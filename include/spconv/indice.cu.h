@@ -16,6 +16,7 @@
 #define INDICE_CU_H_
 #include <tensorview/tensorview.h>
 #include <tensorview/helper_kernel.cu.h>
+#include <spconv/geometry.h>
 
 namespace spconv {
 template <typename Index, typename IndexGrid, unsigned NDim,
