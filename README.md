@@ -4,6 +4,8 @@ This is a spatially sparse convolution library like [SparseConvNet](https://gith
 
 If you need more kinds of spatial layers such as avg pool, please implement it by yourself, I don't have time to do this.
 
+The GPU Indice Generation algorithm is a unofficial implementation of paper [SECOND](http://www.mdpi.com/1424-8220/18/10/3337). That algorithm (don't include GPU SubM indice generation algorithm) may be protected by patent.
+
 ## Install 
 
 0. Use ```git clone xxx.git --recursive``` to clone this repo.
@@ -130,7 +132,7 @@ This implementation use gather-gemm-scatter framework to do sparse convolution.
 
 * **Yan Yan** - *Initial work* - [traveller59](https://github.com/traveller59)
 
-* **Bo Li** - *gpu indice generation idea* - [prclibo](https://github.com/prclibo)
+* **Bo Li** - *gpu indice generation idea, owner of patent of the sparse conv gpu indice generation algorithm (don't include subm)* - [prclibo](https://github.com/prclibo)
 
 ## License
 
