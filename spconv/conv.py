@@ -53,7 +53,7 @@ class SparseConvolution(SparseModule):
                  ndim,
                  in_channels,
                  out_channels,
-                 kernel_size,
+                 kernel_size=3,
                  stride=1,
                  padding=0,
                  dilation=1,
