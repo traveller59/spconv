@@ -3,13 +3,17 @@ import re
 import sys
 import platform
 import subprocess
-
+import torch
 from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
 from distutils.version import LooseVersion
 
-if 'LIBTORCH_ROOT' not in os.environ:
-    raise ValueError("You must set LIBTORCH_ROOT to your torch c++ library.")
+from pathlib import Path
+
+# if 'LIBTORCH_ROOT' not in os.environ:
+#     raise ValueError("You must set LIBTORCH_ROOT to your torch c++ library.")
+
+LIBTORCH_ROOT = str(Path(torch.__file__).parent)
 
 PYTHON_VERSION = "{}.{}".format(sys.version_info.major, sys.version_info.minor)
 
@@ -38,7 +42,7 @@ class CMakeBuild(build_ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
         print(extdir)
         cmake_args = ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir + "/spconv",
-                      '-DCMAKE_PREFIX_PATH=' + os.environ["LIBTORCH_ROOT"],
+                      '-DCMAKE_PREFIX_PATH=' + LIBTORCH_ROOT,
                       '-DPYBIND11_PYTHON_VERSION={}'.format(PYTHON_VERSION),
                       '-DSPCONV_BuildTests=OFF',
                       '-DCMAKE_CUDA_FLAGS="--expt-relaxed-constexpr"']

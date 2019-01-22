@@ -6,19 +6,17 @@ If you need more kinds of spatial layers such as avg pool, please implement it b
 
 The GPU Indice Generation algorithm is a unofficial implementation of paper [SECOND](http://www.mdpi.com/1424-8220/18/10/3337). That algorithm (don't include GPU SubM indice generation algorithm) may be protected by patent.
 
+This project only support CUDA 9.0+. If you are using cuda 8.0, please update it to 9.0.
+
 ## Install 
 
 0. Use ```git clone xxx.git --recursive``` to clone this repo.
 
-1. Download stable LibTorch from pytorch [website](https://pytorch.org/).
+1. Install boost headers to your system include path, you can use either ```sudo apt-get install libboostall-dev``` or download compressed files from boost official website and copy headers to include path.
 
-2. Set an environment variable ```LIBTORCH_ROOT``` to the root path of LibTorch.
+2. Download cmake >= 3.13.2, then add cmake executables to PATH.
 
-3. Install boost headers to your system include path, you can use either ```sudo apt-get install libboostall-dev``` or download compressed files from boost official website and copy headers to include path.
-
-4. Download cmake >= 3.13.2, then add cmake executables to PATH.
-
-5. run ```python setup.py install```.
+3. Ensure you have install pytorch 1.0 in your environment, run ```python setup.py install```.
 
 ## Compare with SparseConvNet
 
