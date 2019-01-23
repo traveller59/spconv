@@ -86,7 +86,7 @@ def get_indice_pairs(indices,
         else:
             raise NotImplementedError
         return get_indice_pairs_func(indices, batch_size, out_shape, spatial_shape, ksize,
-                            stride, padding, dilation, out_padding, subm, transpose)
+                            stride, padding, dilation, out_padding, int(subm), int(transpose))
     else:
         if ndim == 2:
             get_indice_pairs_func = torch.ops.spconv.get_indice_pairs_grid_2d
@@ -95,7 +95,7 @@ def get_indice_pairs(indices,
         else:
             raise NotImplementedError
         return get_indice_pairs_func(indices, grid, batch_size, out_shape, spatial_shape, ksize,
-                            stride, padding, dilation, out_padding, subm, transpose)
+                            stride, padding, dilation, out_padding, int(subm), int(transpose))
 
 
 
@@ -109,11 +109,11 @@ def indice_conv(features,
     if filters.dtype == torch.float32:
         return torch.ops.spconv.indice_conv_fp32(features, filters, indice_pairs,
                                                indice_pair_num, num_activate_out,
-                                               inverse, subm)
+                                               int(inverse), int(subm))
     elif filters.dtype == torch.half:
         return torch.ops.spconv.indice_conv_half(features, filters, indice_pairs,
                                                indice_pair_num, num_activate_out,
-                                               inverse, subm)
+                                               int(inverse), int(subm))
     else:
         raise NotImplementedError
 
@@ -127,10 +127,10 @@ def indice_conv_backward(features,
                        subm=False):
     if filters.dtype == torch.float32:
         return torch.ops.spconv.indice_conv_backward_fp32(
-            features, filters, out_bp, indice_pairs, indice_pair_num, inverse, subm)
+            features, filters, out_bp, indice_pairs, indice_pair_num, int(inverse), int(subm))
     elif filters.dtype == torch.half:
         return torch.ops.spconv.indice_conv_backward_half(
-            features, filters, out_bp, indice_pairs, indice_pair_num, inverse, subm)
+            features, filters, out_bp, indice_pairs, indice_pair_num, int(inverse), int(subm))
     else:
         raise NotImplementedError
 

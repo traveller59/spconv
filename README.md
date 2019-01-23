@@ -91,7 +91,7 @@ class ExampleNet(nn.Module):
         super().__init__()
         self.net = spconv.SparseSequential(
             spconv.SparseConv3d(32, 64, 3, 2, indice_key="cp0"),
-            spconv.SparseInverseConv3d(64, 32, indice_key="cp0"),
+            spconv.SparseInverseConv3d(64, 32, 3, indice_key="cp0"), # need provide kernel size to create weight
         )
         self.shape = shape
 

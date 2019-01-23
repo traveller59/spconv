@@ -141,6 +141,7 @@ class SparseConvolution(SparseModule):
         if self.inverse:
             assert datas is not None and self.indice_key is not None
             _, outids, indice_pairs, indice_pair_num, out_spatial_shape = datas
+            assert indice_pairs.shape[0] == np.prod(self.kernel_size), "inverse conv must have same kernel size as its couple conv"
         else:
             if self.indice_key is not None and datas is not None:
                 outids, _, indice_pairs, indice_pair_num, _ = datas
@@ -274,12 +275,14 @@ class SparseInverseConv2d(SparseConvolution):
     def __init__(self,
                  in_channels,
                  out_channels,
+                 kernel_size,
                  indice_key,
                  bias=True):
         super(SparseInverseConv2d, self).__init__(
             2,
             in_channels,
             out_channels,
+            kernel_size,
             bias=bias,
             inverse=True,
             indice_key=indice_key)
@@ -289,12 +292,14 @@ class SparseInverseConv3d(SparseConvolution):
     def __init__(self,
                  in_channels,
                  out_channels,
+                 kernel_size,
                  indice_key,
                  bias=True):
         super(SparseInverseConv3d, self).__init__(
             3,
             in_channels,
             out_channels,
+            kernel_size,
             bias=bias,
             inverse=True,
             indice_key=indice_key)

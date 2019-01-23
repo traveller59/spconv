@@ -20,7 +20,7 @@ import numpy as np
 import time 
 from spconv.test_utils import params_grid, generate_sparse_data, TestCase
 import unittest
-# import sparseconvnet as scn 
+import sparseconvnet as scn 
 
 class SparseConv3dTestTorch(nn.Module):
     def __init__(self, num_layers, ndim, shape, in_channels, out_channels, kernel_size,
@@ -278,11 +278,10 @@ class SparseCoupleDeConvTest(nn.Module):
                 stride,
                 indice_key="cp0",
                 bias=False),
-            spconv.SparseConvCoupleTranspose3d(
+            spconv.SparseInverseConv3d(
                 out_channels,
                 in_channels,
                 kernel_size,
-                stride,
                 indice_key="cp0",
                 bias=False),
             
@@ -361,7 +360,7 @@ class TestSpConv(TestCase):
             net_ref.net[0].weight.data[:] = filters_t.permute(4, 3, 0, 1, 2).contiguous()
             net.net[0].weight.data[:] = filters_t
             out_ref = net_ref(features_dense_t)
-            out = net(features_t, indices_t, bs).dense().permute(0, 4, 1, 2, 3).contiguous()
+            out = net(features_t, indices_t, bs).dense()
             dout = np.random.uniform(-0.2, 0.2, out_ref.shape).astype(features.dtype)
             dout_t = torch.from_numpy(dout).to(device)
             out.backward(dout_t)
@@ -420,7 +419,7 @@ class TestSpConv(TestCase):
             net_ref.net[0].weight.data[:] = filters_t.permute(3, 4, 0, 1, 2).contiguous()
             net.net[0].weight.data[:] = filters_t
             out_ref = net_ref(features_dense_t)
-            out = net(features_t, indices_t, bs).dense().permute(0, 4, 1, 2, 3).contiguous()
+            out = net(features_t, indices_t, bs).dense()
             dout = np.random.uniform(-0.2, 0.2, out_ref.shape).astype(features.dtype)
             dout_t = torch.from_numpy(dout).to(device)
             out.backward(dout_t)
@@ -500,7 +499,7 @@ class TestSpConv(TestCase):
 
     
     def testSpMaxPool3d(self):
-        np.random.seed(484)
+        np.random.seed(485)
         devices = ["cuda:0", "cpu:0"]
         shapes = [[19, 18, 17]]
         batchsizes = [1, 2]
@@ -538,7 +537,7 @@ class TestSpConv(TestCase):
             out = net(features_t, indices_t, bs)
             outids = out.indices
             outfeatures = out.features
-            out_dense = out.dense()
+            out_dense = out.dense(channels_first=False)
             out = out_dense.permute(0, 4, 1, 2, 3).contiguous()
             
             dout_sparse = np.random.uniform(-0.2, 0.2, outfeatures.shape).astype(features.dtype)
@@ -605,10 +604,10 @@ def main():
             out = net(features_t, indices_t, bs)
             torch.cuda.synchronize()
             times.append(time.time() - t)
-        print((net.grid == -1).float().sum(), net.grid.numel())
+        # print((net.grid == -1).float().sum(), net.grid.numel())
             # print("spconv time", time.time() - t)
         print("spconv time", np.mean(times[2:]))
-        out = net(features_t, indices_t, bs).dense().permute(0, 4, 1, 2, 3).contiguous()
+        out = net(features_t, indices_t, bs).dense()
         print(np.linalg.norm(out.detach().cpu().numpy() - out_ref.detach().cpu().numpy()))
 
 

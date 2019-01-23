@@ -30,8 +30,10 @@ getIndicePair(torch::Tensor indices, int64_t batchSize,
         std::vector<int64_t> outSpatialShape, std::vector<int64_t> spatialShape,
         std::vector<int64_t> kernelSize, std::vector<int64_t> stride,
         std::vector<int64_t> padding, std::vector<int64_t> dilation,
-        std::vector<int64_t> outPadding, bool subM, bool transpose) {
+        std::vector<int64_t> outPadding, int64_t _subM, int64_t _transpose) {
   // auto timer = spconv::CudaContextTimer<>();
+  bool subM = _subM != 0;
+  bool transpose = _transpose != 0;
   auto numAct = indices.size(0);
   auto coorDim = indices.size(1) - 1; // batchIdx + xyz
   TV_ASSERT_RT_ERR(NDim == coorDim, "error");
@@ -140,8 +142,10 @@ getIndicePairPreGrid(torch::Tensor indices, torch::Tensor gridOut, int64_t batch
         std::vector<int64_t> outSpatialShape, std::vector<int64_t> spatialShape,
         std::vector<int64_t> kernelSize, std::vector<int64_t> stride,
         std::vector<int64_t> padding, std::vector<int64_t> dilation,
-        std::vector<int64_t> outPadding, bool subM, bool transpose) {
+        std::vector<int64_t> outPadding, int64_t _subM, int64_t _transpose) {
   // auto timer = spconv::CudaContextTimer<>();
+  bool subM = _subM != 0;
+  bool transpose = _transpose != 0;
   auto numAct = indices.size(0);
   auto coorDim = indices.size(1) - 1; // batchIdx + xyz
   TV_ASSERT_RT_ERR(NDim == coorDim, "error");
@@ -249,7 +253,9 @@ getIndicePairPreGrid(torch::Tensor indices, torch::Tensor gridOut, int64_t batch
 template <typename T>
 torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
                        torch::Tensor indicePairs, torch::Tensor indiceNum,
-                       int64_t numActOut, bool inverse, bool subm) {
+                       int64_t numActOut, int64_t _inverse, int64_t _subM) {
+  bool subM = _subM != 0;
+  bool inverse = _inverse != 0;
   auto device = features.device().type();
   auto ndim = filters.dim() - 2;
   auto kernelVolume = indicePairs.size(0);
@@ -261,7 +267,7 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
   int indicePairMaxOffset = indicePairMaxSizeIter - indicePairNumCpu.data<int>();
   int indicePairMaxSize = *indicePairMaxSizeIter;
   
-  /*if (subm){
+  /*if (_subM){
     std::vector<int> indicePairNumVec(indicePairNumCpu.data<int>(), indicePairNumCpu.data<int>() + kernelVolume);
     indicePairNumVec.erase(indicePairNumVec.begin() + indicePairMaxOffset);
 
@@ -280,7 +286,7 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
   torch::Tensor outputBuffer =
       torch::zeros({indicePairMaxSize, numOutPlanes}, options);
   filters = filters.view({-1, numInPlanes, numOutPlanes});
-  if (subm) { // the center index of subm conv don't need gather and scatter
+  if (subM) { // the center index of subm conv don't need gather and scatter
               // add.
     torch::mm_out(output, features, filters[indicePairMaxOffset]);
   }
@@ -289,7 +295,7 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
   double totalSAddTime = 0;
   for (int i = 0; i < kernelVolume; ++i) {
     auto nHot = indicePairNumCpu.data<int>()[i];
-    if (nHot <= 0 || (subm && i == indicePairMaxOffset)) {
+    if (nHot <= 0 || (subM && i == indicePairMaxOffset)) {
       continue;
     }
     // auto timer = spconv::CudaContextTimer<>();
@@ -346,7 +352,10 @@ template <typename T>
 std::vector<torch::Tensor>
 indiceConvBackward(torch::Tensor features, torch::Tensor filters,
                  torch::Tensor outGrad, torch::Tensor indicePairs, torch::Tensor indiceNum,
-                 bool inverse, bool subm) {
+                 int64_t _inverse, int64_t _subM) {
+  bool subM = _subM != 0;
+  bool inverse = _inverse != 0;
+
   auto device = features.device().type();
   auto ndim = filters.dim() - 2;
   auto kernelVolume = indicePairs.size(0);
@@ -368,14 +377,14 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
 
   filters = filters.view({-1, numInPlanes, numOutPlanes});
   filtersGrad = filtersGrad.view({-1, numInPlanes, numOutPlanes});
-  if (subm) {
+  if (subM) {
     auto filterGradSub = filtersGrad[indicePairMaxOffset];
     torch::mm_out(filterGradSub, features.t(), outGrad);
     torch::mm_out(inputGrad, outGrad, filters[indicePairMaxOffset].t());
   }
   for (int i = 0; i < kernelVolume; ++i) {
     auto nHot = indicePairNumCpu.data<int>()[i];
-    if (nHot <= 0 || (subm && i == indicePairMaxOffset)) {
+    if (nHot <= 0 || (subM && i == indicePairMaxOffset)) {
       continue;
     }
     if (device == torch::kCPU) {
@@ -426,7 +435,10 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
 template <typename T>
 torch::Tensor indiceConvDevelopDontUse(torch::Tensor features, torch::Tensor filters,
                          torch::Tensor indicePairs, torch::Tensor indiceNum,
-                         int64_t numActOut, bool inverse, bool subm) {
+                         int64_t numActOut, int64_t _inverse, int64_t _subM) {
+  bool subM = _subM != 0;
+  bool inverse = _inverse != 0;
+
   auto device = features.device().type();
   auto ndim = filters.dim() - 2;
   auto kernelVolume = indicePairs.size(0);
@@ -443,7 +455,7 @@ torch::Tensor indiceConvDevelopDontUse(torch::Tensor features, torch::Tensor fil
                               indicePairNumCpu.data<int>() + kernelVolume);
   indicePairNumVec.erase(indicePairNumVec.begin() + indicePairMaxOffset);
   int subRuleMaxSize = *std::max_element(indicePairNumVec.begin(), indicePairNumVec.end());
-  if (subm) {
+  if (subM) {
     indicePairMaxSize = subRuleMaxSize;
   }
   auto timer = spconv::CudaContextTimer<>();
@@ -459,7 +471,7 @@ torch::Tensor indiceConvDevelopDontUse(torch::Tensor features, torch::Tensor fil
       torch::zeros({kernelVolume, indicePairMaxSize, numOutPlanes}, options);
   filters = filters.view({-1, numInPlanes, numOutPlanes});
   std::cout << "create time " << timer.report()/1000.0 << std::endl;
-  if (subm) { // the center index of subm conv don't need gather and scatter
+  if (subM) { // the center index of subm conv don't need gather and scatter
               // add.
     torch::mm_out(output, features, filters[indicePairMaxOffset]);
   }
@@ -469,7 +481,7 @@ torch::Tensor indiceConvDevelopDontUse(torch::Tensor features, torch::Tensor fil
   // auto timer = spconv::CudaContextTimer<>();
   for (int i = 0; i < kernelVolume; ++i) {
     auto nHot = indicePairNumCpu.data<int>()[i];
-    if (nHot <= 0 || (subm && i == indicePairMaxOffset)) {
+    if (nHot <= 0 || (subM && i == indicePairMaxOffset)) {
       continue;
     }
     // 
@@ -499,7 +511,7 @@ torch::Tensor indiceConvDevelopDontUse(torch::Tensor features, torch::Tensor fil
   // totalGatherTime += timer.report() / 1000.0;
   for (int i = 0; i < kernelVolume; ++i) {
     auto nHot = indicePairNumCpu.data<int>()[i];
-    if (nHot <= 0 || (subm && i == indicePairMaxOffset)) {
+    if (nHot <= 0 || (subM && i == indicePairMaxOffset)) {
       continue;
     }
     auto outputBufferBlob = torch::from_blob(outputBuffer[i].data<T>(),
@@ -513,7 +525,7 @@ torch::Tensor indiceConvDevelopDontUse(torch::Tensor features, torch::Tensor fil
   // totalGEMMTime += timer.report() / 1000.0;
   for (int i = 0; i < kernelVolume; ++i) {
     auto nHot = indicePairNumCpu.data<int>()[i];
-    if (nHot <= 0 || (subm && i == indicePairMaxOffset)) {
+    if (nHot <= 0 || (subM && i == indicePairMaxOffset)) {
       continue;
     }
     auto outputBufferBlob = torch::from_blob(outputBuffer[i].data<T>(),
