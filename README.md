@@ -16,7 +16,9 @@ This project only support CUDA 9.0+. If you are using cuda 8.0, please update it
 
 2. Download cmake >= 3.13.2, then add cmake executables to PATH.
 
-3. Ensure you have install pytorch 1.0 in your environment, run ```python setup.py install```.
+3. Ensure you have install pytorch 1.0 in your environment, run ```python setup.py bdist_wheel``` (don't use ```python setup.py install```).
+
+4. Run ```cd ./dist```, use pip to install generated whl file.
 
 ## Compare with SparseConvNet
 
@@ -40,7 +42,7 @@ indices = # your indices/coordinates with shape [N, ndim + 1], batch index must 
 spatial_shape = # spatial shape of your sparse tensor.
 batch_size = # batch size of your sparse tensor.
 x = spconv.SparseConvTensor(features, indices, spatial_shape, batch_size)
-x_dense_NHWC = x.dense() # convert sparse tensor to dense NCHW tensor.
+x_dense_NCHW = x.dense() # convert sparse tensor to dense NCHW tensor.
 print(x.sparity) # helper function to check sparity. 
 ```
 

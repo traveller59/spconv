@@ -56,6 +56,7 @@ struct CreateConvIndicePairFunctorP1<tv::GPU, Index, IndexGrid, NDim> {
              d.stream()>>>(indicesIn, indicesOut, gridsOut, indicePairs,
                            indiceNum, indicePairUnique, kernelSize, stride,
                            padding, dilation, outSpatialShape);
+    TV_CHECK_CUDA_ERR();
     // std::cout << "p1 gene time " << timer.report() / 1000.0 << std::endl;
     return 1;
   }
@@ -81,14 +82,17 @@ struct CreateConvIndicePairFunctorP2<tv::GPU, Index, IndexGrid, NDim> {
         <<<tv::launch::getBlocks(numAct), tv::launch::CUDA_NUM_THREADS, 0,
            d.stream()>>>(indicesOut, gridsOut, numAct, indicePairs,
                          indicePairUnique, outSpatialShape, batchSize);
+    TV_CHECK_CUDA_ERR();
     assignIndicePairsKernel<Index, IndexGrid, NDim>
         <<<tv::launch::getBlocks(numActIn), tv::launch::CUDA_NUM_THREADS, 0,
            d.stream()>>>(indicesOut, gridsOut, numActIn, indicePairs,
                          indicePairUnique, outSpatialShape);
+    TV_CHECK_CUDA_ERR();
     if (resetGrid) {
       resetGridKernel<Index, IndexGrid, NDim>
           <<<tv::launch::getBlocks(numAct), tv::launch::CUDA_NUM_THREADS, 0,
              d.stream()>>>(indicePairUnique.data(), gridsOut, numAct);
+      TV_CHECK_CUDA_ERR();
     }
     return numAct;
   }
@@ -113,15 +117,18 @@ struct CreateSubMIndicePairFunctor<tv::GPU, Index, IndexGrid, NDim> {
     prepareSubMGridKernel<Index, IndexGrid, NDim>
         <<<tv::launch::getBlocks(numActIn), tv::launch::CUDA_NUM_THREADS, 0,
            d.stream()>>>(indicesIn, gridsOut, outSpatialShape);
+    TV_CHECK_CUDA_ERR();
     getSubMIndicePairsKernel<Index, IndexGrid, NDim>
         <<<tv::launch::getBlocks(numActIn), tv::launch::CUDA_NUM_THREADS, 0,
            d.stream()>>>(indicesIn, gridsOut, indicePairs, indiceNum,
                          kernelSize, stride, padding, dilation, outSpatialShape);
+    TV_CHECK_CUDA_ERR();
     // std::cout << "subm gene time " << timer.report() / 1000.0 << std::endl;
     if (resetGrid) {
       resetGridSubMKernel<Index, IndexGrid, NDim>
           <<<tv::launch::getBlocks(numActIn), tv::launch::CUDA_NUM_THREADS, 0,
              d.stream()>>>(indicesIn.data(), gridsOut, outSpatialShape, numActIn);
+      TV_CHECK_CUDA_ERR();
     }
     return numActIn;
   }

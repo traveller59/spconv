@@ -62,6 +62,7 @@ struct SparseGatherFunctor<tv::GPU, T, Index> {
                    d.stream()>>>(buffer.data() + nHotBlock * numPlanes,
                                  features.data(), indices.data() + nHotBlock,
                                  size - nHotBlock, numPlanes / vecloadFactor);
+            TV_CHECK_CUDA_ERR();
           }
           notFound = false;
         }
@@ -76,6 +77,7 @@ struct SparseGatherFunctor<tv::GPU, T, Index> {
                   tv::launch::DivUp(numPlanes, NumTLP)),
              dim3(NumTLP / NumILP, NumTLP), 0, d.stream()>>>(
               buffer.data(), features.data(), indices.data(), size, numPlanes);
+      TV_CHECK_CUDA_ERR();
     }
   }
 };
@@ -108,6 +110,7 @@ struct SparseScatterAddFunctor<tv::GPU, T, Index> {
                    d.stream()>>>(outFeatures.data(), buffer.data(),
                                  indices.data(), nHotBlock,
                                  numPlanes / vecloadFactor);
+            TV_CHECK_CUDA_ERR();
           }
           if (size - nHotBlock > 0) {
             scatterAddGenericKernel<T, Index, int(NumTLP), NumILP>
@@ -115,6 +118,7 @@ struct SparseScatterAddFunctor<tv::GPU, T, Index> {
                    0, d.stream()>>>(
                     outFeatures.data(), buffer.data() + nHotBlock * numPlanes,
                     indices.data() + nHotBlock, size - nHotBlock, numPlanes);
+            TV_CHECK_CUDA_ERR();
           }
           notFound = false;
         }
@@ -129,6 +133,7 @@ struct SparseScatterAddFunctor<tv::GPU, T, Index> {
              dim3(NumTLP / NumILP, NumTLP), 0, d.stream()>>>(
               outFeatures.data(), buffer.data(), indices.data(), size,
               numPlanes);
+      TV_CHECK_CUDA_ERR();
     }
   }
 };

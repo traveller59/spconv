@@ -343,6 +343,7 @@ struct SparseMaxPoolForwardFunctor<tv::GPU, T, Index> {
                                     indices.subview(0).data() + numHotBlock,
                                     indices.subview(1).data() + numHotBlock,
                                     size - numHotBlock, numPlanes);
+            TV_CHECK_CUDA_ERR();
           }
           notFound = false;
         }
@@ -360,6 +361,7 @@ struct SparseMaxPoolForwardFunctor<tv::GPU, T, Index> {
                 outFeatures.data(), inFeatures.data(),
                 indices.subview(0).data(), indices.subview(1).data(),
                 numHotBlock, numPlanes);
+        TV_CHECK_CUDA_ERR();
       }
 
       if (size > numHotBlock) {
@@ -370,6 +372,7 @@ struct SparseMaxPoolForwardFunctor<tv::GPU, T, Index> {
                 indices.subview(0).data() + numHotBlock,
                 indices.subview(1).data() + numHotBlock, size - numHotBlock,
                 numPlanes);
+        TV_CHECK_CUDA_ERR();
       }
     }
   }
@@ -416,6 +419,7 @@ struct SparseMaxPoolBackwardFunctor<tv::GPU, T, Index> {
                                     indices.subview(0).data() + numHotBlock,
                                     indices.subview(1).data() + numHotBlock,
                                     size - numHotBlock, numPlanes);
+            TV_CHECK_CUDA_ERR();
           }
           notFound = false;
         }
@@ -433,6 +437,7 @@ struct SparseMaxPoolBackwardFunctor<tv::GPU, T, Index> {
                 outFeatures.data(), inFeatures.data(), dout.data(), din.data(),
                 indices.subview(0).data(), indices.subview(1).data(),
                 numHotBlock, numPlanes);
+        TV_CHECK_CUDA_ERR();
       }
 
       if (size > numHotBlock) {
@@ -443,6 +448,7 @@ struct SparseMaxPoolBackwardFunctor<tv::GPU, T, Index> {
                 indices.subview(0).data() + numHotBlock,
                 indices.subview(1).data() + numHotBlock, size - numHotBlock,
                 numPlanes);
+        TV_CHECK_CUDA_ERR();
       }
     }
   }
