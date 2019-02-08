@@ -134,7 +134,7 @@ class SparseConvolution(SparseModule):
             input.features = torch.mm(
                 input.features,
                 self.weight.view(self.in_channels, self.out_channels))
-            if self.bias:
+            if self.bias is not None:
                 input.features += self.bias
             return input
         datas = input.find_indice_pair(self.indice_key)
@@ -165,7 +165,7 @@ class SparseConvolution(SparseModule):
                                             self.weight, indice_pairs.to(device),
                                             indice_pair_num, outids.shape[0])
 
-        if self.bias:
+        if self.bias is not None:
             out_features += self.bias
         out_tensor = spconv.SparseConvTensor(out_features, outids,
                                              out_spatial_shape, batch_size)
