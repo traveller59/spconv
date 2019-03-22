@@ -24,7 +24,7 @@ This project only support CUDA 9.0+. If you are using cuda 8.0, please update it
 
 Since install newest driver and CUDA is very simple on windows, please use CUDA 10 on windows. 
 
-0. Use ```git clone xxx.git --recursive``` to clone this repo.
+0. Install Visual Studio 2017. Use ```git clone xxx.git --recursive``` to clone this repo.
 
 1. Download compressed files from boost official website and copy headers (i.e. boost_1_69/boost) to spconv/include.
 
