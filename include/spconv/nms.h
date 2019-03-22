@@ -34,9 +34,9 @@ std::vector<int> non_max_suppression_cpu(py::array_t<DType> boxes,
   auto ndets = boxes.shape(0);
   auto boxes_r = boxes.template unchecked<2>();
   auto order_r = order.template unchecked<1>();
-  auto suppressed = zeros<int>({ndets});
+  auto suppressed = zeros<int>({int(ndets)});
   auto suppressed_rw = suppressed.template mutable_unchecked<1>();
-  auto area = zeros<DType>({ndets});
+  auto area = zeros<DType>({int(ndets)});
   auto area_rw = area.template mutable_unchecked<1>();
   // get areas
   for (int i = 0; i < ndets; ++i) {
@@ -82,7 +82,7 @@ std::vector<int> rotate_non_max_suppression_cpu(py::array_t<DType> box_corners,
   auto ndets = box_corners.shape(0);
   auto box_corners_r = box_corners.template unchecked<3>();
   auto order_r = order.template unchecked<1>();
-  auto suppressed = zeros<int>({ndets});
+  auto suppressed = zeros<int>({int(ndets)});
   auto suppressed_rw = suppressed.template mutable_unchecked<1>();
   auto standup_iou_r = standup_iou.template unchecked<2>();
   std::vector<int> keep;

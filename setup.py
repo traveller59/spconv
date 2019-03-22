@@ -17,7 +17,6 @@ LIBTORCH_ROOT = str(Path(torch.__file__).parent)
 
 PYTHON_VERSION = "{}.{}".format(sys.version_info.major, sys.version_info.minor)
 
-
 class CMakeExtension(Extension):
     def __init__(self, name, sourcedir='', library_dirs=[]):
         Extension.__init__(self, name, sources=[], library_dirs=library_dirs)
@@ -33,30 +32,35 @@ class CMakeBuild(build_ext):
                                ", ".join(e.name for e in self.extensions))
 
         if platform.system() == "Windows":
-            raise NotImplementedError
+            cmake_version = LooseVersion(re.search(r'version\s*([\d.]+)', out.decode()).group(1))
+            if cmake_version < '3.13.0':
+                raise RuntimeError("CMake >= 3.13.0 is required on Windows")
 
         for ext in self.extensions:
             self.build_extension(ext)
 
     def build_extension(self, ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
-        print(extdir)
-        cmake_args = ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir + "/spconv",
-                      '-DCMAKE_PREFIX_PATH=' + LIBTORCH_ROOT,
+        cmake_args = [# '-G "Visual Studio 15 2017 Win64"',
+                      '-DCMAKE_PREFIX_PATH={}'.format(LIBTORCH_ROOT),
                       '-DPYBIND11_PYTHON_VERSION={}'.format(PYTHON_VERSION),
                       '-DSPCONV_BuildTests=OFF',
                       '-DCMAKE_CUDA_FLAGS="--expt-relaxed-constexpr"']
-
+        assert self.debug is False, "pytorch ops don't support debug build."
         cfg = 'Debug' if self.debug else 'Release'
         # cfg = 'Debug'
         build_args = ['--config', cfg]
         print(cfg)
         if platform.system() == "Windows":
-            cmake_args += ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{}={}'.format(cfg.upper(), extdir)]
+            cmake_args += ['-DCMAKE_BUILD_TYPE=' + cfg]
+            cmake_args += ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{}={}'.format(cfg.upper(), str(Path(extdir) / "spconv"))]
+            # cmake_args += ['-DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_{}={}'.format(cfg.upper(), str(Path(extdir) / "spconv"))]
+            cmake_args += ['-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_{}={}'.format(cfg.upper(), str(Path(extdir) / "spconv"))]
             if sys.maxsize > 2**32:
                 cmake_args += ['-A', 'x64']
             build_args += ['--', '/m']
         else:
+            cmake_args += ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={}'.format(extdir + str(Path(extdir) / "spconv"))]
             cmake_args += ['-DCMAKE_BUILD_TYPE=' + cfg]
             build_args += ['--', '-j4']
 
@@ -65,7 +69,7 @@ class CMakeBuild(build_ext):
                                                               self.distribution.get_version())
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
-        
+        print("|||||||||", cmake_args)
         subprocess.check_call(['cmake', ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env)
         subprocess.check_call(['cmake', '--build', '.'] + build_args, cwd=self.build_temp)
 

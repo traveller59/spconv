@@ -54,7 +54,7 @@ rbbox_iou(py::array_t<DType> box_corners, py::array_t<DType> qbox_corners,
   auto standup_iou_r = standup_iou.template unchecked<2>();
   auto N = box_corners_r.shape(0);
   auto K = qbox_corners_r.shape(0);
-  py::array_t<DType> overlaps = zeros<DType>({N, K});
+  py::array_t<DType> overlaps = zeros<DType>({int(N), int(K)});
   auto overlaps_rw = overlaps.template mutable_unchecked<2>();
   if (N == 0 || K == 0) {
     return overlaps;

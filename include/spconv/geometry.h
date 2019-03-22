@@ -166,7 +166,8 @@ Index getIndicePairsConv(tv::TensorView<const Index> indicesIn,
     kernelVolume *= kernelSize[i];
   }
   Index numValidPoints = 0;
-  Index validPoints[kernelVolume * (NDim + 1)];
+  std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
+  Index* validPoints = validPoints_.data();
   Index *pointPtr = nullptr;
   for (int j = 0; j < numActIn; ++j) {
     batchIdx = indicesIn(j, 0);
@@ -216,7 +217,8 @@ Index getIndicePairsDeConv(tv::TensorView<const Index> indicesIn,
     kernelVolume *= kernelSize[i];
   }
   Index numValidPoints = 0;
-  Index validPoints[kernelVolume * (NDim + 1)];
+  std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
+  Index* validPoints = validPoints_.data();
   Index *pointPtr = nullptr;
   for (int j = 0; j < numActIn; ++j) {
     batchIdx = indicesIn(j, 0);
@@ -265,7 +267,9 @@ Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
     kernelVolume *= kernelSize[i];
   }
   Index numValidPoints = 0;
-  Index validPoints[kernelVolume * (NDim + 1)];
+  // Index validPoints[kernelVolume * (NDim + 1)];
+  std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
+  Index* validPoints = validPoints_.data();
   Index *pointPtr = nullptr;
   Index index = 0;
   for (int j = 0; j < numActIn; ++j) {

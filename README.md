@@ -8,7 +8,7 @@ The GPU Indice Generation algorithm is a unofficial implementation of paper [SEC
 
 This project only support CUDA 9.0+. If you are using cuda 8.0, please update it to 9.0.
 
-## Install 
+## Install on Ubuntu 16.04/18.04
 
 0. Use ```git clone xxx.git --recursive``` to clone this repo.
 
@@ -16,7 +16,21 @@ This project only support CUDA 9.0+. If you are using cuda 8.0, please update it
 
 2. Download cmake >= 3.13.2, then add cmake executables to PATH.
 
-3. Ensure you have install pytorch 1.0 in your environment, run ```python setup.py bdist_wheel``` (don't use ```python setup.py install```).
+3. Ensure you have installed pytorch 1.0 in your environment, run ```python setup.py bdist_wheel``` (don't use ```python setup.py install```).
+
+4. Run ```cd ./dist```, use pip to install generated whl file.
+
+## Install on Windows 10 with CUDA 10 and python 3.6 (python 3.7 may have problem, see [this](https://github.com/pytorch/pytorch/issues/17233))
+
+Since install newest driver and CUDA is very simple on windows, please use CUDA 10 on windows. 
+
+0. Use ```git clone xxx.git --recursive``` to clone this repo.
+
+1. Download compressed files from boost official website and copy headers (i.e. boost_1_69/boost) to spconv/include.
+
+2. Download and install cmake >= 3.13.2, select add cmake to User or System PATH.
+
+3. Ensure you have installed pytorch 1.0 in your environment, run ```python setup.py bdist_wheel``` (don't use ```python setup.py install```).
 
 4. Run ```cd ./dist```, use pip to install generated whl file.
 

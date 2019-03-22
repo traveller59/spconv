@@ -14,6 +14,7 @@
 
 from pathlib import Path
 
+import platform
 import numpy as np
 import torch
 from spconv import utils
@@ -23,7 +24,10 @@ from spconv.conv import SparseInverseConv2d, SparseInverseConv3d
 from spconv.modules import SparseModule, SparseSequential
 from spconv.pool import SparseMaxPool2d, SparseMaxPool3d
 
-_LIB_PATH = str(Path(__file__).parent / "libspconv.so")
+_LIB_FILE_NAME = "libspconv.so"
+if platform.system() == "Windows":
+    _LIB_FILE_NAME = "spconv.dll"
+_LIB_PATH = str(Path(__file__).parent / _LIB_FILE_NAME)
 torch.ops.load_library(_LIB_PATH)
 
 def scatter_nd(indices, updates, shape):
