@@ -4,6 +4,7 @@ set_target_properties(spconv_nms PROPERTIES SOVERSION 1)
 target_include_directories(spconv_nms PRIVATE ${ALL_INCLUDE})
 set_property(TARGET spconv_nms PROPERTY CXX_STANDARD 14)
 set_property(TARGET spconv_nms PROPERTY CUDA_STANDARD 14)
+set_property(TARGET spconv_nms PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(spconv_nms ${CUDA_CUDART})
 
 install (TARGETS spconv_nms DESTINATION lib)

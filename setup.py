@@ -46,9 +46,8 @@ class CMakeBuild(build_ext):
                       '-DPYBIND11_PYTHON_VERSION={}'.format(PYTHON_VERSION),
                       '-DSPCONV_BuildTests=OFF',
                       '-DCMAKE_CUDA_FLAGS="--expt-relaxed-constexpr"']
-        assert self.debug is False, "pytorch ops don't support debug build."
         cfg = 'Debug' if self.debug else 'Release'
-        # cfg = 'Debug'
+        assert cfg == "Release", "pytorch ops don't support debug build."
         build_args = ['--config', cfg]
         print(cfg)
         if platform.system() == "Windows":
@@ -60,7 +59,7 @@ class CMakeBuild(build_ext):
                 cmake_args += ['-A', 'x64']
             build_args += ['--', '/m']
         else:
-            cmake_args += ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={}'.format(extdir + str(Path(extdir) / "spconv"))]
+            cmake_args += ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={}'.format(str(Path(extdir) / "spconv"))]
             cmake_args += ['-DCMAKE_BUILD_TYPE=' + cfg]
             build_args += ['--', '-j4']
 
@@ -69,7 +68,7 @@ class CMakeBuild(build_ext):
                                                               self.distribution.get_version())
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
-        print("|||||||||", cmake_args)
+        print("|||||CMAKE ARGS|||||", cmake_args)
         subprocess.check_call(['cmake', ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env)
         subprocess.check_call(['cmake', '--build', '.'] + build_args, cwd=self.build_temp)
 
