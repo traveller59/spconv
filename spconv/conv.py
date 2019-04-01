@@ -131,12 +131,16 @@ class SparseConvolution(SparseModule):
         # input.update_grid(out_spatial_shape)
         # t = time.time()
         if self.conv1x1:
-            input.features = torch.mm(
+            features = torch.mm(
                 input.features,
                 self.weight.view(self.in_channels, self.out_channels))
             if self.bias is not None:
-                input.features += self.bias
-            return input
+                features += self.bias
+            out_tensor = spconv.SparseConvTensor(features, input.indices,
+                                                input.spatial_shape, input.batch_size)
+            out_tensor.indice_dict = input.indice_dict
+            out_tensor.grid = input.grid
+            return out_tensor
         datas = input.find_indice_pair(self.indice_key)
         if self.inverse:
             assert datas is not None and self.indice_key is not None
