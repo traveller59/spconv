@@ -19,7 +19,7 @@
 #include <cuda_runtime_api.h>
 #include <iostream>
 #include <memory>
-#include <prettyprint.h>
+// #include <prettyprint.h>
 #include <sstream>
 #include <type_traits>
 #include <vector>
