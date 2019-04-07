@@ -41,6 +41,14 @@ PYBIND11_MODULE(spconv_utils, m)
           py::return_value_policy::reference_internal, "rbbox iou",
           "box_corners"_a = 1, "qbox_corners"_a = 2, "standup_iou"_a = 3,
           "standup_thresh"_a = 4);
+    m.def("rbbox_intersection", &spconv::rbbox_intersection<double>,
+          py::return_value_policy::reference_internal, "rbbox iou",
+          "box_corners"_a = 1, "qbox_corners"_a = 2, "standup_iou"_a = 3,
+          "standup_thresh"_a = 4);
+    m.def("rbbox_intersection", &spconv::rbbox_intersection<float>,
+          py::return_value_policy::reference_internal, "rbbox iou",
+          "box_corners"_a = 1, "qbox_corners"_a = 2, "standup_iou"_a = 3,
+          "standup_thresh"_a = 4);
     m.def("points_to_voxel_3d_np", &spconv::points_to_voxel_3d_np<float, 3>,
           "matrix tensor_square", "points"_a = 1, "voxels"_a = 2, "coors"_a = 3,
           "num_points_per_voxel"_a = 4, "coor_to_voxelidx"_a = 5,
