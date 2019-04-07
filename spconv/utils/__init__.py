@@ -59,10 +59,10 @@ def points_to_voxel(points,
     voxel_num = points_to_voxel_3d_np(
         points, voxels, coors, num_points_per_voxel, coor_to_voxelidx,
         voxel_size.tolist(), coors_range.tolist(), max_points, max_voxels)
-    coors = coors[:voxel_num]
-    voxels = voxels[:voxel_num]
-    num_points_per_voxel = num_points_per_voxel[:voxel_num]
-    return voxels, coors, num_points_per_voxel
+    # coors = coors[:voxel_num]
+    # voxels = voxels[:voxel_num]
+    # num_points_per_voxel = num_points_per_voxel[:voxel_num]
+    return voxels, coors, num_points_per_voxel, voxel_num
 
 class VoxelGenerator:
     def __init__(self,
@@ -90,7 +90,18 @@ class VoxelGenerator:
         res = points_to_voxel(
             points, self._voxel_size, self._point_cloud_range, self._coor_to_voxelidx,
             self._max_num_points, max_voxels or self._max_voxels)
-        return res 
+        voxels, coors, num_points_per_voxel, voxel_num = res
+        coors = coors[:voxel_num]
+        voxels = voxels[:voxel_num]
+        num_points_per_voxel = num_points_per_voxel[:voxel_num]
+
+        return (voxels, coors, num_points_per_voxel)
+
+    def generate_multi_gpu(self, points, max_voxels=None):
+        res = points_to_voxel(
+            points, self._voxel_size, self._point_cloud_range, self._coor_to_voxelidx,
+            self._max_num_points, max_voxels or self._max_voxels)
+        return res
 
 
     @property
