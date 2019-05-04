@@ -147,8 +147,7 @@ assignIndicePairsKernel(tv::TensorView<Index> indicesOut,
   }
 }
 
-template <typename Index, typename IndexGrid, unsigned NDim,
-          int KernelMaxVolume = 256>
+template <typename Index, typename IndexGrid, unsigned NDim>
 __global__ void
 prepareSubMGridKernel(tv::TensorView<const Index> indicesIn,
                   tv::TensorView<IndexGrid> gridsOut,

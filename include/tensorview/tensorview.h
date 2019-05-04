@@ -102,7 +102,7 @@ void sstream_print(SStream &ss, T val, TArgs... args) {
 
 struct GPU {
   GPU(cudaStream_t s = 0) : mStream(s) {}
-  cudaStream_t stream() const { return mStream; }
+  virtual cudaStream_t getStream() const { return mStream; }
   cudaStream_t mStream = 0;
 };
 struct CPU {};

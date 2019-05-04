@@ -21,8 +21,8 @@
 namespace tv {
 
 struct TorchGPU: public tv::GPU {
-  TorchGPU(){
-    mStream = at::cuda::getCurrentCUDAStream();
+  virtual cudaStream_t getStream() const override {
+    return at::cuda::getCurrentCUDAStream();
   }
 };
 
@@ -48,7 +48,11 @@ template <typename T> void check_torch_dtype(const torch::Tensor &tensor) {
     TV_ASSERT_RT_ERR(val, "error");
     break;
   }
-
+  case at::ScalarType::Long: {
+    auto val = std::is_same<std::remove_const_t<T>, long>::value;
+    TV_ASSERT_RT_ERR(val, "error");
+    break;
+  }
   default:
     TV_ASSERT_RT_ERR(false, "error");
   }

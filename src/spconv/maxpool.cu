@@ -329,7 +329,7 @@ struct SparseMaxPoolForwardFunctor<tv::GPU, T, Index> {
             maxPoolFwdVecBlockKernel<T, Index, int(NumTLP), NumILP, vecload_type_t>
                 <<<dim3(std::min(size / NumTLP, 512), numPlanes / NumTLP),
                    dim3(NumTLP / vecloadFactor, NumTLP / NumILP), 0,
-                   d.stream()>>>(outFeatures.data(), inFeatures.data(),
+                   d.getStream()>>>(outFeatures.data(), inFeatures.data(),
                                  indices.subview(0).data(),
                                  indices.subview(1).data(), numHotBlock,
                                  numPlanes / vecloadFactor);
@@ -339,7 +339,7 @@ struct SparseMaxPoolForwardFunctor<tv::GPU, T, Index> {
           if (size > numHotBlock) {
             maxPoolFwdGenericKernel<T, Index, int(NumTLP), NumILP>
                 <<<dim3(1, numPlanes / NumTLP), dim3(NumTLP / NumILP, NumTLP),
-                   0, d.stream()>>>(outFeatures.data(), inFeatures.data(),
+                   0, d.getStream()>>>(outFeatures.data(), inFeatures.data(),
                                     indices.subview(0).data() + numHotBlock,
                                     indices.subview(1).data() + numHotBlock,
                                     size - numHotBlock, numPlanes);
@@ -357,7 +357,7 @@ struct SparseMaxPoolForwardFunctor<tv::GPU, T, Index> {
       if (numHotBlock >= NumTLP) {
         maxPoolFwdGenericBlockKernel<T, Index, NumTLP, NumILP>
             <<<dim3(size / NumTLP, tv::launch::DivUp(numPlanes, NumTLP)),
-               dim3(NumTLP / NumILP, NumTLP), 0, d.stream()>>>(
+               dim3(NumTLP / NumILP, NumTLP), 0, d.getStream()>>>(
                 outFeatures.data(), inFeatures.data(),
                 indices.subview(0).data(), indices.subview(1).data(),
                 numHotBlock, numPlanes);
@@ -367,7 +367,7 @@ struct SparseMaxPoolForwardFunctor<tv::GPU, T, Index> {
       if (size > numHotBlock) {
         maxPoolFwdGenericKernel<T, Index, NumTLP, NumILP>
             <<<dim3(1, tv::launch::DivUp(numPlanes, NumTLP)),
-               dim3(NumTLP / NumILP, NumTLP), 0, d.stream()>>>(
+               dim3(NumTLP / NumILP, NumTLP), 0, d.getStream()>>>(
                 outFeatures.data(), inFeatures.data(),
                 indices.subview(0).data() + numHotBlock,
                 indices.subview(1).data() + numHotBlock, size - numHotBlock,
@@ -403,7 +403,7 @@ struct SparseMaxPoolBackwardFunctor<tv::GPU, T, Index> {
             maxPoolBwdVecBlockKernel<T, Index, int(NumTLP), NumILP, vecload_type_t>
                 <<<dim3(std::min(size / NumTLP, 512), numPlanes / NumTLP),
                    dim3(NumTLP / vecloadFactor, NumTLP / NumILP), 0,
-                   d.stream()>>>(outFeatures.data(), inFeatures.data(),
+                   d.getStream()>>>(outFeatures.data(), inFeatures.data(),
                                  dout.data(), din.data(),
                                  indices.subview(0).data(),
                                  indices.subview(1).data(), numHotBlock,
@@ -414,7 +414,7 @@ struct SparseMaxPoolBackwardFunctor<tv::GPU, T, Index> {
           if (size > numHotBlock) {
             maxPoolBwdGenericKernel<T, Index, int(NumTLP), NumILP>
                 <<<dim3(1, numPlanes / NumTLP), dim3(NumTLP / NumILP, NumTLP),
-                   0, d.stream()>>>(outFeatures.data(), inFeatures.data(),
+                   0, d.getStream()>>>(outFeatures.data(), inFeatures.data(),
                                     dout.data(), din.data(),
                                     indices.subview(0).data() + numHotBlock,
                                     indices.subview(1).data() + numHotBlock,
@@ -433,7 +433,7 @@ struct SparseMaxPoolBackwardFunctor<tv::GPU, T, Index> {
       if (numHotBlock >= NumTLP) {
         maxPoolBwdGenericBlockKernel<T, Index, NumTLP, NumILP>
             <<<dim3(size / NumTLP, tv::launch::DivUp(numPlanes, NumTLP)),
-               dim3(NumTLP / NumILP, NumTLP), 0, d.stream()>>>(
+               dim3(NumTLP / NumILP, NumTLP), 0, d.getStream()>>>(
                 outFeatures.data(), inFeatures.data(), dout.data(), din.data(),
                 indices.subview(0).data(), indices.subview(1).data(),
                 numHotBlock, numPlanes);
@@ -443,7 +443,7 @@ struct SparseMaxPoolBackwardFunctor<tv::GPU, T, Index> {
       if (size > numHotBlock) {
         maxPoolBwdGenericKernel<T, Index, NumTLP, NumILP>
             <<<dim3(1, tv::launch::DivUp(numPlanes, NumTLP)),
-               dim3(NumTLP / NumILP, NumTLP), 0, d.stream()>>>(
+               dim3(NumTLP / NumILP, NumTLP), 0, d.getStream()>>>(
                 outFeatures.data(), inFeatures.data(), dout.data(), din.data(),
                 indices.subview(0).data() + numHotBlock,
                 indices.subview(1).data() + numHotBlock, size - numHotBlock,

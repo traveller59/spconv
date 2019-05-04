@@ -47,7 +47,7 @@ getIndicePair(torch::Tensor indices, int64_t batchSize,
   for (int i = 1; i < kernelSize.size(); ++i) {
     kernelVolume *= kernelSize[i];
   }
-  TV_ASSERT_RT_ERR(kernelVolume <= 256, "error");
+  TV_ASSERT_RT_ERR(kernelVolume <= 4096, "error");
   auto outputVolume = outSpatialShape[0];
   for (int i = 1; i < outSpatialShape.size(); ++i) {
     outputVolume *= outSpatialShape[i];
@@ -159,7 +159,7 @@ getIndicePairPreGrid(torch::Tensor indices, torch::Tensor gridOut, int64_t batch
   for (int i = 1; i < kernelSize.size(); ++i) {
     kernelVolume *= kernelSize[i];
   }
-  TV_ASSERT_RT_ERR(kernelVolume <= 256, "error");
+  TV_ASSERT_RT_ERR(kernelVolume <= 4096, "error");
   auto outputVolume = outSpatialShape[0];
   for (int i = 1; i < outSpatialShape.size(); ++i) {
     outputVolume *= outSpatialShape[i];
