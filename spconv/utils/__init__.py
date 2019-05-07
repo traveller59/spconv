@@ -222,10 +222,13 @@ class VoxelGeneratorV2:
         grid_size = (
             point_cloud_range[3:] - point_cloud_range[:3]) / voxel_size
         grid_size = np.round(grid_size).astype(np.int64)
+        if block_filtering:
+            assert block_size > 0
+            assert grid_size[0] % block_factor == 0
+            assert grid_size[1] % block_factor == 0
+
         voxelmap_shape = tuple(np.round(grid_size).astype(np.int32).tolist())
         voxelmap_shape = voxelmap_shape[::-1]
-        assert grid_size[0] % block_factor == 0
-        assert grid_size[1] % block_factor == 0
         self._coor_to_voxelidx = np.full(voxelmap_shape, -1, dtype=np.int32)
         self._voxel_size = voxel_size
         self._point_cloud_range = point_cloud_range
@@ -238,7 +241,6 @@ class VoxelGeneratorV2:
         self._block_factor = block_factor
         self._height_threshold = height_threshold
         self._block_size = block_size
-        assert block_size > 0
 
     def generate(self, points, max_voxels=None):
         res = points_to_voxel(
