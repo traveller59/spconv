@@ -111,7 +111,6 @@ class SparseMaxPoolFunction(Function):
         input_bp = ops.indice_maxpool_backward(features, out, grad_output, indice_pairs, indice_pair_num)
         return input_bp, None, None, None
 
-
 indice_conv = SparseConvFunction.apply
 indice_inverse_conv = SparseInverseConvFunction.apply
 indice_subm_conv = SubMConvFunction.apply

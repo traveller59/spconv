@@ -1,5 +1,5 @@
 add_library(spconv SHARED all.cc indice.cc indice.cu 
-            reordering.cc reordering.cu maxpool.cc maxpool.cu)
+            reordering.cc reordering.cu maxpool.cc maxpool.cu nms.cc)
 
 target_include_directories(spconv PRIVATE ${ALL_INCLUDE} )
 set_property(TARGET spconv PROPERTY CUDA_STANDARD 14)

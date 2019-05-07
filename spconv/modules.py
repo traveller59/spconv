@@ -1,11 +1,11 @@
 # Copyright 2019 Yan Yan
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,11 +17,18 @@ from collections import OrderedDict
 import spconv
 import torch
 from torch import nn
-import time 
+import time
+
 
 def is_spconv_module(module):
-    spconv_modules = (SparseModule,)
+    spconv_modules = (SparseModule, )
     return isinstance(module, spconv_modules)
+
+
+def is_sparse_conv(module):
+    from spconv.conv import SparseConvolution
+    return isinstance(module, SparseConvolution)
+
 
 def _mean_update(vals, m_vals, t):
     outputs = []
@@ -104,7 +111,7 @@ class SparseSequential(SparseModule):
     def __len__(self):
         return len(self._modules)
 
-    @property 
+    @property
     def sparity_dict(self):
         return self._sparity_dict
 
@@ -117,7 +124,7 @@ class SparseSequential(SparseModule):
 
     def forward(self, input):
         for k, module in self._modules.items():
-            if is_spconv_module(module): # use SpConvTensor as input
+            if is_spconv_module(module):  # use SpConvTensor as input
                 assert isinstance(input, spconv.SparseConvTensor)
                 self._sparity_dict[k] = input.sparity
                 input = module(input)
@@ -128,3 +135,50 @@ class SparseSequential(SparseModule):
                 else:
                     input = module(input)
         return input
+
+    def fused(self):
+        """don't use this. no effect.
+        """
+        from spconv.conv import SparseConvolution
+        mods = [v for k, v in self._modules.items()]
+        fused_mods = []
+        idx = 0
+        while idx < len(mods):
+            if is_sparse_conv(mods[idx]):
+                if idx < len(mods) - 1 and isinstance(mods[idx + 1], nn.BatchNorm1d):
+                    new_module = SparseConvolution(
+                        ndim=mods[idx].ndim,
+                        in_channels=mods[idx].in_channels,
+                        out_channels=mods[idx].out_channels,
+                        kernel_size=mods[idx].kernel_size,
+                        stride=mods[idx].stride,
+                        padding=mods[idx].padding,
+                        dilation=mods[idx].dilation,
+                        groups=mods[idx].groups,
+                        bias=True,
+                        subm=mods[idx].subm,
+                        output_padding=mods[idx].output_padding,
+                        transposed=mods[idx].transposed,
+                        inverse=mods[idx].inverse,
+                        indice_key=mods[idx].indice_key,
+                        fused_bn=True,
+                    )
+                    new_module.load_state_dict(mods[idx].state_dict(), False)
+                    new_module.to(mods[idx].weight.device)
+                    conv = new_module
+                    bn = mods[idx + 1]
+                    conv.bias.data.zero_()
+                    conv.weight.data[:] = conv.weight.data * bn.weight.data / (
+                        torch.sqrt(bn.running_var) + bn.eps)
+                    conv.bias.data[:] = (
+                        conv.bias.data - bn.running_mean) * bn.weight.data / (
+                            torch.sqrt(bn.running_var) + bn.eps) + bn.bias.data
+                    fused_mods.append(conv)
+                    idx += 2
+                else:
+                    fused_mods.append(mods[idx])
+                    idx += 1
+            else:
+                fused_mods.append(mods[idx])
+                idx += 1
+        return SparseSequential(*fused_mods)

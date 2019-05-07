@@ -83,6 +83,8 @@ def get_indice_pairs(indices,
             get_indice_pairs_func = torch.ops.spconv.get_indice_pairs_2d
         elif ndim == 3:
             get_indice_pairs_func = torch.ops.spconv.get_indice_pairs_3d
+        elif ndim == 4:
+            get_indice_pairs_func = torch.ops.spconv.get_indice_pairs_4d
         else:
             raise NotImplementedError
         return get_indice_pairs_func(indices, batch_size, out_shape, spatial_shape, ksize,
@@ -116,6 +118,21 @@ def indice_conv(features,
                                                int(inverse), int(subm))
     else:
         raise NotImplementedError
+
+def fused_indice_conv(features, filters, bias,
+            indice_pairs,
+            indice_pair_num,
+            num_activate_out, inverse, subm):
+    if features.dtype == torch.half:
+        func = torch.ops.spconv.fused_indice_conv_half
+    elif filters.dtype == torch.float32:
+        func = torch.ops.spconv.fused_indice_conv_fp32
+    else:
+        raise NotImplementedError
+
+    return func(features, filters, bias, indice_pairs,
+                indice_pair_num, num_activate_out,
+                int(inverse), int(subm))
 
 
 def indice_conv_backward(features,
@@ -155,3 +172,8 @@ def indice_maxpool_backward(features, out_features, out_bp, indice_pairs, indice
             features, out_features, out_bp, indice_pairs, indice_pair_num)
     else:
         raise NotImplementedError
+
+def nms(boxes, scores, pre_max_size, post_max_size, thresh, eps):
+    res = torch.ops.spconv.nms(
+        boxes, scores, pre_max_size, post_max_size, thresh, eps)
+    return res

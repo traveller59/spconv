@@ -59,4 +59,29 @@ PYBIND11_MODULE(spconv_utils, m)
           "num_points_per_voxel"_a = 4, "coor_to_voxelidx"_a = 5,
           "voxel_size"_a = 6, "coors_range"_a = 7, "max_points"_a = 8,
           "max_voxels"_a = 9);
+    m.def("points_to_voxel_3d_np_mean", &spconv::points_to_voxel_3d_np_mean<float, 3>,
+          "matrix tensor_square", "points"_a = 1, "voxels"_a = 2, "means"_a = 3, "coors"_a = 4,
+          "num_points_per_voxel"_a = 5, "coor_to_voxelidx"_a = 6,
+          "voxel_size"_a = 7, "coors_range"_a = 8, "max_points"_a = 9,
+          "max_voxels"_a = 10);
+    m.def("points_to_voxel_3d_np_mean", &spconv::points_to_voxel_3d_np_mean<double, 3>,
+          "matrix tensor_square", "points"_a = 1, "voxels"_a = 2, "means"_a = 3, "coors"_a = 4,
+          "num_points_per_voxel"_a = 5, "coor_to_voxelidx"_a = 6,
+          "voxel_size"_a = 7, "coors_range"_a = 8, "max_points"_a = 9,
+          "max_voxels"_a = 10);
+    m.def("points_to_voxel_3d_np_height", &spconv::points_to_voxel_3d_np_height<double, 3>,
+          "matrix tensor_square", "points"_a = 1, "voxels"_a = 2, "heights"_a = 3,
+          "maxs"_a = 4, "coors"_a = 5, "num_points_per_voxel"_a = 6, "coor_to_voxelidx"_a = 7,
+          "voxel_size"_a = 8, "coors_range"_a = 9, "max_points"_a = 10,
+          "max_voxels"_a = 11);
+    m.def("points_to_voxel_3d_with_filtering", &spconv::points_to_voxel_3d_with_filtering<float, 3>,
+          "matrix tensor_square", "points"_a = 1, "voxels"_a = 2, "voxel_mask"_a = 3, "mins"_a = 4,
+          "maxs"_a = 5, "coors"_a = 6, "num_points_per_voxel"_a = 7, "coor_to_voxelidx"_a = 8,
+          "voxel_size"_a = 9, "coors_range"_a = 10, "max_points"_a = 11,
+          "max_voxels"_a = 12, "block_factor"_a = 13, "block_size"_a = 14, "height_threshold"_a = 15);
+    m.def("points_to_voxel_3d_with_filtering", &spconv::points_to_voxel_3d_with_filtering<double, 3>,
+          "matrix tensor_square", "points"_a = 1, "voxels"_a = 2, "voxel_mask"_a = 3, "mins"_a = 4,
+          "maxs"_a = 5, "coors"_a = 6, "num_points_per_voxel"_a = 7, "coor_to_voxelidx"_a = 8,
+          "voxel_size"_a = 9, "coors_range"_a = 10, "max_points"_a = 11,
+          "max_voxels"_a = 12, "block_factor"_a = 13, "block_size"_a = 14, "height_threshold"_a = 15);
 }

@@ -20,7 +20,7 @@ import numpy as np
 import time 
 from spconv.test_utils import params_grid, generate_sparse_data, TestCase
 import unittest
-import sparseconvnet as scn 
+# import sparseconvnet as scn 
 
 class SparseConv3dTestTorch(nn.Module):
     def __init__(self, num_layers, ndim, shape, in_channels, out_channels, kernel_size,
@@ -612,7 +612,7 @@ def main():
 
 
 if __name__ == '__main__':
-    # main()
-    unittest.main()
+    main()
+    # unittest.main()
 
 
