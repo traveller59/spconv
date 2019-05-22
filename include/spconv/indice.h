@@ -44,7 +44,7 @@ struct CreateConvIndicePairFunctorP2
         tv::TensorView<Index> indicePairs, tv::TensorView<Index> indiceNum,
         tv::TensorView<Index> indicePairUnique,
         const tv::SimpleVector<Index, NDim> outSpatialShape, bool transpose,
-        bool resetGrid=false);
+        bool resetGrid=false, bool useHash=true);
 };
 
 template <typename Device, typename Index, typename IndexGrid, unsigned NDim>
@@ -58,7 +58,8 @@ struct CreateConvIndicePairFunctor
         const tv::SimpleVector<Index, NDim> stride,
         const tv::SimpleVector<Index, NDim> padding,
         const tv::SimpleVector<Index, NDim> dilation,
-        const tv::SimpleVector<Index, NDim> outSpatialShape, bool transpose, bool resetGrid=false);
+        const tv::SimpleVector<Index, NDim> outSpatialShape, bool transpose, bool resetGrid=false,
+        bool useHash=true);
 };
 
 template <typename Device, typename Index, typename IndexGrid, unsigned NDim>
@@ -71,7 +72,8 @@ struct CreateSubMIndicePairFunctor
         const tv::SimpleVector<Index, NDim> stride,
         const tv::SimpleVector<Index, NDim> padding,
         const tv::SimpleVector<Index, NDim> dilation,
-        const tv::SimpleVector<Index, NDim> outSpatialShape, bool transpose, bool resetGrid=false);
+        const tv::SimpleVector<Index, NDim> outSpatialShape, bool transpose, bool resetGrid=false,
+        bool useHash=true);
 };
 } // namespace functor
 } // namespace spconv

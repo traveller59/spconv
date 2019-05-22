@@ -32,7 +32,7 @@ struct CreateConvIndicePairFunctor<tv::CPU, Index, IndexGrid, NDim> {
                      const tv::SimpleVector<Index, NDim> padding,
                      const tv::SimpleVector<Index, NDim> dilation,
                      const tv::SimpleVector<Index, NDim> outSpatialShape,
-                     bool transpose, bool resetGrid) {
+                     bool transpose, bool resetGrid, bool useHash) {
     if (transpose)
       return getIndicePairsDeConv<Index, IndexGrid, NDim>(
           indicesIn, indicesOut,
@@ -59,7 +59,7 @@ struct CreateSubMIndicePairFunctor<tv::CPU, Index, IndexGrid, NDim> {
                      const tv::SimpleVector<Index, NDim> padding,
                      const tv::SimpleVector<Index, NDim> dilation,
                      const tv::SimpleVector<Index, NDim> outSpatialShape,
-                     bool transpose, bool resetGrid) {
+                     bool transpose, bool resetGrid, bool useHash) {
     return getIndicePairsSubM<Index, IndexGrid, NDim>(
         indicesIn,
         gridsOut, indicePairs, indiceNum,

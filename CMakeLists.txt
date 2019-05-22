@@ -13,7 +13,7 @@ if(WIN32) # true if windows (32 and 64 bit)
 else()
     set(CUDA_LIB_PATH_HINTS "${CUDA_TOOLKIT_ROOT_DIR}/lib64")
 endif()
-
+# set(CMAKE_VERBOSE_MAKEFILE ON)
 find_library(CUDA_CUDART NAMES cudart HINTS ${CUDA_LIB_PATH_HINTS})
 find_library(CUDA_CUBLAS NAMES cublas HINTS ${CUDA_LIB_PATH_HINTS})
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -21,6 +21,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 find_package(Torch REQUIRED)
+
+torch_cuda_get_nvcc_gencode_flag(NVCC_FLAGS_EXTRA)
+string (REPLACE ";" " " NVCC_FLAGS_EXTRA_STR "${NVCC_FLAGS_EXTRA}")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${NVCC_FLAGS_EXTRA_STR}")
 
 # add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
 
@@ -35,6 +39,7 @@ set(ALL_INCLUDE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
 
 add_subdirectory(src/spconv)
 add_subdirectory(src/utils)
+add_subdirectory(src/hash)
 
 if (SPCONV_BuildTests)
     include(CTest) #adds option BUILD_TESTING (default ON)

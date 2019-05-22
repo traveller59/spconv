@@ -271,13 +271,14 @@ Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
   std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
   Index* validPoints = validPoints_.data();
   Index *pointPtr = nullptr;
-  Index index = 0;
   for (int j = 0; j < numActIn; ++j) {
+    Index index = 0;
     index = tv::rowArrayIdx<Index, NDim>(indicesIn.data() + j * (NDim + 1) + 1,
                                          outSpatialShape) +
             spatialVolume * indicesIn(j, 0);
     gridsOut[index] = j;
   }
+  Index index = 0;
   for (int j = 0; j < numActIn; ++j) {
     numValidPoints = getValidOutPos<Index, NDim>(
         indicesIn.data() + j * (NDim + 1) + 1, kernelSize, stride, padding,

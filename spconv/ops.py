@@ -52,7 +52,8 @@ def get_indice_pairs(indices,
              out_padding=0,
              subm=False,
              transpose=False,
-             grid=None):
+             grid=None,
+             use_hash=True):
     ndim = indices.shape[1] - 1
     if not isinstance(ksize, (list, tuple)):
         ksize = [ksize] * ndim
@@ -88,7 +89,7 @@ def get_indice_pairs(indices,
         else:
             raise NotImplementedError
         return get_indice_pairs_func(indices, batch_size, out_shape, spatial_shape, ksize,
-                            stride, padding, dilation, out_padding, int(subm), int(transpose))
+                            stride, padding, dilation, out_padding, int(subm), int(transpose), int(use_hash))
     else:
         if ndim == 2:
             get_indice_pairs_func = torch.ops.spconv.get_indice_pairs_grid_2d
@@ -97,7 +98,7 @@ def get_indice_pairs(indices,
         else:
             raise NotImplementedError
         return get_indice_pairs_func(indices, grid, batch_size, out_shape, spatial_shape, ksize,
-                            stride, padding, dilation, out_padding, int(subm), int(transpose))
+                            stride, padding, dilation, out_padding, int(subm), int(transpose), int(use_hash))
 
 
 
@@ -177,3 +178,11 @@ def nms(boxes, scores, pre_max_size, post_max_size, thresh, eps):
     res = torch.ops.spconv.nms(
         boxes, scores, pre_max_size, post_max_size, thresh, eps)
     return res
+
+def pillar_scatter(features, coors, shape):
+    if features.dtype == torch.float32:
+        return torch.ops.spconv.pillar_scatter_float(features, coors, shape)
+    elif features.dtype == torch.half:
+        return torch.ops.spconv.pillar_scatter_half(features, coors, shape)
+    else:
+        raise NotImplementedError

@@ -30,10 +30,12 @@ getIndicePair(torch::Tensor indices, int64_t batchSize,
         std::vector<int64_t> outSpatialShape, std::vector<int64_t> spatialShape,
         std::vector<int64_t> kernelSize, std::vector<int64_t> stride,
         std::vector<int64_t> padding, std::vector<int64_t> dilation,
-        std::vector<int64_t> outPadding, int64_t _subM, int64_t _transpose) {
+        std::vector<int64_t> outPadding, int64_t _subM, int64_t _transpose, int64_t _useHash) {
+  
   // auto timer = spconv::CudaContextTimer<>();
   bool subM = _subM != 0;
   bool transpose = _transpose != 0;
+  bool useHash = _useHash != 0;
   auto numAct = indices.size(0);
   auto coorDim = indices.size(1) - 1; // batchIdx + xyz
   TV_ASSERT_RT_ERR(NDim == coorDim, "error");
@@ -52,13 +54,20 @@ getIndicePair(torch::Tensor indices, int64_t batchSize,
   for (int i = 1; i < outSpatialShape.size(); ++i) {
     outputVolume *= outSpatialShape[i];
   }
+  std::string msg = "due to limits of cuda hash, the volume of dense space include batch size ";
+  msg += "must less than std::numeric_limits<int>::max()";
+  TV_ASSERT_RT_ERR(batchSize * outputVolume < std::numeric_limits<int>::max(), msg);
   torch::Tensor indicePairs =
       torch::full({kernelVolume, 2, numAct}, -1,
                    torch::dtype(torch::kInt32).device(indices.device()));
   torch::Tensor indiceNum = torch::zeros(
       {kernelVolume}, torch::dtype(torch::kInt32).device(indices.device()));
+  auto gridSize = batchSize * outputVolume;
+  if (useHash){
+    gridSize = 1;
+  }
   torch::Tensor gridOut =
-      torch::full({batchSize * outputVolume}, -1,
+      torch::full({gridSize}, -1,
                   torch::dtype(torch::kInt32).device(indices.device()));
   // std::cout << "full time " << timer.report() / 1000.0 << std::endl;
   int64_t numActOut = -1;
@@ -90,14 +99,14 @@ getIndicePair(torch::Tensor indices, int64_t batchSize,
       numActOut = getIndicePairFtor(
           tv::CPU(), tv::torch2tv<const int>(indices), tv::torch2tv<int>(gridOut),
           tv::torch2tv<int>(indicePairs), tv::torch2tv<int>(indiceNum), kernelSize32,
-          stride32, padding32, dilation32, outSpatialShape32, transpose);
+          stride32, padding32, dilation32, outSpatialShape32, transpose, useHash);
     } else {
       auto getIndicePairFtor =
           functor::CreateSubMIndicePairFunctor<tv::GPU, int, int, NDim>();
       numActOut = getIndicePairFtor(
           tv::TorchGPU(), tv::torch2tv<const int>(indices), tv::torch2tv<int>(gridOut),
           tv::torch2tv<int>(indicePairs), tv::torch2tv<int>(indiceNum), kernelSize32,
-          stride32, padding32, dilation32, outSpatialShape32, transpose);
+          stride32, padding32, dilation32, outSpatialShape32, transpose, useHash);
     }
     return {indices, indicePairs, indiceNum};
   } else {
@@ -129,7 +138,7 @@ getIndicePair(torch::Tensor indices, int64_t batchSize,
             tv::TorchGPU(), tv::torch2tv<const int>(indices),
             tv::torch2tv<int>(outInds), tv::torch2tv<int>(gridOut),
             tv::torch2tv<int>(indicePairs), tv::torch2tv<int>(indiceNum),
-            tv::torch2tv<int>(indicePairUnique), outSpatialShape32, transpose);
+            tv::torch2tv<int>(indicePairUnique), outSpatialShape32, transpose, useHash);
       }
     }
     return {outInds.slice(0, 0, numActOut), indicePairs, indiceNum};
@@ -142,10 +151,12 @@ getIndicePairPreGrid(torch::Tensor indices, torch::Tensor gridOut, int64_t batch
         std::vector<int64_t> outSpatialShape, std::vector<int64_t> spatialShape,
         std::vector<int64_t> kernelSize, std::vector<int64_t> stride,
         std::vector<int64_t> padding, std::vector<int64_t> dilation,
-        std::vector<int64_t> outPadding, int64_t _subM, int64_t _transpose) {
+        std::vector<int64_t> outPadding, int64_t _subM, int64_t _transpose, int64_t _useHash) {
   // auto timer = spconv::CudaContextTimer<>();
   bool subM = _subM != 0;
   bool transpose = _transpose != 0;
+  bool useHash = _useHash != 0;
+  TV_ASSERT_RT_ERR(!useHash, "error");
   auto numAct = indices.size(0);
   auto coorDim = indices.size(1) - 1; // batchIdx + xyz
   TV_ASSERT_RT_ERR(NDim == coorDim, "error");

@@ -8,6 +8,10 @@ The GPU Indice Generation algorithm is a unofficial implementation of paper [SEC
 
 This project only support CUDA 9.0+. If you are using cuda 8.0, please update it to 9.0.
 
+## News:
+
+2019-5-22: spconv v1.1 alpha released, now cuda hash implementation will be default. you can use ```use_hash=False``` to use dense implementation. you may see some message during running, they will be removed in future.
+
 ## Install on Ubuntu 16.04/18.04
 
 0. Use ```git clone xxx.git --recursive``` to clone this repo.

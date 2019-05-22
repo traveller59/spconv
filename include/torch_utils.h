@@ -59,6 +59,31 @@ template <typename T> void check_torch_dtype(const torch::Tensor &tensor) {
 }
 
 template <typename T>
+constexpr auto type2torch(T val=T()) -> decltype(torch::kInt32){
+  TV_ASSERT_RT_ERR(false, "unknown type");
+}
+
+template <>
+constexpr auto type2torch(int val) -> decltype(torch::kInt32){
+  return torch::kInt32;
+}
+
+template <>
+constexpr auto type2torch(long val) -> decltype(torch::kInt32){
+  return torch::kInt64;
+}
+
+template <>
+constexpr auto type2torch(float val) -> decltype(torch::kInt32){
+  return torch::kFloat32;
+}
+
+template <>
+constexpr auto type2torch(double val) -> decltype(torch::kInt32){
+  return torch::kFloat64;
+}
+
+template <typename T>
 tv::TensorView<T> torch2tv(const torch::Tensor &tensor) {
   check_torch_dtype<T>(tensor);
   tv::Shape shape;

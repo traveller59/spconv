@@ -14,9 +14,10 @@
 
 #ifndef INDICE_CU_H_
 #define INDICE_CU_H_
-#include <tensorview/tensorview.h>
-#include <tensorview/helper_kernel.cu.h>
+#include <hash/hash_table.cuh>
 #include <spconv/geometry.h>
+#include <tensorview/helper_kernel.cu.h>
+#include <tensorview/tensorview.h>
 
 namespace spconv {
 template <typename Index, typename IndexGrid, unsigned NDim,
@@ -127,6 +128,49 @@ __global__ void assignGridAndIndiceOutKernel(
   }
 }
 
+template <typename Index, unsigned NDim,
+          unsigned kNumHashFunctions = 4>
+__global__ void assignIndiceOutKernel(
+    tv::TensorView<Index> indicesOut, int numAct,
+    tv::TensorView<Index> indicePairUnique,
+    const tv::SimpleVector<Index, NDim> outSpatialShape, int batchSize) {
+
+  Index index;
+  auto indicesOutPtr = indicesOut.data();
+  for (unsigned ix : tv::KernelLoopX<unsigned>(numAct)) {
+    index = indicePairUnique[ix];
+    index = tv::rowArrayIdxInv<Index, NDim>(
+        index, indicesOutPtr + ix * (NDim + 1) + 1, outSpatialShape.data());
+    indicesOut[ix * (NDim + 1)] = index % batchSize;
+  }
+}
+
+template <typename Index, typename IndexGrid, unsigned NDim,
+          unsigned kNumHashFunctions = 4>
+__global__ void
+assignIndicePairsHashKernel(tv::TensorView<Index> indicesOut, int numActIn,
+                            tv::TensorView<Index> indicePairs,
+                            tv::TensorView<Index> indicePairUnique,
+                            unsigned table_size, const cudahash::Entry *table,
+                            cudahash::Functions<kNumHashFunctions> constants,
+                            uint2 stash_constants, unsigned stash_count) {
+
+  Index index;
+  int kernelVolume = indicePairs.dim(0);
+  for (int ix : tv::KernelLoopX<int>(numActIn)) {
+    for (int i = 0; i < kernelVolume; ++i) {
+      index = indicePairs(i, 1, ix);
+      if (index > -1) {
+        auto val =
+            cudahash::retrieve((unsigned)(index), table_size,
+                               table, constants, stash_constants, stash_count);
+        assert(val != cudahash::kNotFound);
+        indicePairs(i, 1, ix) = (unsigned)val;
+      }
+    }
+  }
+}
+
 template <typename Index, typename IndexGrid, unsigned NDim>
 __global__ void
 assignIndicePairsKernel(tv::TensorView<Index> indicesOut,
@@ -150,8 +194,8 @@ assignIndicePairsKernel(tv::TensorView<Index> indicesOut,
 template <typename Index, typename IndexGrid, unsigned NDim>
 __global__ void
 prepareSubMGridKernel(tv::TensorView<const Index> indicesIn,
-                  tv::TensorView<IndexGrid> gridsOut,
-                  const tv::SimpleVector<Index, NDim> outSpatialShape) {
+                      tv::TensorView<IndexGrid> gridsOut,
+                      const tv::SimpleVector<Index, NDim> outSpatialShape) {
   auto numActIn = indicesIn.dim(0);
   Index spatialVolume = 1;
 #pragma unroll
@@ -166,6 +210,29 @@ prepareSubMGridKernel(tv::TensorView<const Index> indicesIn,
     gridsOut[index] = ix;
   }
 }
+
+template <typename Index, unsigned NDim>
+__global__ void
+prepareSubMHashKernel(tv::TensorView<const Index> indicesIn,
+                      unsigned* keys,
+                      unsigned* values,
+                      const tv::SimpleVector<Index, NDim> outSpatialShape) {
+  auto numActIn = indicesIn.dim(0);
+  Index spatialVolume = 1;
+#pragma unroll
+  for (int i = 0; i < NDim; ++i) {
+    spatialVolume *= outSpatialShape[i];
+  }
+  Index index = 0;
+  for (int ix : tv::KernelLoopX<int>(numActIn)) {
+    index = tv::rowArrayIdx<Index, NDim>(indicesIn.data() + ix * (NDim + 1) + 1,
+                                         outSpatialShape.data()) +
+            spatialVolume * indicesIn(ix, 0);
+    keys[ix] = index;
+    values[ix] = ix;
+  }
+}
+
 
 template <typename Index, typename IndexGrid, unsigned NDim,
           int KernelMaxVolume = 256>
@@ -206,6 +273,52 @@ __global__ void getSubMIndicePairsKernel(
   }
 }
 
+template <typename Index, unsigned NDim,
+          int KernelMaxVolume = 256, unsigned kNumHashFunctions=4>
+__global__ void getSubMIndicePairsHashKernel(
+    tv::TensorView<const Index> indicesIn,
+    tv::TensorView<Index> indicePairs, tv::TensorView<Index> indiceNum,
+    const tv::SimpleVector<Index, NDim> kernelSize,
+    const tv::SimpleVector<Index, NDim> stride,
+    const tv::SimpleVector<Index, NDim> padding,
+    const tv::SimpleVector<Index, NDim> dilation,
+    const tv::SimpleVector<Index, NDim> outSpatialShape,
+    unsigned table_size, const cudahash::Entry *table,
+    cudahash::Functions<kNumHashFunctions> constants,
+    uint2 stash_constants, unsigned stash_count) {
+  auto numActIn = indicesIn.dim(0);
+  Index spatialVolume = 1;
+#pragma unroll
+  for (int i = 0; i < NDim; ++i) {
+    spatialVolume *= outSpatialShape[i];
+  }
+  Index numValidPoints = 0;
+  Index validPoints[KernelMaxVolume * (NDim + 1)];
+  Index *pointPtr = nullptr;
+  Index index = 0;
+  for (int ix : tv::KernelLoopX<int>(numActIn)) {
+    numValidPoints = getValidOutPos<Index, NDim>(
+        indicesIn.data() + ix * (NDim + 1) + 1, kernelSize.data(),
+        stride.data(), padding.data(), dilation.data(), outSpatialShape.data(),
+        validPoints);
+    for (int i = 0; i < numValidPoints; ++i) {
+      pointPtr = validPoints + i * (NDim + 1);
+      auto offset = pointPtr[NDim];
+      index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape.data()) +
+              spatialVolume * indicesIn(ix, 0);
+      auto val =
+          cudahash::retrieve((unsigned)(index), table_size,
+                              table, constants, stash_constants, stash_count);
+      if (val != cudahash::kNotFound) {
+        auto oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
+        indicePairs(offset, 1, oldNum) = val;
+        indicePairs(offset, 0, oldNum) = ix;
+      }
+    }
+  }
+}
+
+
 template <typename Index, typename IndexGrid, unsigned NDim>
 __global__ void resetGridKernel(const Index *indicePairUnique,
                                 tv::TensorView<IndexGrid> gridsOut,
@@ -214,6 +327,14 @@ __global__ void resetGridKernel(const Index *indicePairUnique,
     gridsOut[indicePairUnique[ix]] = -1;
   }
 }
+
+template <typename T>
+__global__ void arangeKernel(T *data, int size) {
+  for (int ix : tv::KernelLoopX<int>(size)) {
+    data[ix] = ix;
+  }
+}
+
 
 template <typename Index, typename IndexGrid, unsigned NDim>
 __global__ void

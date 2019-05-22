@@ -13,12 +13,12 @@
 # limitations under the License.
 
 import numpy as np
+
 from spconv import spconv_utils
 from spconv.spconv_utils import (
     non_max_suppression, non_max_suppression_cpu, points_to_voxel_3d_np,
-    rbbox_iou, points_to_voxel_3d_np_mean, points_to_voxel_3d_np_height,
-    points_to_voxel_3d_with_filtering, rotate_non_max_suppression_cpu,
-    rbbox_intersection)
+    points_to_voxel_3d_np_mean, points_to_voxel_3d_with_filtering,
+    rbbox_intersection, rbbox_iou, rotate_non_max_suppression_cpu)
 
 
 def points_to_voxel(points,
@@ -28,11 +28,11 @@ def points_to_voxel(points,
                     max_points=35,
                     max_voxels=20000,
                     full_mean=False,
-                    with_height=False,
                     block_filtering=True,
                     block_factor=1,
                     block_size=8,
                     height_threshold=0.2,
+                    height_high_threshold=3.0,
                     pad_output=False):
     """convert 3d points(N, >=3) to voxels. This version calculate
     everything in one loop. now it takes only 0.8ms(~6k voxels) 
@@ -51,7 +51,6 @@ def points_to_voxel(points,
             before call this function because max_voxels may drop some points.
         full_mean: bool. if true, all empty points in voxel will be filled with mean
             of exist points.
-        with_height: bool. don't use this.
         block_filtering: filter voxels by height. used for lidar point cloud.
             use some visualization tool to see filtered result.
     Returns:
@@ -71,67 +70,63 @@ def points_to_voxel(points,
     num_points_per_voxel = np.zeros(shape=(max_voxels, ), dtype=np.int32)
     voxels = np.zeros(
         shape=(max_voxels, max_points, points.shape[-1]), dtype=points.dtype)
+    voxel_point_mask = np.zeros(
+        shape=(max_voxels, max_points), dtype=points.dtype)
     coors = np.zeros(shape=(max_voxels, 3), dtype=np.int32)
     res = {
         "voxels": voxels,
         "coordinates": coors,
         "num_points_per_voxel": num_points_per_voxel,
+        "voxel_point_mask": voxel_point_mask,
     }
     if full_mean:
         means = np.zeros(
             shape=(max_voxels, points.shape[-1]), dtype=points.dtype)
         voxel_num = points_to_voxel_3d_np_mean(
-            points, voxels, means, coors,
+            points, voxels, voxel_point_mask, means, coors,
             num_points_per_voxel, coor_to_voxelidx, voxel_size.tolist(),
             coors_range.tolist(), max_points, max_voxels)
     else:
-        if with_height:
-            heights = np.zeros(
-                shape=(max_voxels, points.shape[-1]), dtype=points.dtype)
-            maxs = np.zeros(
-                shape=(max_voxels, points.shape[-1]), dtype=points.dtype)
-            res["heights"] = heights
-            voxel_num = points_to_voxel_3d_np_height(
-                points, voxels, heights, maxs, coors,
+        if block_filtering:
+            block_shape = [*voxelmap_shape[1:]]
+            block_shape = [b // block_factor for b in block_shape]
+            mins = np.full(block_shape, 99999999, dtype=points.dtype)
+            maxs = np.full(block_shape, -99999999, dtype=points.dtype)
+            voxel_mask = np.zeros((max_voxels, ), dtype=np.int32)
+            voxel_num = points_to_voxel_3d_with_filtering(
+                points, voxels, voxel_point_mask, voxel_mask, mins, maxs,
+                coors, num_points_per_voxel, coor_to_voxelidx,
+                voxel_size.tolist(), coors_range.tolist(), max_points,
+                max_voxels, block_factor, block_size, height_threshold,
+                height_high_threshold)
+            voxel_mask = voxel_mask.astype(np.bool_)
+            coors_ = coors[voxel_mask]
+            if pad_output:
+                res["coordinates"][:voxel_num] = coors_
+                res["voxels"][:voxel_num] = voxels[voxel_mask]
+                res["voxel_point_mask"][:voxel_num] = voxel_point_mask[
+                    voxel_mask]
+
+                res["num_points_per_voxel"][:voxel_num] = num_points_per_voxel[
+                    voxel_mask]
+                res["coordinates"][voxel_num:] = 0
+                res["voxels"][voxel_num:] = 0
+                res["num_points_per_voxel"][voxel_num:] = 0
+                res["voxel_point_mask"][voxel_num:] = 0
+            else:
+                res["coordinates"] = coors_
+                res["voxels"] = voxels[voxel_mask]
+                res["num_points_per_voxel"] = num_points_per_voxel[voxel_mask]
+                res["voxel_point_mask"] = voxel_point_mask[voxel_mask]
+            voxel_num = coors_.shape[0]
+        else:
+            voxel_num = points_to_voxel_3d_np(
+                points, voxels, voxel_point_mask, coors,
                 num_points_per_voxel, coor_to_voxelidx, voxel_size.tolist(),
                 coors_range.tolist(), max_points, max_voxels)
-        else:
-            if block_filtering:
-                block_shape = [*voxelmap_shape[1:]]
-                block_shape = [b // block_factor for b in block_shape]
-                mins = np.full(block_shape, 99999999, dtype=points.dtype)
-                maxs = np.full(block_shape, -99999999, dtype=points.dtype)
-                voxel_mask = np.zeros((max_voxels, ), dtype=np.int32)
-                voxel_num = points_to_voxel_3d_with_filtering(
-                    points, voxels, voxel_mask, mins, maxs,
-                    coors, num_points_per_voxel, coor_to_voxelidx,
-                    voxel_size.tolist(), coors_range.tolist(), max_points,
-                    max_voxels, block_factor, block_size, height_threshold)
-                voxel_mask = voxel_mask.astype(np.bool_)
-                coors_ = coors[voxel_mask]
-                if pad_output:
-                    res["coordinates"][:voxel_num] = coors_
-                    res["voxels"][:voxel_num] = voxels[voxel_mask]
-                    res["num_points_per_voxel"][:
-                                                voxel_num] = num_points_per_voxel[
-                                                    voxel_mask]
-                    res["coordinates"][voxel_num:] = 0
-                    res["voxels"][voxel_num:] = 0
-                    res["num_points_per_voxel"][voxel_num:] = 0
-                else:
-                    res["coordinates"] = coors_
-                    res["voxels"] = voxels[voxel_mask]
-                    res["num_points_per_voxel"] = num_points_per_voxel[
-                        voxel_mask]
-                voxel_num = coors_.shape[0]
-            else:
-                voxel_num = points_to_voxel_3d_np(points, voxels, coors,
-                                                  num_points_per_voxel,
-                                                  coor_to_voxelidx,
-                                                  voxel_size.tolist(),
-                                                  coors_range.tolist(),
-                                                  max_points, max_voxels)
     res["voxel_num"] = voxel_num
+    res["voxel_point_mask"] = res["voxel_point_mask"].reshape(
+        -1, max_points, 1)
     return res
 
 
@@ -209,12 +204,11 @@ class VoxelGeneratorV2:
                  max_num_points,
                  max_voxels=20000,
                  full_mean=False,
-                 with_height=False,
                  block_filtering=False,
                  block_factor=8,
                  block_size=3,
-                 height_threshold=0.1):
-        assert with_height is False, "don't use this."
+                 height_threshold=0.1,
+                 height_high_threshold=2.0):
         assert full_mean is False, "don't use this."
         point_cloud_range = np.array(point_cloud_range, dtype=np.float32)
         # [0, -40, -3, 70.4, 40, 1]
@@ -236,19 +230,19 @@ class VoxelGeneratorV2:
         self._max_voxels = max_voxels
         self._grid_size = grid_size
         self._full_mean = full_mean
-        self._with_height = with_height
         self._block_filtering = block_filtering
         self._block_factor = block_factor
         self._height_threshold = height_threshold
         self._block_size = block_size
+        self._height_high_threshold = height_high_threshold
 
     def generate(self, points, max_voxels=None):
         res = points_to_voxel(
             points, self._voxel_size, self._point_cloud_range,
             self._coor_to_voxelidx, self._max_num_points, max_voxels
-            or self._max_voxels, self._full_mean, self._with_height,
-            self._block_filtering, self._block_factor, self._block_size,
-            self._height_threshold)
+            or self._max_voxels, self._full_mean, self._block_filtering,
+            self._block_factor, self._block_size, self._height_threshold,
+            self._height_high_threshold)
         for k, v in res.items():
             if k != "voxel_num":
                 res[k] = v[:res["voxel_num"]]
@@ -263,11 +257,11 @@ class VoxelGeneratorV2:
             self._max_num_points,
             max_voxels or self._max_voxels,
             self._full_mean,
-            self._with_height,
             self._block_filtering,
             self._block_factor,
             self._block_size,
             self._height_threshold,
+            self._height_high_threshold,
             pad_output=True)
         return res
 

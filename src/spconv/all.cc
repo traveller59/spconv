@@ -15,6 +15,7 @@
 #include <cuda_runtime_api.h>
 #include <spconv/pool_ops.h>
 #include <spconv/spconv_ops.h>
+#include <spconv/pillar_scatter_ops.h>
 #include <spconv/fused_spconv_ops.h>
 #include <spconv/nms_ops.h>
 
@@ -34,7 +35,9 @@ static auto registry =
         .op("spconv::indice_maxpool_fp32", &spconv::indiceMaxPool<float>)
         .op("spconv::indice_maxpool_backward_fp32",
             &spconv::indiceMaxPoolBackward<float>)
-        .op("spconv::indice_maxpool_half", &spconv::indiceMaxPool<at::Half>)
-        .op("spconv::indice_maxpool_backward_half",
-            &spconv::indiceMaxPoolBackward<at::Half>)
-        .op("spconv::nms", &spconv::nonMaxSuppression<float>);
+        // .op("spconv::indice_maxpool_half", &spconv::indiceMaxPool<at::Half>)
+        // .op("spconv::indice_maxpool_backward_half",
+        //     &spconv::indiceMaxPoolBackward<at::Half>)
+        .op("spconv::nms", &spconv::nonMaxSuppression<float>)
+        .op("spconv::pillar_scatter_float", &spconv::pointPillarScatter<float>)
+        .op("spconv::pillar_scatter_half", &spconv::pointPillarScatter<at::Half>);

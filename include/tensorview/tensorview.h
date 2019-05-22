@@ -91,14 +91,28 @@ void sstream_print(SStream &ss, T val, TArgs... args) {
 
 #define TV_CHECK_CUDA_ERR()                                                    \
   {                                                                            \
-    auto err = cudaGetLastError();                                             \
-    if (err != cudaSuccess) {                                                  \
+    auto __macro_err = cudaGetLastError();                                             \
+    if (__macro_err != cudaSuccess) {                                                  \
       std::stringstream __macro_s;                                             \
       __macro_s << __FILE__ << " " << __LINE__ << "\n";                        \
-      __macro_s << "cuda execution failed with error " << err;                 \
+      __macro_s << "cuda execution failed with error " << __macro_err;                 \
       throw std::runtime_error(__macro_s.str());                               \
     }                                                                          \
   }
+
+#define TV_CHECK_CUDA_ERR_V2(...)                                                    \
+  {                                                                            \
+    auto __macro_err = cudaGetLastError();                                             \
+    if (__macro_err != cudaSuccess) {                                                  \
+      std::stringstream __macro_s;                                             \
+      __macro_s << __FILE__ << " " << __LINE__ << "\n";                        \
+      __macro_s << "cuda execution failed with error " << __macro_err;                 \
+      __macro_s << " " << cudaGetErrorString(__macro_err) << "\n";\
+      tv::sstream_print(__macro_s, __VA_ARGS__); \
+      throw std::runtime_error(__macro_s.str());                               \
+    }                                                                          \
+  }
+
 
 struct GPU {
   GPU(cudaStream_t s = 0) : mStream(s) {}

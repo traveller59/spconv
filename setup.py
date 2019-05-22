@@ -45,7 +45,8 @@ class CMakeBuild(build_ext):
                       '-DCMAKE_PREFIX_PATH={}'.format(LIBTORCH_ROOT),
                       '-DPYBIND11_PYTHON_VERSION={}'.format(PYTHON_VERSION),
                       '-DSPCONV_BuildTests=OFF',
-                      '-DCMAKE_CUDA_FLAGS="--expt-relaxed-constexpr"']
+                      '-DCMAKE_CUDA_FLAGS="--expt-relaxed-constexpr"'
+                      ] #  -arch=sm_61
         cfg = 'Debug' if self.debug else 'Release'
         assert cfg == "Release", "pytorch ops don't support debug build."
         build_args = ['--config', cfg]
