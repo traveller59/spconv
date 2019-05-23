@@ -70,7 +70,7 @@ class SparseConvolution(SparseModule):
                  inverse=False,
                  indice_key=None,
                  fused_bn=False,
-                 use_hash=True):
+                 use_hash=False):
         super(SparseConvolution, self).__init__()
         assert groups == 1
         if not isinstance(kernel_size, (list, tuple)):
@@ -222,7 +222,7 @@ class SparseConv2d(SparseConvolution):
                  groups=1,
                  bias=True,
                  indice_key=None,
-                 use_hash=True):
+                 use_hash=False):
         super(SparseConv2d, self).__init__(
             2,
             in_channels,
@@ -248,7 +248,7 @@ class SparseConv3d(SparseConvolution):
                  groups=1,
                  bias=True,
                  indice_key=None,
-                 use_hash=True):
+                 use_hash=False):
         super(SparseConv3d, self).__init__(
             3,
             in_channels,
@@ -274,7 +274,7 @@ class SparseConv4d(SparseConvolution):
                  groups=1,
                  bias=True,
                  indice_key=None,
-                 use_hash=True):
+                 use_hash=False):
         super(SparseConv4d, self).__init__(
             4,
             in_channels,
@@ -300,7 +300,7 @@ class SparseConvTranspose2d(SparseConvolution):
                  groups=1,
                  bias=True,
                  indice_key=None,
-                 use_hash=True):
+                 use_hash=False):
         super(SparseConvTranspose2d, self).__init__(
             2,
             in_channels,
@@ -327,7 +327,7 @@ class SparseConvTranspose3d(SparseConvolution):
                  groups=1,
                  bias=True,
                  indice_key=None,
-                 use_hash=True):
+                 use_hash=False):
         super(SparseConvTranspose3d, self).__init__(
             3,
             in_channels,
@@ -388,7 +388,7 @@ class SubMConv2d(SparseConvolution):
                  groups=1,
                  bias=True,
                  indice_key=None,
-                 use_hash=True):
+                 use_hash=False):
         super(SubMConv2d, self).__init__(
             2,
             in_channels,
@@ -415,7 +415,7 @@ class SubMConv3d(SparseConvolution):
                  groups=1,
                  bias=True,
                  indice_key=None,
-                 use_hash=True):
+                 use_hash=False):
         super(SubMConv3d, self).__init__(
             3,
             in_channels,
@@ -442,7 +442,7 @@ class SubMConv4d(SparseConvolution):
                  groups=1,
                  bias=True,
                  indice_key=None,
-                 use_hash=True):
+                 use_hash=False):
         super(SubMConv4d, self).__init__(
             4,
             in_channels,
