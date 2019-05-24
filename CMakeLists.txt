@@ -3,9 +3,9 @@ cmake_minimum_required(VERSION 3.13 FATAL_ERROR)
 option(SPCONV_BuildTests "Build the unit tests when BUILD_TESTING is enabled." ON)
 option(SPCONV_BuildCUDA "Build cuda code when BUILD_TESTING is enabled." ON)
 if (SPCONV_BuildCUDA)
-    project(SparseConv LANGUAGES CXX CUDA VERSION 1.0)
+    project(SparseConv LANGUAGES CXX CUDA VERSION 1.1)
 else()
-project(SparseConv LANGUAGES CXX VERSION 1.0)
+    project(SparseConv LANGUAGES CXX VERSION 1.1)
 endif()
 
 
@@ -15,7 +15,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 find_package(Torch REQUIRED)
-
+# set(CMAKE_VERBOSE_MAKEFILE ON)
 if (SPCONV_BuildCUDA)
     set(CUDA_TOOLKIT_ROOT_DIR "${CMAKE_CUDA_COMPILER}")
     get_filename_component(CUDA_TOOLKIT_ROOT_DIR "${CUDA_TOOLKIT_ROOT_DIR}" DIRECTORY)
@@ -26,7 +26,6 @@ if (SPCONV_BuildCUDA)
     else()
         set(CUDA_LIB_PATH_HINTS "${CUDA_TOOLKIT_ROOT_DIR}/lib64")
     endif()
-    # set(CMAKE_VERBOSE_MAKEFILE ON)
     find_library(CUDA_CUDART NAMES cudart HINTS ${CUDA_LIB_PATH_HINTS})
     find_library(CUDA_CUBLAS NAMES cublas HINTS ${CUDA_LIB_PATH_HINTS})
     torch_cuda_get_nvcc_gencode_flag(NVCC_FLAGS_EXTRA)
@@ -49,7 +48,6 @@ endif()
 
 add_subdirectory(src/spconv)
 add_subdirectory(src/utils)
-
 
 if (SPCONV_BuildTests)
     include(CTest) #adds option BUILD_TESTING (default ON)
