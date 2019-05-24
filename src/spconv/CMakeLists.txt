@@ -4,6 +4,12 @@ if (SPCONV_BuildCUDA)
 endif()
 add_library(spconv SHARED ${ALL_FILES})
 
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(spconv PUBLIC OpenMP::OpenMP_CXX)
+endif()
+
+
 target_include_directories(spconv PRIVATE ${ALL_INCLUDE} )
 set_property(TARGET spconv PROPERTY CUDA_STANDARD 14)
 set_property(TARGET spconv PROPERTY CXX_STANDARD 14)
