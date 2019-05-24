@@ -1,8 +1,8 @@
-#include <hash/hash_table.h>
+#include <cuhash/hash_table.h>
 #include <cuda.h>
 
 int main(){
-    auto table = cudahash::HashTable();
+    auto table = cuhash::HashTable();
     table.Initialize(10, 2.0);
     const int N = 10;
 

@@ -15,7 +15,6 @@
 #ifndef NMS_TORCH_OP_H_
 #define NMS_TORCH_OP_H_
 
-#include <cuda_runtime_api.h>
 #include <spconv/indice.h>
 #include <spconv/reordering.h>
 #include <torch/script.h>

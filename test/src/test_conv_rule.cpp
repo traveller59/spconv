@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 #include <exception>
-#include <fmt/format.h>
 #include <numeric>
 #include <pybind11/embed.h> // everything needed for embedding
 #include <pybind11/functional.h>
@@ -118,7 +117,7 @@ TEST_CASE("GetConvIndPair", "[SpConvNet]")
         auto filters_gpu = filters_tensor.to(torch::Device(torch::kCUDA, 0));
         
         auto outputs = spconv::getIndicePair<3>(inds_gpu, 1, {46, 26, 26}, {50, 30, 30}, {3, 3, 3},
-            {1, 1, 1}, {0, 0, 0}, {2, 2, 2}, {0, 0, 0}, false, false);
+            {1, 1, 1}, {0, 0, 0}, {2, 2, 2}, {0, 0, 0}, 0, 0, 0);
         // std::cout << outputs[2] << std::endl;
         /*
         auto output = spconv::indiceConv<float>(features_gpu, filters_gpu, outputs[1], outputs[2], outputs[0].size(0), false);

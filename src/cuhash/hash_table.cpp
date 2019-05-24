@@ -14,20 +14,18 @@
  * @brief Implements a basic hash table that stores one value per key.
  */
 
-#include <hash/hash_table.h>
-#include <hash/debugging.h>
+#include <cuhash/hash_table.h>
+#include <cuhash/debugging.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <limits>
-#include <hash/mt19937ar.h>
-
 #include <cuda_runtime_api.h>
-#include <hash/cuda_util.h>
+#include <cuhash/cuda_util.h>
 
-namespace cudahash {
+namespace cuhash {
 
 char buffer[256];
 
@@ -164,8 +162,8 @@ bool HashTable::Build(const unsigned  n,
         else
             constants_5_.Generate(n, d_keys,table_size_);
 
-        stash_constants_.x = std::max(1lu, genrand_int32()) % kPrimeDivisor;
-        stash_constants_.y = genrand_int32() % kPrimeDivisor;
+        stash_constants_.x = std::max(1u, generate_random_uint32()) % kPrimeDivisor;
+        stash_constants_.y = generate_random_uint32() % kPrimeDivisor;
         stash_count_ = 0;
 
         // Initialize memory.
@@ -205,8 +203,8 @@ bool HashTable::Build(const unsigned  n,
     // Copy out the stash size.
     CUDA_SAFE_CALL(cudaMemcpy( &stash_count_, d_stash_count, sizeof(unsigned), cudaMemcpyDeviceToHost ));
     if (stash_count_ && num_failures == 0) {
-        sprintf(buffer, "Stash size: %u", stash_count_);
-        PrintMessage(buffer, true);
+        // sprintf(buffer, "Stash size: %u", stash_count_);
+        // PrintMessage(buffer, true);
 
 #ifdef _DEBUG
         PrintStashContents(d_contents_ + table_size_);
@@ -226,7 +224,7 @@ bool HashTable::Build(const unsigned  n,
         sprintf(buffer, "Completely failed to build");
         PrintMessage(buffer, true);
     } else if (num_attempts > 1) {
-        sprintf(buffer, "Needed %u attempts to build", num_attempts);
+        sprintf(buffer, "Needed %u attempts to build, you can ignore this message.", num_attempts);
         PrintMessage(buffer, true);
     }
 

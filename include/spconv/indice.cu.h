@@ -14,18 +14,18 @@
 
 #ifndef INDICE_CU_H_
 #define INDICE_CU_H_
-#include <hash/hash_table.cuh>
+#include <cuhash/hash_table.cuh>
 #include <spconv/geometry.h>
 #include <tensorview/helper_kernel.cu.h>
 #include <tensorview/tensorview.h>
 
 namespace spconv {
 template <typename Index, typename IndexGrid, unsigned NDim,
-          int KernelMaxVolume = 256>
+          int KernelMaxVolume = 256, typename Index1D=int>
 __global__ void prepareIndicePairsKernel(
     tv::TensorView<const Index> indicesIn, tv::TensorView<Index> indicesOut,
     tv::TensorView<IndexGrid> gridsOut, tv::TensorView<Index> indicePairs,
-    tv::TensorView<Index> indiceNum, tv::TensorView<Index> indicePairUnique,
+    tv::TensorView<Index> indiceNum, tv::TensorView<Index1D> indicePairUnique,
     const tv::SimpleVector<Index, NDim> kernelSize,
     const tv::SimpleVector<Index, NDim> stride,
     const tv::SimpleVector<Index, NDim> padding,
@@ -151,8 +151,8 @@ __global__ void
 assignIndicePairsHashKernel(tv::TensorView<Index> indicesOut, int numActIn,
                             tv::TensorView<Index> indicePairs,
                             tv::TensorView<Index> indicePairUnique,
-                            unsigned table_size, const cudahash::Entry *table,
-                            cudahash::Functions<kNumHashFunctions> constants,
+                            unsigned table_size, const cuhash::Entry *table,
+                            cuhash::Functions<kNumHashFunctions> constants,
                             uint2 stash_constants, unsigned stash_count) {
 
   Index index;
@@ -162,9 +162,9 @@ assignIndicePairsHashKernel(tv::TensorView<Index> indicesOut, int numActIn,
       index = indicePairs(i, 1, ix);
       if (index > -1) {
         auto val =
-            cudahash::retrieve((unsigned)(index), table_size,
+            cuhash::retrieve((unsigned)(index), table_size,
                                table, constants, stash_constants, stash_count);
-        assert(val != cudahash::kNotFound);
+        assert(val != cuhash::kNotFound);
         indicePairs(i, 1, ix) = (unsigned)val;
       }
     }
@@ -283,8 +283,8 @@ __global__ void getSubMIndicePairsHashKernel(
     const tv::SimpleVector<Index, NDim> padding,
     const tv::SimpleVector<Index, NDim> dilation,
     const tv::SimpleVector<Index, NDim> outSpatialShape,
-    unsigned table_size, const cudahash::Entry *table,
-    cudahash::Functions<kNumHashFunctions> constants,
+    unsigned table_size, const cuhash::Entry *table,
+    cuhash::Functions<kNumHashFunctions> constants,
     uint2 stash_constants, unsigned stash_count) {
   auto numActIn = indicesIn.dim(0);
   Index spatialVolume = 1;
@@ -307,9 +307,9 @@ __global__ void getSubMIndicePairsHashKernel(
       index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape.data()) +
               spatialVolume * indicesIn(ix, 0);
       auto val =
-          cudahash::retrieve((unsigned)(index), table_size,
+          cuhash::retrieve((unsigned)(index), table_size,
                               table, constants, stash_constants, stash_count);
-      if (val != cudahash::kNotFound) {
+      if (val != cuhash::kNotFound) {
         auto oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
         indicePairs(offset, 1, oldNum) = val;
         indicePairs(offset, 0, oldNum) = ix;

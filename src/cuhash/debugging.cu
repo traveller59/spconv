@@ -15,14 +15,14 @@
  * @brief Debugging/statistics/performance utilities for hash tables.
  */
 
-#include <hash/debugging.h>
-#include <hash/definitions.h>
-#include <hash/hash_table.cuh>
+#include <cuhash/debugging.h>
+#include <cuhash/definitions.h>
+#include <cuhash/hash_table.cuh>
 
 #include <algorithm>
-#include <hash/cuda_util.h>
+#include <cuhash/cuda_util.h>
 
-namespace cudahash {
+namespace cuhash {
 
 
 //! Debugging function: Takes statistics on the hash functions' distribution.
@@ -231,9 +231,9 @@ bool CheckAssignedSameSlot(const unsigned  N,
 
 
 void PrintStashContents(const Entry *d_stash) {
-  Entry *stash = new Entry[cudahash::kStashSize];
-  CUDA_SAFE_CALL(cudaMemcpy(stash, d_stash, sizeof(Entry) * cudahash::kStashSize, cudaMemcpyDeviceToHost));
-  for (unsigned i = 0; i < cudahash::kStashSize; ++i) {
+  Entry *stash = new Entry[cuhash::kStashSize];
+  CUDA_SAFE_CALL(cudaMemcpy(stash, d_stash, sizeof(Entry) * cuhash::kStashSize, cudaMemcpyDeviceToHost));
+  for (unsigned i = 0; i < cuhash::kStashSize; ++i) {
     if (get_key(stash[i]) != kKeyEmpty) {
       char buffer[256];
       sprintf(buffer, "Stash[%u]: %u = %u", i, get_key(stash[i]), get_value(stash[i]));

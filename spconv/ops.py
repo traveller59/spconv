@@ -88,8 +88,10 @@ def get_indice_pairs(indices,
             get_indice_pairs_func = torch.ops.spconv.get_indice_pairs_4d
         else:
             raise NotImplementedError
-        return get_indice_pairs_func(indices, batch_size, out_shape, spatial_shape, ksize,
+
+        res = get_indice_pairs_func(indices, batch_size, out_shape, spatial_shape, ksize,
                             stride, padding, dilation, out_padding, int(subm), int(transpose), int(use_hash))
+        return res
     else:
         if ndim == 2:
             get_indice_pairs_func = torch.ops.spconv.get_indice_pairs_grid_2d

@@ -1,0 +1,19 @@
+add_library(cuhash SHARED hash_functions.cu hash_table.cpp hash_table.cu)
+
+target_include_directories(cuhash PRIVATE ${ALL_INCLUDE} )
+set_property(TARGET cuhash PROPERTY CUDA_STANDARD 14)
+set_property(TARGET cuhash PROPERTY CXX_STANDARD 14)
+set_target_properties(cuhash PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+target_link_libraries(cuhash PRIVATE ${ALL_LIBS})
+install (TARGETS cuhash DESTINATION lib)
+
+if (SPCONV_BuildTests)
+    add_executable(cuhash_test main.cc)
+
+    target_include_directories(cuhash_test PRIVATE ${ALL_INCLUDE} )
+    set_property(TARGET cuhash_test PROPERTY CUDA_STANDARD 14)
+    set_property(TARGET cuhash_test PROPERTY CXX_STANDARD 14)
+    set_target_properties(cuhash_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+    target_link_libraries(cuhash_test PRIVATE ${ALL_LIBS} cuhash)
+    install (TARGETS cuhash_test DESTINATION bin)
+endif()

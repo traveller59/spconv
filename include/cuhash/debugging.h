@@ -24,7 +24,7 @@
 
 #include <algorithm>
 
-namespace cudahash {
+namespace cuhash {
 
 //! @name Debugging functions
 /// @{

@@ -45,7 +45,7 @@
 /* -------------------------------------------------------------------------
    Hash table code.
    ------------------------------------------------------------------------- */
-namespace cudahash {
+namespace cuhash {
 
 //! Compute how many thread blocks are required for the given number of threads.
 dim3 ComputeGridDim(unsigned threads);
@@ -113,7 +113,7 @@ class HashTable {
    *  The input keys are expected to be completely unique.
    *  To reduce the chance of a failure, increase the space usage or number of 
    *  functions.
-   *  Keys are not allowed to be equal to cudahash::kKeyEmpty.
+   *  Keys are not allowed to be equal to cuhash::kKeyEmpty.
    */
   virtual bool Build(const unsigned  input_size,
                      const unsigned *d_keys,

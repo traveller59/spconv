@@ -15,7 +15,6 @@
 #ifndef FUSED_SPARSE_CONV_OP_H_
 #define FUSED_SPARSE_CONV_OP_H_
 
-#include <cuda_runtime_api.h>
 #include <spconv/indice.h>
 #include <spconv/reordering.h>
 #include <torch/script.h>
@@ -84,7 +83,9 @@ torch::Tensor fusedIndiceConvBatchNorm(torch::Tensor features, torch::Tensor fil
       gatherFtor(tv::CPU(), tv::torch2tv<T>(inputBuffer),
                  tv::torch2tv<const T>(features),
                  tv::torch2tv<const int>(indicePairs).subview(i, inverse), nHot);
-    } else {
+    } 
+#ifdef SPCONV_CUDA
+    else if (device == torch::kCUDA) {
       functor::SparseGatherFunctor<tv::GPU, T, int> gatherFtor;
       gatherFtor(tv::TorchGPU(), tv::torch2tv<T>(inputBuffer),
                  tv::torch2tv<const T>(features),
@@ -97,6 +98,11 @@ torch::Tensor fusedIndiceConvBatchNorm(torch::Tensor features, torch::Tensor fil
       torch::index_select_out(inputBufferBlob, features, 0,
       indicePairBlob);*/
     }
+#endif
+    else {
+      TV_ASSERT_INVALID_ARG(false, "unknown device type");
+    }
+
     // totalGatherTime += timer.report() / 1000.0;
     torch::mm_out(outputBufferBlob, inputBufferBlob, filters[i]);
     // totalGEMMTime += timer.report() / 1000.0;
@@ -107,7 +113,9 @@ torch::Tensor fusedIndiceConvBatchNorm(torch::Tensor features, torch::Tensor fil
                   tv::torch2tv<const T>(outputBuffer),
                   tv::torch2tv<const int>(indicePairs).subview(i, !inverse), nHot,
                   true);
-    } else {
+    }
+#ifdef SPCONV_CUDA 
+    else if (device == torch::kCUDA) {
       functor::SparseScatterAddFunctor<tv::GPU, T, int> scatterFtor;
       scatterFtor(tv::TorchGPU(), tv::torch2tv<T>(output),
                   tv::torch2tv<const T>(outputBuffer),
@@ -115,6 +123,11 @@ torch::Tensor fusedIndiceConvBatchNorm(torch::Tensor features, torch::Tensor fil
                   true);
       TV_CHECK_CUDA_ERR();
     }
+#endif
+    else {
+      TV_ASSERT_INVALID_ARG(false, "unknown device type");
+    }
+
     // totalSAddTime += timer.report() / 1000.0;
   }
   // std::cout << "gather time " << totalGatherTime << std::endl;

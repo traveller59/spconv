@@ -22,7 +22,7 @@
 #include <tensorview/tensorview.h>
 #include <type_traits>
 #include <utility/timer.h>
-#include <hash/hash_table.h>
+#include <cuhash/hash_table.h>
 
 namespace spconv {
 namespace functor {
@@ -78,24 +78,28 @@ struct CreateConvIndicePairFunctorP2<tv::GPU, Index, IndexGrid, NDim> {
     auto numActIn = indicesIn.dim(0);
     if (numActIn == 0)
       return 0;
-    Index numAct = indicePairUnique.dim(0) - 1;
+    // after unique, there is a std::numeric_limits<int>::max() in the end of indicePairUnique
+    Index numAct = indicePairUnique.dim(0) - 1; 
     if (useHash){
-      auto table = cudahash::HashTable();
-      table.Initialize(numAct, 2.0);
-      Index *d_values = nullptr;
-      cudaMalloc((void**)&d_values, sizeof(Index) * numAct);
+      auto table = cuhash::HashTable();
+      // std::cout << "create " << numAct << " size table..." << std::endl;
+      table.Initialize(numAct, 2.0, 4);
+      unsigned *d_values = nullptr;
+      cudaMalloc((void**)&d_values, sizeof(unsigned) * numAct);
       TV_CHECK_CUDA_ERR_V2("cudaMalloc failed");
-      arangeKernel<Index><<<tv::launch::getBlocks(numAct), tv::launch::CUDA_NUM_THREADS, 0,
+      arangeKernel<unsigned><<<tv::launch::getBlocks(numAct), tv::launch::CUDA_NUM_THREADS, 0,
             d.getStream()>>>(d_values, numAct);
       bool res = table.Build(numAct, reinterpret_cast<unsigned*>(indicePairUnique.data()), 
-                reinterpret_cast<unsigned*>(d_values));
-      TV_ASSERT_RT_ERR(res, "err");
+                d_values);
+      cudaFree(d_values);
+      if (!res){
+        return -1; //use -1 to tell outside use CPU implementation
+      }
       assignIndiceOutKernel<Index, NDim>
           <<<tv::launch::getBlocks(numAct), tv::launch::CUDA_NUM_THREADS, 0,
             d.getStream()>>>(indicesOut, numAct,
                           indicePairUnique, outSpatialShape, batchSize);
       TV_CHECK_CUDA_ERR_V2("assignGridAndIndiceOutKernel failed");
-      cudaFree(d_values);
       auto tableSize = table.get_table_size();
       auto tableData = table.data();
       auto constants = table.get_constants_4();
@@ -149,8 +153,9 @@ struct CreateSubMIndicePairFunctor<tv::GPU, Index, IndexGrid, NDim> {
       return 0;
     // auto timer = spconv::CudaContextTimer<>();
     if (useHash){
-      auto table = cudahash::HashTable();
-      table.Initialize(numActIn, 2.0);
+      auto table = cuhash::HashTable();
+      // std::cout << "subm create " << numActIn << " size table..." << std::endl;
+      table.Initialize(numActIn, 2.0, 4);
       unsigned *d_keyvalues = nullptr;
       cudaMalloc((void**)&d_keyvalues, sizeof(unsigned) * numActIn * 2);
       unsigned *d_values = d_keyvalues + numActIn;
@@ -160,8 +165,10 @@ struct CreateSubMIndicePairFunctor<tv::GPU, Index, IndexGrid, NDim> {
       TV_CHECK_CUDA_ERR_V2("prepareSubMHashKernel failed");
       bool res = table.Build(numActIn, reinterpret_cast<unsigned*>(d_keyvalues), 
                 reinterpret_cast<unsigned*>(d_values));
-      TV_ASSERT_RT_ERR(res, "err");
       cudaFree(d_keyvalues);
+      if (!res){
+        return -1; //use -1 to tell outside use CPU implementation
+      }
       auto tableSize = table.get_table_size();
       auto tableData = table.data();
       auto constants = table.get_constants_4();

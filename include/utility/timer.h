@@ -14,11 +14,14 @@
 
 #pragma once
 #include <chrono>
+#ifdef SPCONV_CUDA
 #include <cuda_runtime_api.h>
+#endif
 #include <iostream>
 
 namespace spconv {
 
+#ifdef SPCONV_CUDA
 template <typename TimeT = std::chrono::microseconds> struct CudaContextTimer {
   CudaContextTimer() {
     cudaDeviceSynchronize();
@@ -36,6 +39,7 @@ template <typename TimeT = std::chrono::microseconds> struct CudaContextTimer {
 private:
   std::chrono::time_point<std::chrono::steady_clock> mCurTime;
 };
+#endif
 
 template <typename TimeT = std::chrono::microseconds> struct CPUTimer {
   CPUTimer() { mCurTime = std::chrono::steady_clock::now(); }

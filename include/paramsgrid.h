@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// This file is used for c++ unit test, but pytorch jit ops don't support c++ debug build.
+
 #ifndef PARAMS_GRID_H_
 #define PARAMS_GRID_H_
 #include <tuple>

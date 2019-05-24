@@ -1,10 +1,16 @@
-add_library(spconv SHARED all.cc indice.cc indice.cu 
-            reordering.cc reordering.cu maxpool.cc maxpool.cu nms.cc
-            pillar_scatter.cu)
+set(ALL_FILES all.cc indice.cc reordering.cc maxpool.cc nms.cc)
+if (SPCONV_BuildCUDA)
+    set(ALL_FILES ${ALL_FILES} indice.cu reordering.cu maxpool.cu pillar_scatter.cu)
+endif()
+add_library(spconv SHARED ${ALL_FILES})
 
 target_include_directories(spconv PRIVATE ${ALL_INCLUDE} )
 set_property(TARGET spconv PROPERTY CUDA_STANDARD 14)
 set_property(TARGET spconv PROPERTY CXX_STANDARD 14)
 set_target_properties(spconv PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-target_link_libraries(spconv PRIVATE ${ALL_LIBS} cudahash)
+if (SPCONV_BuildCUDA)
+    target_link_libraries(spconv PRIVATE ${ALL_LIBS} cuhash)
+else()
+    target_link_libraries(spconv PRIVATE ${ALL_LIBS})
+endif()
 install (TARGETS spconv DESTINATION lib)

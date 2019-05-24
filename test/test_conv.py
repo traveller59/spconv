@@ -33,7 +33,8 @@ class SparseConv3dTestTorch(nn.Module):
                 stride,
                 padding=padding,
                 dilation=dilation,
-                bias=False)]
+                bias=False,
+                use_hash=True)]
         for i in range(1, num_layers):
             layers.append(spconv.SparseConv3d(
                 out_channels,
@@ -561,14 +562,15 @@ class TestSpConv(TestCase):
 def main():
     # function for develop.
     np.random.seed(484)
+    # devices = ["cuda:0"]
     devices = ["cuda:0"]
     shapes = [[50, 30, 30]]
-    batchsizes = [3]
+    batchsizes = [2]
 
     
     in_channels = [256]
     out_channels = [256]
-    ksizes = [3]
+    ksizes = [(3, 1, 1)]
     strides = [1]
     paddings = [0]
     dilations = [1]
@@ -579,7 +581,7 @@ def main():
         if all([s > 1, d > 1]):
             continue
         device = torch.device(dev)
-        num_points = [5000] * bs
+        num_points = [5] * bs
 
         sparse_dict = generate_sparse_data(shape, num_points, IC)
 
@@ -587,19 +589,19 @@ def main():
         indices = np.ascontiguousarray(sparse_dict["indices"][:, [3, 0, 1, 2]]).astype(np.int32)
         features_dense = sparse_dict["features_dense"].astype(np.float32)
         indices_t = torch.from_numpy(indices)
-        filters = np.random.uniform(0, 1, size=[k, k, k, IC, OC]).astype(np.float32)
-        indices_t = torch.from_numpy(indices).int().to(device).half()
-        features_t = torch.from_numpy(features).to(device).half()
+        filters = np.random.uniform(0, 1, size=[k[0], 1, 1, IC, OC]).astype(np.float32)
+        indices_t = torch.from_numpy(indices).int().to(device).float()
+        features_t = torch.from_numpy(features).to(device).float()
         
-        features_dense_t = torch.from_numpy(features_dense).to(device).half()
-        net = SparseConv3dTestTorch(1, 3, shape, IC, OC, k, s, p, d).to(device).half()
-        net_ref = Conv3dTestTorch(1, 3, shape, IC, OC, k, s, p, d).to(device).half()
-        filters_t = torch.from_numpy(filters).to(device).half()
+        features_dense_t = torch.from_numpy(features_dense).to(device).float()
+        net = SparseConv3dTestTorch(1, 3, shape, IC, OC, k, s, p, d).to(device).float()
+        net_ref = Conv3dTestTorch(1, 3, shape, IC, OC, k, s, p, d).to(device).float()
+        filters_t = torch.from_numpy(filters).to(device).float()
         net_ref.net[0].weight[:] = filters_t.permute(4, 3, 0, 1, 2).contiguous()
         net.net[0].weight[:] = filters_t
         out_ref = net_ref(features_dense_t)
         times = []
-        for i in range(30):
+        for i in range(0):
             t = time.time()
             out = net(features_t, indices_t, bs)
             torch.cuda.synchronize()
@@ -607,7 +609,9 @@ def main():
         # print((net.grid == -1).float().sum(), net.grid.numel())
             # print("spconv time", time.time() - t)
         print("spconv time", np.mean(times[2:]))
-        out = net(features_t, indices_t, bs).dense()
+        out = net(features_t, indices_t, bs)
+        # print(out.indices)
+        out = out.dense()
         print(np.linalg.norm(out.detach().cpu().numpy() - out_ref.detach().cpu().numpy()))
 
 

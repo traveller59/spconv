@@ -16,17 +16,22 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
-#include <cuda_runtime_api.h>
+
 #include <iostream>
 #include <memory>
 // #include <prettyprint.h>
 #include <sstream>
 #include <type_traits>
 #include <vector>
+#ifdef SPCONV_CUDA
+#include <cuda_runtime_api.h>
+#endif
+
 
 namespace tv {
 
 #ifdef __NVCC__
+
 #define TV_HOST_DEVICE_INLINE __forceinline__ __device__ __host__
 #define TV_DEVICE_INLINE __forceinline__ __device__
 #define TV_HOST_DEVICE __device__ __host__
@@ -113,12 +118,13 @@ void sstream_print(SStream &ss, T val, TArgs... args) {
     }                                                                          \
   }
 
-
+#ifdef SPCONV_CUDA
 struct GPU {
   GPU(cudaStream_t s = 0) : mStream(s) {}
   virtual cudaStream_t getStream() const { return mStream; }
   cudaStream_t mStream = 0;
 };
+#endif
 struct CPU {};
 
 #define TV_MAX_DIM 6

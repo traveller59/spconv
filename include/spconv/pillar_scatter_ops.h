@@ -15,7 +15,6 @@
 #ifndef PILLAR_SCATTER_OP_H_
 #define PILLAR_SCATTER_OP_H_
 
-#include <cuda_runtime_api.h>
 #include <spconv/pillar_scatter_functor.h>
 #include <torch/script.h>
 #include <torch_utils.h>
@@ -28,6 +27,7 @@ template <typename T>
 torch::Tensor pointPillarScatter(torch::Tensor features, torch::Tensor coors,
                                  torch::Tensor shape) {
   TV_ASSERT_RT_ERR(shape.device().type() == torch::kCPU, "error");
+  TV_ASSERT_RT_ERR(features.device().type() == torch::kCUDA, "error");
   TV_ASSERT_RT_ERR(shape.dim() == 1, "error");
   TV_ASSERT_RT_ERR(shape.size(0) == 4, "error");
   TV_ASSERT_RT_ERR(features.dim() >= 3, "error");
@@ -42,10 +42,11 @@ torch::Tensor pointPillarScatter(torch::Tensor features, torch::Tensor coors,
       torch::zeros({shapeData[0], shapeData[1], shapeData[2], shapeData[3]},
                    features.options());
   TV_ASSERT_RT_ERR(shapeData[1] == features.size(1), "error");
+#ifdef SPCONV_CUDA
   functor::PointPillarScatter<tv::GPU, T, int> ftor;
   ftor(tv::TorchGPU(), tv::torch2tv<T>(canvas), tv::torch2tv<const T>(features.squeeze()),
        tv::torch2tv<const T>(coors.squeeze()));
-
+#endif
   return canvas;
 }
 

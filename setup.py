@@ -45,8 +45,16 @@ class CMakeBuild(build_ext):
                       '-DCMAKE_PREFIX_PATH={}'.format(LIBTORCH_ROOT),
                       '-DPYBIND11_PYTHON_VERSION={}'.format(PYTHON_VERSION),
                       '-DSPCONV_BuildTests=OFF',
-                      '-DCMAKE_CUDA_FLAGS="--expt-relaxed-constexpr"'
                       ] #  -arch=sm_61
+        if not torch.cuda.is_available():
+            cmake_args += ['-DSPCONV_BuildCUDA=OFF']
+        else:
+            cuda_flags = ["\"--expt-relaxed-constexpr\""]
+            # must add following flags to use at::Half
+            # but will remove raw half operators.
+            cuda_flags += ["-D__CUDA_NO_HALF_OPERATORS__", "-D__CUDA_NO_HALF_CONVERSIONS__"]
+            cuda_flags += ["-D__CUDA_NO_HALF2_OPERATORS__"] 
+            cmake_args += ['-DCMAKE_CUDA_FLAGS=' + " ".join(cuda_flags)]
         cfg = 'Debug' if self.debug else 'Release'
         assert cfg == "Release", "pytorch ops don't support debug build."
         build_args = ['--config', cfg]

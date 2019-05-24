@@ -14,14 +14,14 @@
  * @brief Hides all of the CUDA calls from the actual CPP file.
  */
 
-#include <hash/cuda_util.h>
-#include <hash/debugging.h>
-#include <hash/definitions.h>
-#include <hash/hash_table.cuh>
+#include <cuhash/cuda_util.h>
+#include <cuhash/debugging.h>
+#include <cuhash/definitions.h>
+#include <cuhash/hash_table.cuh>
 
 #include <cuda.h>
 
-namespace cudahash {
+namespace cuhash {
 
 namespace CUDAWrapper {
     void ClearTable(const unsigned  slots_in_table,

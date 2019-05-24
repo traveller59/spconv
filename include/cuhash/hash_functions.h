@@ -9,7 +9,7 @@
 #include <vector_types.h>
 #include "definitions.h"
 
-namespace cudahash {
+namespace cuhash {
 
 //! Prime number larger than the largest practical hash table size.
 const unsigned kPrimeDivisor = 4294967291u;
@@ -89,6 +89,7 @@ unsigned stash_hash_function(const uint2 stash_constants,
   return (stash_constants.x ^ key + stash_constants.y) % kStashSize;
 }
 
+unsigned generate_random_uint32();
 
 };  // namespace CuckooHashing
 

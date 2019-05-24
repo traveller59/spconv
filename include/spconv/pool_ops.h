@@ -15,7 +15,6 @@
 #ifndef SPARSE_POOL_OP_H_
 #define SPARSE_POOL_OP_H_
 
-#include <cuda_runtime_api.h>
 #include <spconv/maxpool.h>
 #include <torch/script.h>
 #include <torch_utils.h>
@@ -44,12 +43,18 @@ torch::Tensor indiceMaxPool(torch::Tensor features, torch::Tensor indicePairs,
       forwardFtor(tv::CPU(), tv::torch2tv<T>(output),
                   tv::torch2tv<const T>(features),
                   tv::torch2tv<const int>(indicePairs).subview(i), nHot);
-    } else {
+    } 
+#ifdef SPCONV_CUDA
+    else if (device == torch::kCUDA) {
       functor::SparseMaxPoolForwardFunctor<tv::GPU, T, int> forwardFtor;
       forwardFtor(tv::TorchGPU(), tv::torch2tv<T>(output),
                   tv::torch2tv<const T>(features),
                   tv::torch2tv<const int>(indicePairs).subview(i), nHot);
       TV_CHECK_CUDA_ERR();
+    }
+#endif
+    else{
+      TV_ASSERT_INVALID_ARG(false, "unknown device type");
     }
     // totalTime += timer.report() / 1000.0;
   }
@@ -80,7 +85,9 @@ torch::Tensor indiceMaxPoolBackward(torch::Tensor features,
                    tv::torch2tv<const T>(features),
                    tv::torch2tv<const T>(outGrad), tv::torch2tv<T>(inputGrad),
                    tv::torch2tv<const int>(indicePairs).subview(i), nHot);
-    } else {
+    } 
+#ifdef SPCONV_CUDA
+    else if (device == torch::kCUDA) {
       functor::SparseMaxPoolBackwardFunctor<tv::GPU, T, int> backwardFtor;
       backwardFtor(tv::TorchGPU(), tv::torch2tv<const T>(outFeatures),
                    tv::torch2tv<const T>(features),
@@ -88,6 +95,11 @@ torch::Tensor indiceMaxPoolBackward(torch::Tensor features,
                    tv::torch2tv<const int>(indicePairs).subview(i), nHot);
       TV_CHECK_CUDA_ERR();
     }
+#endif
+    else{
+      TV_ASSERT_INVALID_ARG(false, "unknown device type");
+    }
+
   }
   return inputGrad;
 }

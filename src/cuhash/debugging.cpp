@@ -15,14 +15,14 @@
  * @brief Debugging/statistics/performance utilities for hash tables.
  */
 
-#include <hash/debugging.h>
-#include <hash/definitions.h>
+#include <cuhash/debugging.h>
+#include <cuhash/definitions.h>
 
 #include <algorithm>
 #include <cstring>
-#include <hash/cuda_util.h>
+#include <cuhash/cuda_util.h>
 
-namespace cudahash {
+namespace cuhash {
 
 
 void OutputRetrievalStatistics(const unsigned  n_queries,

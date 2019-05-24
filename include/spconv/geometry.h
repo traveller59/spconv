@@ -18,8 +18,51 @@
 #include <iostream>
 #include <limits>
 #include <tensorview/tensorview.h>
-
+#include <tsl/robin_map.h>
+#include <unordered_map>
 namespace spconv {
+
+namespace detail {
+
+template <typename T> struct ToUnsigned;
+
+template <> struct ToUnsigned<int>{
+  using type = uint32_t;
+};
+
+template <> struct ToUnsigned<long>{
+  using type = uint64_t;
+};
+
+template <typename T> struct FNVInternal;
+template <> struct FNVInternal<uint32_t>
+{
+  constexpr static uint32_t defaultOffsetBasis = 0x811C9DC5;
+  constexpr static uint32_t prime = 0x01000193;
+};
+
+template <> struct FNVInternal<uint64_t>
+{
+  constexpr static uint64_t defaultOffsetBasis = 0xcbf29ce484222325;
+  constexpr static uint64_t prime = 0x100000001b3;
+};
+
+}
+template <typename T>
+using to_unsigned_t = typename detail::ToUnsigned<std::remove_const_t<T>>::type;
+
+template <typename T>
+struct FNV1a : detail::FNVInternal<T>{
+  std::size_t operator()(const T* data, std::size_t size){
+    to_unsigned_t<T> hash = detail::FNVInternal<T>::defaultOffsetBasis;
+    for (std::size_t i = 0; i < size; ++i) {
+      hash *= detail::FNVInternal<T>::prime;
+      hash ^= static_cast<to_unsigned_t<T>>(data[i]);
+    }
+    return hash;
+  }
+};
+
 template <typename Index, unsigned NDim>
 TV_HOST_DEVICE Index getValidOutPos(const Index *input_pos,
                                     const Index *kernelSize,
@@ -169,6 +212,7 @@ Index getIndicePairsConv(tv::TensorView<const Index> indicesIn,
   std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
   Index* validPoints = validPoints_.data();
   Index *pointPtr = nullptr;
+  tsl::robin_map<Index, Index> hash;
   for (int j = 0; j < numActIn; ++j) {
     batchIdx = indicesIn(j, 0);
     numValidPoints = getValidOutPos<Index, NDim>(
@@ -179,16 +223,16 @@ Index getIndicePairsConv(tv::TensorView<const Index> indicesIn,
       auto offset = pointPtr[NDim];
       auto index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape) +
                    spatialVolume * batchIdx;
-      if (gridsOut[index] == -1) {
+      if (hash.find(index) == hash.end()) {
         for (unsigned k = 1; k < NDim + 1; ++k) {
           indicesOut(numAct, k) = pointPtr[k - 1];
         }
         indicesOut(numAct, 0) = batchIdx;
-        gridsOut[index] = numAct++;
+        hash[index] = numAct++;
       }
       // indicePairs: [K, 2, L]
       indicePairs(offset, 0, indiceNum[offset]) = j;
-      indicePairs(offset, 1, indiceNum[offset]++) = gridsOut[index];
+      indicePairs(offset, 1, indiceNum[offset]++) = hash[index];
     }
   }
   return numAct;
@@ -220,6 +264,7 @@ Index getIndicePairsDeConv(tv::TensorView<const Index> indicesIn,
   std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
   Index* validPoints = validPoints_.data();
   Index *pointPtr = nullptr;
+  tsl::robin_map<Index, Index> hash;
   for (int j = 0; j < numActIn; ++j) {
     batchIdx = indicesIn(j, 0);
     numValidPoints = getValidOutPosTranspose<Index, NDim>(
@@ -230,16 +275,16 @@ Index getIndicePairsDeConv(tv::TensorView<const Index> indicesIn,
       auto offset = pointPtr[NDim];
       auto index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape) +
                    spatialVolume * batchIdx;
-      if (gridsOut[index] == -1) {
+      if (hash.find(index) == hash.end()) {
         for (unsigned k = 1; k < NDim + 1; ++k) {
           indicesOut(numAct, k) = pointPtr[k - 1];
         }
         indicesOut(numAct, 0) = batchIdx;
-        gridsOut[index] = numAct++;
+        hash[index] = numAct++;
       }
       // indicePairs: [K, 2, L]
       indicePairs(offset, 0, indiceNum[offset]) = j;
-      indicePairs(offset, 1, indiceNum[offset]++) = gridsOut[index];
+      indicePairs(offset, 1, indiceNum[offset]++) = hash[index];
     }
   }
   return numAct;
@@ -271,12 +316,13 @@ Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
   std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
   Index* validPoints = validPoints_.data();
   Index *pointPtr = nullptr;
+  tsl::robin_map<Index, Index> hash;
   for (int j = 0; j < numActIn; ++j) {
     Index index = 0;
     index = tv::rowArrayIdx<Index, NDim>(indicesIn.data() + j * (NDim + 1) + 1,
                                          outSpatialShape) +
             spatialVolume * indicesIn(j, 0);
-    gridsOut[index] = j;
+    hash[index] = j;
   }
   Index index = 0;
   for (int j = 0; j < numActIn; ++j) {
@@ -288,9 +334,9 @@ Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
       auto offset = pointPtr[NDim];
       index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape) +
               spatialVolume * indicesIn(j, 0);
-      if (gridsOut[index] > -1) {
+      if (hash.find(index) == hash.end()) {
         indicePairs(offset, 0, indiceNum[offset]) = j;
-        indicePairs(offset, 1, indiceNum[offset]++) = gridsOut[index];
+        indicePairs(offset, 1, indiceNum[offset]++) = hash[index];
       }
     }
   }

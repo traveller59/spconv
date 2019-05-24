@@ -1,11 +1,18 @@
-#include <hash/hash_table.h>
-#include <hash/debugging.h>
-
-#include <hash/mt19937ar.h>
-
+#include <cuhash/hash_table.h>
+#include <cuhash/debugging.h>
 #include <cassert>
+#include <random>
 
-namespace cudahash {
+namespace cuhash {
+  
+std::random_device random_dev;
+
+std::mt19937 random_engine(random_dev());
+std::uniform_int_distribution<unsigned> uint_distribution;
+
+unsigned generate_random_uint32(){
+  return uint_distribution(random_engine);
+}
 
 void GenerateFunctions(const unsigned  N,
                        const unsigned  num_keys,
@@ -19,9 +26,11 @@ void GenerateFunctions(const unsigned  N,
 
     // Generate a set of hash function constants for this build attempt.
     for (unsigned i = 0 ; i < N; ++i) {
-      unsigned new_a = genrand_int32() % kPrimeDivisor;
+      // uint_distribution(random_engine) % kPrimeDivisor;
+      // genrand_int32() % kPrimeDivisor;
+      unsigned new_a = generate_random_uint32() % kPrimeDivisor;
       constants[i].x = (1 > new_a ? 1 : new_a);
-      constants[i].y = genrand_int32() % kPrimeDivisor;
+      constants[i].y = generate_random_uint32() % kPrimeDivisor;
     }
 
 #ifdef FORCEFULLY_GENERATE_NO_CYCLES

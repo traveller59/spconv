@@ -181,7 +181,7 @@ std::vector<int> rotate_non_max_suppression_cpu(py::array_t<DType> box_corners,
   }
   return keep;
 }
-
+#ifdef SPCONV_CUDA
 constexpr int const threadsPerBlock = sizeof(unsigned long long) * 8;
 
 template <typename DType>
@@ -196,6 +196,7 @@ int non_max_suppression(py::array_t<DType> boxes, py::array_t<int> keep_out,
                                           boxes.shape(0), boxes.shape(1),
                                           nms_overlap_thresh, device_id);
 }
+#endif
 
 } // namespace spconv
 #endif

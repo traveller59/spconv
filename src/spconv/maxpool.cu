@@ -464,7 +464,7 @@ struct SparseMaxPoolBackwardFunctor<tv::GPU, T, Index> {
 
 DECLARE_GPU_SPECS(float);
 DECLARE_GPU_SPECS(double);
-// DECLARE_GPU_SPECS(at::Half); // currently have problem
+DECLARE_GPU_SPECS(at::Half);
 
 #undef DECLARE_GPU_SPECS
 #undef DECLARE_GPU_SPECS_T_INDEX

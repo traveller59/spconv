@@ -22,7 +22,7 @@
 #include <tensorview/tensorview.h>
 #include <driver_types.h>
 
-namespace cudahash {
+namespace cuhash {
 
 //! Makes an 64-bit Entry out of a key-value pair for the hash table.
 TV_HOST_DEVICE_INLINE Entry make_entry(unsigned key, unsigned value) {

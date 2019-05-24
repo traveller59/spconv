@@ -58,7 +58,7 @@ inline void PrintMessage(const char *message, const bool error = false) {
 //! Prints a message out to the console.
 inline void PrintMessage(const char *message, const bool error = false) {
   if (error) {
-    printf("!!! %s\n", message);
+    printf("cudahash: %s\n", message);
   } else {
     printf("%s\n", message);
   }
@@ -68,7 +68,7 @@ inline void PrintMessage(const char *message, const bool error = false) {
 /* -------------------------------------------------------------------------
    Hash table constants and definitions.
    ------------------------------------------------------------------------- */
-namespace cudahash {
+namespace cuhash {
 
 /**
  * \addtogroup cudpp_hash_data_structures
@@ -111,6 +111,6 @@ const float kMinimumSpaceUsages[] = {std::numeric_limits<float>::max(),
 
 /** @} */ // end cudpp_hash_data_structures
 
-}; // namespace cudahash
+}; // namespace cuhash
 
 #endif

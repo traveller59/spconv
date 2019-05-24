@@ -2,15 +2,15 @@
 
 This is a spatially sparse convolution library like [SparseConvNet](https://github.com/facebookresearch/SparseConvNet) but faster and easy to read. This library provide sparse convolution/transposed, submanifold convolution, inverse convolution and sparse maxpool.
 
-If you need more kinds of spatial layers such as avg pool, please implement it by yourself, I don't have time to do this.
-
 The GPU Indice Generation algorithm is a unofficial implementation of paper [SECOND](http://www.mdpi.com/1424-8220/18/10/3337). That algorithm (don't include GPU SubM indice generation algorithm) may be protected by patent.
 
-This project only support CUDA 9.0+. If you are using cuda 8.0, please update it to 9.0.
+This project only support CUDA 9.0+ or CPU only. If you are using cuda 8.0, please update it to 9.0.
+
+This project only support tensors with spatial volume less than ```std::numeric_limits<int>::max()``` (~2e9). if someone really need very large space, open an issue.
 
 ## News:
 
-2019-5-22: spconv v1.1 alpha released, now cuda hash implementation will be default. you can use ```use_hash=False``` to use dense implementation. you may see some message during running, they will be removed in future.
+2019-5-24: spconv v1.1 released, now indice generation will use hash table as default (CPU code only support hash table). you can use ```use_hash=False``` to use dense table when using CUDA. In addition, add CPU only build support.
 
 ## Install on Ubuntu 16.04/18.04
 
@@ -20,7 +20,7 @@ This project only support CUDA 9.0+. If you are using cuda 8.0, please update it
 
 2. Download cmake >= 3.13.2, then add cmake executables to PATH.
 
-3. Ensure you have installed pytorch 1.0 in your environment, run ```python setup.py bdist_wheel``` (don't use ```python setup.py install```).
+3. Ensure you have installed pytorch 1.0+ in your environment, run ```python setup.py bdist_wheel``` (don't use ```python setup.py install```).
 
 4. Run ```cd ./dist```, use pip to install generated whl file.
 
@@ -152,6 +152,20 @@ This implementation use gather-gemm-scatter framework to do sparse convolution.
 
 * **Bo Li** - *gpu indice generation idea, owner of patent of the sparse conv gpu indice generation algorithm (don't include subm)* - [prclibo](https://github.com/prclibo)
 
+## Third party libraries
+
+* [CUDPP](https://github.com/cudpp/cudpp): A cuda library. contains a cuda hash implementation.
+
+* [robin-map](https://github.com/Tessil/robin-map): A fast c++ hash library. almost 2x faster than std::unordered_map in this project.
+
+* [pybind11](https://github.com/pybind/pybind11): A head-only python c++ binding library.
+
+* [prettyprint](https://github.com/louisdx/cxx-prettyprint): A head-only library for container print.
+
 ## License
 
 This project is licensed under the Apache license 2.0 License - see the [LICENSE.md](LICENSE.md) file for details
+
+The [CUDPP](https://github.com/cudpp/cudpp) hash code is licensed under BSD License.
+
+The [robin-map](https://github.com/Tessil/robin-map) code is licensed under MIT license.

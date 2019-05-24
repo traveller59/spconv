@@ -16,16 +16,19 @@
 #include <tensorview/tensorview.h>
 #include <torch/script.h>
 #include <ATen/ATen.h>
+#ifdef SPCONV_CUDA
 #include <ATen/cuda/CUDAContext.h>
+#endif
 
 namespace tv {
-
+  
+#ifdef SPCONV_CUDA
 struct TorchGPU: public tv::GPU {
   virtual cudaStream_t getStream() const override {
     return at::cuda::getCurrentCUDAStream();
   }
 };
-
+#endif
 template <typename T> void check_torch_dtype(const torch::Tensor &tensor) {
   switch (tensor.type().scalarType()) {
   case at::ScalarType::Double: {
