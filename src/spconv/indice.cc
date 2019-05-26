@@ -223,13 +223,15 @@ Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
   std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
   Index* validPoints = validPoints_.data();
   Index *pointPtr = nullptr;
-  Index index = 0;
+  tsl::robin_map<Index, Index> hash;
   for (int j = 0; j < numActIn; ++j) {
+    Index index = 0;
     index = tv::rowArrayIdx<Index, NDim>(indicesIn.data() + j * (NDim + 1) + 1,
                                          outSpatialShape) +
             spatialVolume * indicesIn(j, 0);
-    gridsOut[index] = j;
+    hash[index] = j;
   }
+  Index index = 0;
   for (int j = 0; j < numActIn; ++j) {
     numValidPoints = getValidOutPos<Index, NDim>(
         indicesIn.data() + j * (NDim + 1) + 1, kernelSize, stride, padding,
@@ -239,9 +241,10 @@ Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
       auto offset = pointPtr[NDim];
       index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape) +
               spatialVolume * indicesIn(j, 0);
-      if (gridsOut[index] > -1) {
+      auto iter = hash.find(index);
+      if (iter != hash.end()) {
         indicePairs(offset, 0, indiceNum[offset]) = j;
-        indicePairs(offset, 1, indiceNum[offset]++) = gridsOut[index];
+        indicePairs(offset, 1, indiceNum[offset]++) = iter->second;
       }
     }
   }
