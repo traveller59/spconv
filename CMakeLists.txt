@@ -8,6 +8,9 @@ else()
     project(SparseConv LANGUAGES CXX VERSION 1.1)
 endif()
 
+if(WIN32) # true if windows (32 and 64 bit)
+    add_compile_definitions(TV_WINDOWS)
+endif()
 
 set(CMAKE_CXX_EXTENSIONS OFF) # avoid gnu++11 be added to CXX flags
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -22,7 +25,6 @@ if (SPCONV_BuildCUDA)
     get_filename_component(CUDA_TOOLKIT_ROOT_DIR "${CUDA_TOOLKIT_ROOT_DIR}" DIRECTORY)
     if(WIN32) # true if windows (32 and 64 bit)
         set(CUDA_LIB_PATH_HINTS "${CUDA_TOOLKIT_ROOT_DIR}/lib/x64")
-        add_compile_definitions(TV_WINDOWS)
     else()
         set(CUDA_LIB_PATH_HINTS "${CUDA_TOOLKIT_ROOT_DIR}/lib64")
     endif()
@@ -45,7 +47,6 @@ if (SPCONV_BuildCUDA)
     set(ALL_INCLUDE ${ALL_INCLUDE} ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
     add_subdirectory(src/cuhash)
 endif()
-
 add_subdirectory(src/spconv)
 add_subdirectory(src/utils)
 

@@ -136,6 +136,8 @@ Index getIndicePairsDeConv(tv::TensorView<const Index> indicesIn,
   return numAct;
 }
 
+
+#ifndef TV_WINDOWS
 template <typename Index, typename IndexGrid, unsigned NDim>
 Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
                          tv::TensorView<IndexGrid> gridsOut,
@@ -194,6 +196,58 @@ Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
   });
   return numActIn;
 }
+#else 
+template <typename Index, typename IndexGrid, unsigned NDim>
+Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
+                         tv::TensorView<IndexGrid> gridsOut,
+                         tv::TensorView<Index> indicePairs,
+                         tv::TensorView<Index> indiceNum,
+                         const Index *const kernelSize,
+                         const Index *const stride, const Index *const padding,
+                         const Index *dilation, const Index *const outSpatialShape) {
+  Index numAct = 0;
+  auto numActIn = indicesIn.dim(0);
+  Index batchIdx = 0;
+  Index spatialVolume = 1;
+#pragma unroll
+  for (int i = 0; i < NDim; ++i) {
+    spatialVolume *= outSpatialShape[i];
+  }
+  Index kernelVolume = 1;
+#pragma unroll
+  for (int i = 0; i < NDim; ++i) {
+    kernelVolume *= kernelSize[i];
+  }
+  Index numValidPoints = 0;
+  // Index validPoints[kernelVolume * (NDim + 1)];
+  std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
+  Index* validPoints = validPoints_.data();
+  Index *pointPtr = nullptr;
+  Index index = 0;
+  for (int j = 0; j < numActIn; ++j) {
+    index = tv::rowArrayIdx<Index, NDim>(indicesIn.data() + j * (NDim + 1) + 1,
+                                         outSpatialShape) +
+            spatialVolume * indicesIn(j, 0);
+    gridsOut[index] = j;
+  }
+  for (int j = 0; j < numActIn; ++j) {
+    numValidPoints = getValidOutPos<Index, NDim>(
+        indicesIn.data() + j * (NDim + 1) + 1, kernelSize, stride, padding,
+        dilation, outSpatialShape, validPoints);
+    for (Index i = 0; i < numValidPoints; ++i) {
+      pointPtr = validPoints + i * (NDim + 1);
+      auto offset = pointPtr[NDim];
+      index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape) +
+              spatialVolume * indicesIn(j, 0);
+      if (gridsOut[index] > -1) {
+        indicePairs(offset, 0, indiceNum[offset]) = j;
+        indicePairs(offset, 1, indiceNum[offset]++) = gridsOut[index];
+      }
+    }
+  }
+  return numActIn;
+}
+#endif
 
 namespace functor {
 template <typename Index, typename IndexGrid, unsigned NDim>
