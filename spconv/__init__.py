@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from pathlib import Path
 
 import platform
@@ -30,7 +31,12 @@ _LIB_FILE_NAME = "libspconv.so"
 if platform.system() == "Windows":
     _LIB_FILE_NAME = "spconv.dll"
 _LIB_PATH = str(Path(__file__).parent / _LIB_FILE_NAME)
+
+# Change cwd to find cuhash.dll
+original_cwd = os.getcwd()
+os.chdir(str(Path(__file__).parent))
 torch.ops.load_library(_LIB_PATH)
+os.chdir(original_cwd)
 
 def scatter_nd(indices, updates, shape):
     """pytorch edition of tensorflow scatter_nd.
