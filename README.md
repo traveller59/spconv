@@ -16,7 +16,7 @@ This project only support tensors with spatial volume less than ```std::numeric_
 
 0. Use ```git clone xxx.git --recursive``` to clone this repo.
 
-1. Install boost headers to your system include path, you can use either ```sudo apt-get install libboostall-dev``` or download compressed files from boost official website and copy headers to include path.
+1. Install boost headers to your system include path, you can use either ```sudo apt-get install libboost-all-dev``` or download compressed files from boost official website and copy headers to include path.
 
 2. Download cmake >= 3.13.2, then add cmake executables to PATH.
 
