@@ -93,6 +93,6 @@ tv::TensorView<T> torch2tv(const torch::Tensor &tensor) {
   for (auto i : tensor.sizes()) {
     shape.push_back(i);
   }
-  return tv::TensorView<T>(tensor.data<std::remove_const_t<T>>(), shape);
+  return tv::TensorView<T>(tensor.data_ptr<std::remove_const_t<T>>(), shape);
 }
 } // namespace tv

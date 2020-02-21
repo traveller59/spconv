@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <torch/script.h>
 #include <spconv/pool_ops.h>
 #include <spconv/spconv_ops.h>
 #include <spconv/pillar_scatter_ops.h>
@@ -19,7 +20,8 @@
 #include <spconv/nms_ops.h>
 
 static auto registry =
-    torch::jit::RegisterOperators("spconv::get_indice_pairs_2d", &spconv::getIndicePair<2>)
+    torch::RegisterOperators()
+        .op("spconv::get_indice_pairs_2d", &spconv::getIndicePair<2>)
         .op("spconv::get_indice_pairs_3d", &spconv::getIndicePair<3>)
         .op("spconv::get_indice_pairs_4d", &spconv::getIndicePair<4>)
         .op("spconv::get_indice_pairs_grid_2d", &spconv::getIndicePairPreGrid<2>)
