@@ -14,6 +14,8 @@ This project only support tensors with spatial volume less than ```std::numeric_
 
 ## Install on Ubuntu 16.04/18.04
 
+* if you are using pytorch 1.4+ and encounter "nvcc fatal: unknown -Wall", you need to go to torch package dir and remove flags contains "-Wall" in INTERFACE_COMPILE_OPTIONS in Caffe2Targets.cmake. This problem can't be fixed in this project (to avoid this, I need to remove all torch dependency in cuda sources and drop half support).
+
 0. Use ```git clone xxx.git --recursive``` to clone this repo.
 
 1. Install boost headers to your system include path, you can use either ```sudo apt-get install libboostall-dev``` or download compressed files from boost official website and copy headers to include path.
