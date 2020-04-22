@@ -17,16 +17,15 @@
 #include <cassert>
 #include <cstdlib>
 
+#include "prettyprint.h"
 #include <iostream>
 #include <memory>
-// #include <prettyprint.h>
 #include <sstream>
 #include <type_traits>
 #include <vector>
 #ifdef SPCONV_CUDA
 #include <cuda_runtime_api.h>
 #endif
-
 
 namespace tv {
 
@@ -72,15 +71,24 @@ void sstream_print(SStream &ss, T val, TArgs... args) {
   sstream_print(ss, args...);
 }
 
+template <class... TArgs> void ssprint(TArgs... args) {
+  std::stringstream ss;
+  sstream_print(ss, args...);
+  std::cout << ss.str() << std::endl;
+}
+
+#define TV_THROW_RT_ERR(...)                                                   \
+  {                                                                            \
+    std::stringstream __macro_s;                                               \
+    __macro_s << __FILE__ << " " << __LINE__ << "\n";                          \
+    tv::sstream_print(__macro_s, __VA_ARGS__);                                 \
+    throw std::runtime_error(__macro_s.str());                                 \
+  }
+
 #define TV_ASSERT_RT_ERR(expr, ...)                                            \
   {                                                                            \
-    if (!(expr)) {                                                             \
-      std::stringstream __macro_s;                                             \
-      __macro_s << __FILE__ << " " << __LINE__ << "\n";                        \
-      __macro_s << #expr << " assert faild. ";                                 \
-      tv::sstream_print(__macro_s, __VA_ARGS__);                               \
-      throw std::runtime_error(__macro_s.str());                               \
-    }                                                                          \
+    if (!(expr))                                                               \
+      TV_THROW_RT_ERR(__VA_ARGS__);                                            \
   }
 
 #define TV_ASSERT_INVALID_ARG(expr, ...)                                       \
@@ -96,24 +104,24 @@ void sstream_print(SStream &ss, T val, TArgs... args) {
 
 #define TV_CHECK_CUDA_ERR()                                                    \
   {                                                                            \
-    auto __macro_err = cudaGetLastError();                                             \
-    if (__macro_err != cudaSuccess) {                                                  \
+    auto __macro_err = cudaGetLastError();                                     \
+    if (__macro_err != cudaSuccess) {                                          \
       std::stringstream __macro_s;                                             \
       __macro_s << __FILE__ << " " << __LINE__ << "\n";                        \
-      __macro_s << "cuda execution failed with error " << __macro_err;                 \
+      __macro_s << "cuda execution failed with error " << __macro_err;         \
       throw std::runtime_error(__macro_s.str());                               \
     }                                                                          \
   }
 
-#define TV_CHECK_CUDA_ERR_V2(...)                                                    \
+#define TV_CHECK_CUDA_ERR_V2(...)                                              \
   {                                                                            \
-    auto __macro_err = cudaGetLastError();                                             \
-    if (__macro_err != cudaSuccess) {                                                  \
+    auto __macro_err = cudaGetLastError();                                     \
+    if (__macro_err != cudaSuccess) {                                          \
       std::stringstream __macro_s;                                             \
       __macro_s << __FILE__ << " " << __LINE__ << "\n";                        \
-      __macro_s << "cuda execution failed with error " << __macro_err;                 \
-      __macro_s << " " << cudaGetErrorString(__macro_err) << "\n";\
-      tv::sstream_print(__macro_s, __VA_ARGS__); \
+      __macro_s << "cuda execution failed with error " << __macro_err;         \
+      __macro_s << " " << cudaGetErrorString(__macro_err) << "\n";             \
+      tv::sstream_print(__macro_s, __VA_ARGS__);                               \
       throw std::runtime_error(__macro_s.str());                               \
     }                                                                          \
   }
@@ -362,7 +370,8 @@ struct ShapeBase : public SimpleVector<int, MaxDim> {
   TV_HOST_DEVICE_INLINE ShapeBase() : SimpleVector<int, MaxDim>(){};
   TV_HOST_DEVICE_INLINE ShapeBase(std::initializer_list<int> shape)
       : SimpleVector<int, MaxDim>(shape) {}
-
+  TV_HOST_DEVICE_INLINE ShapeBase(SimpleVector<int, MaxDim> vec)
+      : SimpleVector<int, MaxDim>(vec) {}
   template <typename T, template <class...> class Container>
   ShapeBase(Container<T> shape) : SimpleVector<int, MaxDim>(shape) {}
   TV_HOST_DEVICE_INLINE ShapeBase(const ShapeBase<MaxDim> &shape)
@@ -372,7 +381,7 @@ struct ShapeBase : public SimpleVector<int, MaxDim> {
   ShapeBase<MaxDim> &operator=(const ShapeBase<MaxDim> &shape) = default;
   TV_HOST_DEVICE_INLINE ShapeBase<MaxDim> subshape(int start, int end) const {
 #ifdef TV_DEBUG
-    TV_ASSERT(start >= 0 && end < this->mSize && end > start);
+    TV_ASSERT(start >= 0 && end <= this->mSize && end > start);
 #endif
     ShapeBase<MaxDim> shape;
     for (int i = start; i < end; ++i) {
@@ -416,6 +425,13 @@ struct ShapeBase : public SimpleVector<int, MaxDim> {
         shape.push_back(this->mArray[i]);
     }
     return shape;
+  }
+  TV_HOST_DEVICE size_t prod() const {
+    size_t res = 1;
+    for (size_t i = 0; i < this->mSize; ++i) {
+      res *= this->mArray[i];
+    }
+    return res;
   }
 };
 
@@ -545,6 +561,9 @@ template <typename T, int Rank = -1> struct TensorView {
       : mPtr(ptr) {
     mShape = {int(shapes)...};
   }
+  operator TensorView<const T>() {
+    return TensorView<const T>(mPtr, mShape);
+  } // conversion function
 
   TV_HOST_DEVICE_INLINE TensorView<T, Rank> &
   assign(const TensorView<T, Rank> &tensor) {
@@ -846,6 +865,19 @@ template <typename T, int Rank = -1> struct TensorView {
 #endif
     return mPtr[idx];
   }
+  TV_HOST_DEVICE_INLINE const T &operator[](int idx) const {
+#ifdef TV_DEBUG
+#if defined(__CUDA_ARCH__)
+    TV_DEVICE_REQUIRE(idx >= 0 && idx < size(),
+                      "index(%d) out-of-range: [0, %ld)\n", int(idx), size());
+#else
+    TV_REQUIRE(idx >= 0 && idx < size(), "index(%d) out-of-range: [0, %ld)\n",
+               int(idx), size());
+#endif
+#endif
+    return mPtr[idx];
+  }
+
   // TODO: this is conflcit with operator[](SimpleVector<Slice> slice_vec).
   /*TV_HOST_DEVICE_INLINE T &operator[](const Shape index) {
     int idx = rowArrayIdx(mShape, index);
@@ -970,6 +1002,26 @@ template <typename T, int Rank = -1> struct TensorView {
                                mShape.subshape(sizeof...(ints) + 1));
   }
 
+  TV_HOST_DEVICE_INLINE TensorView<T, Rank>
+  subview_ints(SimpleVector<int> ids) const {
+    Shape start = ids;
+    for (int i = ids.size(); i < ndim(); ++i) {
+      start.push_back(0);
+    }
+    return TensorView<T, Rank>(mPtr + rowArrayIdx(mShape, start),
+                               mShape.subshape(ids.size()));
+  }
+
+  std::string print_vec(TensorView<T> tensor) const {
+    std::ostringstream ss;
+    ss << "[";
+    for (size_t i = 0; i < tensor.dim(0) - 1; ++i) {
+      ss << tensor(i) << ", ";
+    }
+    ss << tensor(tensor.dim(0) - 1) << "]";
+    return ss.str();
+  }
+
   std::string repr() const {
     std::ostringstream ss;
     if (empty())
@@ -983,37 +1035,29 @@ template <typename T, int Rank = -1> struct TensorView {
     }
     Shape counter = mShape;
     auto tensor_flat = this->view(-1);
-    for (int i = 0; i < counter.ndim(); ++i) {
+
+    for (int i = 0; i < counter.ndim() - 1; ++i) {
       counter[i] = 0;
-      ss << "[";
+      // ss << "[";
     }
-    for (size_t i = 0; i < this->size(); ++i) {
-      ss << tensor_flat(rowArrayIdx(mShape, counter));
-      counter[counter.ndim() - 1] += 1;
-      int inc_count = 0;
-      bool print_comma = true;
-      for (int c = counter.ndim() - 1; c >= 0; --c) {
-        if (counter[c] == this->dim(c) && c > 0) {
-          ++inc_count;
-          counter[c - 1] += 1;
-          counter[c] = 0;
-          print_comma = false;
-        }
-      }
-      if (print_comma && i != this->size() - 1)
-        ss << ", ";
-      for (int j = 0; j < inc_count; ++j) {
-        ss << "]";
-      }
-      if (i != this->size() - 1) {
-        if (inc_count != 0)
-          ss << "\n";
-        for (int j = 0; j < inc_count; ++j) {
+    for (size_t i = 0; i < this->size() / this->dim(this->ndim() - 1); ++i) {
+      for (int i = 0; i < counter.ndim() - 1; ++i) {
+        if (counter[i] == 0) {
           ss << "[";
         }
       }
+      std::cout << "counter.ndim() " << counter.ndim() << std::endl;
+      auto counter_ = counter.subshape(0, counter.ndim() - 1);
+      std::cout << counter.subshape(0, counter.ndim() - 1) << std::endl;
+      ss << print_vec(this->subview_ints(counter_)) << "\n";
+      std::cout << "after counter.ndim() " << counter.ndim() << std::endl;
+      for (int i = 0; i < counter.ndim() - 1; ++i) {
+        if (counter[i] == this->dim(i) - 1) {
+          ss << "]";
+        }
+      }
     }
-    ss << "]";
+    // ss << "]";
     // ss << fmt::format("\nTensor: shape={}, dtype={}", mShape,
     // detail::simpleTypeName<T>());
     ss << "Tensor: dtype=" << detail::simpleTypeName<T>();
@@ -1160,5 +1204,161 @@ TV_HOST_DEVICE void printTensorView(const T *ptr, Shape shape,
                                     const char *format) {
   return printTensorView(TensorView<const T>(ptr, shape), format);
 }
+
+#ifdef SPCONV_CUDA
+
+#ifdef __DRIVER_TYPES_H__
+#ifndef DEVICE_RESET
+#define DEVICE_RESET cudaDeviceReset();
+#endif
+#else
+#ifndef DEVICE_RESET
+#define DEVICE_RESET
+#endif
+#endif
+
+template <typename T>
+void check(T result, char const *const func, const char *const file,
+           int const line) {
+  if (result) {
+    fprintf(stderr, "CUDA error at %s:%d code=%d \"%s\" \n", file, line,
+            static_cast<unsigned int>(result), func);
+    DEVICE_RESET
+    // Make sure we call CUDA Device Reset before exiting
+    exit(EXIT_FAILURE);
+  }
+}
+
+#define checkCudaErrors(val) check((val), #val, __FILE__, __LINE__)
+
+template <typename T>
+void host2dev(T *dst, const T *src, size_t size, cudaStream_t s = 0) {
+  checkCudaErrors(
+      cudaMemcpyAsync(dst, src, size * sizeof(T), cudaMemcpyHostToDevice, s));
+}
+template <typename T>
+void host2dev(TensorView<T> dst, const TensorView<const T> src,
+              cudaStream_t s = 0) {
+  host2dev(dst.data(), src.data(), std::min(dst.size(), src.size()), s);
+}
+template <typename T>
+void host2dev(TensorView<T> dst, const TensorView<T> src, cudaStream_t s = 0) {
+  host2dev(dst.data(), src.data(), std::min(dst.size(), src.size()), s);
+}
+
+template <typename T> void host2dev_sync(T *dst, const T *src, size_t size) {
+  checkCudaErrors(
+      cudaMemcpy(dst, src, size * sizeof(T), cudaMemcpyHostToDevice));
+}
+template <typename T>
+void host2dev_sync(TensorView<T> dst, const TensorView<const T> src) {
+  host2dev_sync(dst.data(), src.data(), std::min(dst.size(), src.size()));
+}
+template <typename T>
+void host2dev_sync(TensorView<T> dst, const TensorView<T> src) {
+  host2dev_sync(dst.data(), src.data(), std::min(dst.size(), src.size()));
+}
+
+template <typename T>
+void dev2host(T *dst, const T *src, size_t size, cudaStream_t s = 0) {
+  checkCudaErrors(
+      cudaMemcpyAsync(dst, src, size * sizeof(T), cudaMemcpyDeviceToHost, s));
+}
+
+template <typename T>
+void dev2host(TensorView<T> dst, const TensorView<const T> src,
+              cudaStream_t s = 0) {
+  dev2host(dst.data(), src.data(), std::min(dst.size(), src.size()), s);
+}
+
+template <typename T>
+void dev2host(TensorView<T> dst, const TensorView<T> src, cudaStream_t s = 0) {
+  dev2host(dst.data(), src.data(), std::min(dst.size(), src.size()), s);
+}
+
+template <typename T>
+void dev2dev(T *dst, const T *src, size_t size, cudaStream_t s = 0) {
+  checkCudaErrors(
+      cudaMemcpyAsync(dst, src, size * sizeof(T), cudaMemcpyDeviceToDevice, s));
+}
+
+template <typename T>
+void dev2dev(TensorView<T> dst, const TensorView<const T> src,
+             cudaStream_t s = 0) {
+  dev2dev(dst.data(), src.data(), std::min(dst.size(), src.size()), s);
+}
+template <typename T>
+void dev2dev(TensorView<T> dst, const TensorView<T> src, cudaStream_t s = 0) {
+  dev2dev(dst.data(), src.data(), std::min(dst.size(), src.size()), s);
+}
+
+template <typename T>
+void host2host(T *dst, const T *src, size_t size, cudaStream_t s = 0) {
+  checkCudaErrors(
+      cudaMemcpyAsync(dst, src, size * sizeof(T), cudaMemcpyHostToHost, s));
+}
+
+template <typename T>
+void host2host(TensorView<T> dst, const TensorView<const T> src,
+               cudaStream_t s = 0) {
+  host2host(dst.data(), src.data(), std::min(dst.size(), src.size()), s);
+}
+template <typename T>
+void host2host(TensorView<T> dst, const TensorView<T> src, cudaStream_t s = 0) {
+  host2host(dst.data(), src.data(), std::min(dst.size(), src.size()), s);
+}
+
+template <typename T> void zero_dev(TensorView<T> tensor) {
+  checkCudaErrors(cudaMemset(tensor.data(), 0, tensor.size() * sizeof(T)));
+}
+
+template <typename T> void zero_dev(TensorView<T> tensor, cudaStream_t s) {
+  checkCudaErrors(
+      cudaMemsetAsync(tensor.data(), 0, tensor.size() * sizeof(T), s));
+}
+template <typename T> void zero_host(TensorView<T> tensor) {
+  std::fill(tensor.data(), tensor.data() + tensor.size(), 0);
+}
+
+#endif
+
+namespace detail {
+template <typename T> struct TypeToString;
+
+template <> struct TypeToString<int32_t> {
+  static constexpr const char *value = "int32";
+};
+template <> struct TypeToString<bool> {
+  static constexpr const char *value = "bool";
+};
+template <> struct TypeToString<float> {
+  static constexpr const char *value = "float";
+};
+template <> struct TypeToString<double> {
+  static constexpr const char *value = "double";
+};
+template <> struct TypeToString<int16_t> {
+  static constexpr const char *value = "int16";
+};
+template <> struct TypeToString<int8_t> {
+  static constexpr const char *value = "int8";
+};
+template <> struct TypeToString<int64_t> {
+  static constexpr const char *value = "int64";
+};
+template <> struct TypeToString<uint8_t> {
+  static constexpr const char *value = "uint8";
+};
+template <> struct TypeToString<uint16_t> {
+  static constexpr const char *value = "uint16";
+};
+template <> struct TypeToString<uint32_t> {
+  static constexpr const char *value = "uint32";
+};
+template <> struct TypeToString<uint64_t> {
+  static constexpr const char *value = "uint64";
+};
+
+} // namespace detail
 
 } // namespace tv

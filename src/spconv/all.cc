@@ -26,11 +26,8 @@ static auto registry =
         .op("spconv::get_indice_pairs_4d", &spconv::getIndicePair<4>)
         .op("spconv::get_indice_pairs_grid_2d", &spconv::getIndicePairPreGrid<2>)
         .op("spconv::get_indice_pairs_grid_3d", &spconv::getIndicePairPreGrid<3>)
-        .op("spconv::indice_conv_fp32", &spconv::indiceConv<float>)
-        .op("spconv::indice_conv_backward_fp32", &spconv::indiceConvBackward<float>)
-        .op("spconv::indice_conv_half", &spconv::indiceConv<at::Half>)
-        .op("spconv::indice_conv_backward_half",
-            &spconv::indiceConvBackward<at::Half>)
+        .op("spconv::indice_conv", &spconv::indiceConv)
+        .op("spconv::indice_conv_backward", &spconv::indiceConvBackward)
         .op("spconv::fused_indice_conv_fp32", &spconv::fusedIndiceConvBatchNorm<float>)
         .op("spconv::fused_indice_conv_half", &spconv::fusedIndiceConvBatchNorm<at::Half>)
         .op("spconv::indice_maxpool_fp32", &spconv::indiceMaxPool<float>)

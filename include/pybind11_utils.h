@@ -13,49 +13,103 @@
 // limitations under the License.
 
 #pragma once
+#include <tensorview/tensorview.h>
+#include <tensorview/tensor.h>
+
 #include <algorithm>
+#include <array>
 #include <iostream>
-#include <pybind11/embed.h> // everything needed for embedding
 #include <pybind11/functional.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include <tensorview/tensorview.h>
-
 namespace py = pybind11;
+namespace tv {
 
-template <typename T, typename TPyObject>
-std::vector<T> array2Vector(TPyObject arr){
-    py::array arr_np = arr;
-    size_t size = arr.attr("size").template cast<size_t>();
-    py::array_t<T> arr_cc = arr_np;
-    std::vector<T> data(arr_cc.data(), arr_cc.data() + size);
-    return data;
+template <typename T> TensorView<T> arrayt2tv(py::array_t<T> arr) {
+  Shape shape;
+  for (int i = 0; i < arr.ndim(); ++i) {
+    shape.push_back(arr.shape(i));
+  }
+  return TensorView<T>(arr.mutable_data(), shape);
+}
+
+template <typename T> TensorView<const T> carrayt2tv(py::array_t<T> arr) {
+  Shape shape;
+  for (int i = 0; i < arr.ndim(); ++i) {
+    shape.push_back(arr.shape(i));
+  }
+  return TensorView<const T>(arr.data(), shape);
+}
+
+template <typename T> TensorView<T> vector2tv(std::vector<T> &arr) {
+  return TensorView<T>(arr.data(), {arr.size()});
 }
 
 template <typename T>
-std::vector<T> arrayT2Vector(py::array_t<T> arr)
-{
-  std::vector<T> data(arr.data(), arr.data() + arr.size());
-  return data;
+TensorView<T> vector2tv(std::vector<T> &arr, Shape shape) {
+  TV_ASSERT_INVALID_ARG(shape.prod() == arr.size(), "error");
+  return TensorView<T>(arr.data(), shape);
 }
 
-template <typename T, typename TPyObject>
-tv::TensorView<T> array2TensorView(TPyObject arr){
-    py::array arr_np = arr;
-    py::array_t<T> arr_cc = arr_np;
-    tv::Shape shape;
-    for (int i = 0; i < arr_cc.ndim(); ++i){
-        shape.push_back(arr_cc.shape(i));
-    }
-    return tv::TensorView<T>(arr_cc.mutable_data(), shape);
+template <typename T> TensorView<const T> vector2tv(const std::vector<T> &arr) {
+  return TensorView<const T>(arr.data(), {arr.size()});
 }
+
 template <typename T>
-tv::TensorView<T> arrayT2TensorView(py::array_t<T> arr){
-    tv::Shape shape;
-    for (int i = 0; i < arr.ndim(); ++i){
-        shape.push_back(arr.shape(i));
-    }
-    return tv::TensorView<T>(arr.mutable_data(), shape);
+std::vector<T> shape2stride(const std::vector<T> &shape, T itemsize) {
+  T p = T(1);
+  std::vector<T> res;
+  for (auto iter = shape.rbegin(); iter != shape.rend(); ++iter) {
+    res.push_back(p * itemsize);
+    p *= *iter;
+  }
+  std::reverse(res.begin(), res.end());
+  return res;
 }
+
+tv::DType get_array_tv_dtype(const py::array& arr){
+  // 
+  switch (arr.dtype().kind()){
+    case 'b': return tv::bool_;
+    case 'i': {
+      switch (arr.itemsize()){
+        case 1: return tv::int8;
+        case 2: return tv::int16;
+        case 4: return tv::int32;
+        case 8: return tv::int64;
+        default: break;
+      }
+    }
+    case 'u': {
+      switch (arr.itemsize()){
+        case 1: return tv::uint8;
+        case 2: return tv::uint16;
+        case 4: return tv::uint32;
+        case 8: return tv::uint64;
+        default: break;
+      }
+    }
+    case 'f': {
+      switch (arr.itemsize()){
+        case 4: return tv::float32;
+        case 8: return tv::float64;
+        default: break;
+      }
+    }
+  }
+  TV_THROW_RT_ERR("unknown dtype", arr.dtype().kind(), arr.itemsize());
+}
+
+
+Tensor array2tensor(py::array& arr) {
+  Shape shape;
+  for (int i = 0; i < arr.ndim(); ++i) {
+    shape.push_back(arr.shape(i));
+  }
+  return tv::from_blob(arr.mutable_data(), shape, get_array_tv_dtype(arr), -1);
+}
+
+
+} // namespace tv

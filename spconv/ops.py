@@ -111,16 +111,9 @@ def indice_conv(features,
               num_activate_out,
               inverse=False,
               subm=False):
-    if filters.dtype == torch.float32:
-        return torch.ops.spconv.indice_conv_fp32(features, filters, indice_pairs,
-                                               indice_pair_num, num_activate_out,
-                                               int(inverse), int(subm))
-    elif filters.dtype == torch.half:
-        return torch.ops.spconv.indice_conv_half(features, filters, indice_pairs,
-                                               indice_pair_num, num_activate_out,
-                                               int(inverse), int(subm))
-    else:
-        raise NotImplementedError
+    return torch.ops.spconv.indice_conv(features, filters, indice_pairs,
+                                        indice_pair_num, num_activate_out,
+                                        int(inverse), int(subm))
 
 def fused_indice_conv(features, filters, bias,
             indice_pairs,
@@ -145,14 +138,8 @@ def indice_conv_backward(features,
                        indice_pair_num,
                        inverse=False,
                        subm=False):
-    if filters.dtype == torch.float32:
-        return torch.ops.spconv.indice_conv_backward_fp32(
-            features, filters, out_bp, indice_pairs, indice_pair_num, int(inverse), int(subm))
-    elif filters.dtype == torch.half:
-        return torch.ops.spconv.indice_conv_backward_half(
-            features, filters, out_bp, indice_pairs, indice_pair_num, int(inverse), int(subm))
-    else:
-        raise NotImplementedError
+    return torch.ops.spconv.indice_conv_backward(
+        features, filters, out_bp, indice_pairs, indice_pair_num, int(inverse), int(subm))
 
 
 def indice_maxpool(features, indice_pairs, indice_pair_num, num_activate_out):
