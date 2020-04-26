@@ -1,0 +1,36 @@
+name: build
+
+on:
+  push:
+    branches:
+      - master
+  schedule:
+    # * is a special character in YAML so you have to quote this string
+    - cron:  '0 0 * * 6' # base builds run every saturday
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_IMAGE_NAME: scrin/dev-spconv
+      DOCKER_FILE_PATH: ./Dockerfile
+
+    # TODO: create a action to reuse code. the problem is how to reuse docker-login.
+    steps:
+      - uses: actions/checkout@master
+      - name: Build Docker
+        run: |
+          docker build . --file ${{env.DOCKER_FILE_PATH}} --tag ${{env.DOCKER_IMAGE_NAME}}:latest
+          docker tag ${{env.DOCKER_IMAGE_NAME}}:latest ${{env.DOCKER_IMAGE_NAME}}:${{ github.sha }}
+          
+
+      - name: Login to Registry
+        uses: azure/docker-login@v1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Publish to Registry
+        run: |
+          docker push ${{env.DOCKER_IMAGE_NAME}}:latest
+          docker push ${{env.DOCKER_IMAGE_NAME}}:${{ github.sha }}
