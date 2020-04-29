@@ -72,7 +72,7 @@ class SparseSequential(SparseModule):
                   ('conv2', SparseConv2d(20,64,5)),
                   ('relu2', nn.ReLU())
                 ]))
-        
+
         # Example of using Sequential with kwargs(python 3.6+)
         model = SparseSequential(
                   conv1=SparseConv2d(1,20,5),
@@ -125,9 +125,12 @@ class SparseSequential(SparseModule):
     def forward(self, input):
         for k, module in self._modules.items():
             if is_spconv_module(module):  # use SpConvTensor as input
-                assert isinstance(input, spconv.SparseConvTensor)
-                self._sparity_dict[k] = input.sparity
-                input = module(input)
+                if isinstance(input, list):
+                    input = module(input)
+                else:
+                    assert isinstance(input, spconv.SparseConvTensor)
+                    self._sparity_dict[k] = input.sparity
+                    input = module(input)
             else:
                 if isinstance(input, spconv.SparseConvTensor):
                     if input.indices.shape[0] != 0:

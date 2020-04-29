@@ -23,7 +23,7 @@ from spconv.conv import SparseConvTranspose2d, SparseConvTranspose3d
 from spconv.conv import SparseInverseConv2d, SparseInverseConv3d
 from spconv.modules import SparseModule, SparseSequential
 from spconv.pool import SparseMaxPool2d, SparseMaxPool3d
-from spconv.tables import ConcatTable, JoinTable
+from spconv.tables import ConcatTable, JoinTable, AddTable
 from spconv.identity import Identity
 
 from spconv import ops
