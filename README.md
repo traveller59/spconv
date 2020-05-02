@@ -1,14 +1,7 @@
 # SpConv: PyTorch Spatially Sparse Convolution Library
 
-This is a spatially sparse convolution library like [SparseConvNet](https://github.com/facebookresearch/SparseConvNet) but faster and easy to read. This library provide sparse convolution/transposed, submanifold convolution, inverse convolution and sparse maxpool.
+This is a variation version of [spconv](https://github.com/traveller59/spconv)
 
-The GPU Indice Generation algorithm is a unofficial implementation of paper [SECOND](http://www.mdpi.com/1424-8220/18/10/3337). That algorithm (don't include GPU SubM indice generation algorithm) may be protected by patent.
-
-This project only support CUDA 9.0+ or CPU only. If you are using cuda 8.0, please update it to 9.0.
-
-This project only support tensors with spatial volume less than ```std::numeric_limits<int>::max()``` (~2e9). if someone really need very large space, open an issue.
-
-## Note:
 2020-5-2, we add ConcatTable, JoinTable, AddTable, and Identity function to build ResNet and Unet in this version of spconv.
 
 
