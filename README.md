@@ -8,9 +8,9 @@ This project only support CUDA 9.0+ or CPU only. If you are using cuda 8.0, plea
 
 This project only support tensors with spatial volume less than ```std::numeric_limits<int>::max()``` (~2e9). if someone really need very large space, open an issue.
 
-## News:
+## Note:
+2020-5-2, we add ConcatTable, JoinTable, AddTable, and Identity function to build ResNet and Unet in this version of spconv.
 
-2019-5-24: spconv v1.1 released, now indice generation will use hash table as default (CPU code only support hash table). you can use ```use_hash=False``` to use dense table when using CUDA. In addition, add CPU only build support.
 
 ## Install on Ubuntu 16.04/18.04
 
