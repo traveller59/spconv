@@ -71,7 +71,7 @@ int points_to_voxel_3d_np(py::array_t<DType> points, py::array_t<DType> voxels,
     if (voxelidx == -1) {
       voxelidx = voxel_num;
       if (voxel_num >= max_voxels)
-        break;
+        continue;
       voxel_num += 1;
       coor_to_voxelidx_rw(coor[0], coor[1], coor[2]) = voxelidx;
       for (int k = 0; k < NDim; ++k) {
@@ -139,7 +139,7 @@ int points_to_voxel_3d_np_mean(py::array_t<DType> points,
     if (voxelidx == -1) {
       voxelidx = voxel_num;
       if (voxel_num >= max_voxels)
-        break;
+        continue;
       voxel_num += 1;
       coor_to_voxelidx_rw(coor[0], coor[1], coor[2]) = voxelidx;
       for (int k = 0; k < NDim; ++k) {
@@ -225,7 +225,7 @@ int points_to_voxel_3d_with_filtering(
     if (voxelidx == -1) {
       voxelidx = voxel_num;
       if (voxel_num >= max_voxels)
-        break;
+        continue;
       voxel_num += 1;
       coor_to_voxelidx_rw(coor[0], coor[1], coor[2]) = voxelidx;
       for (int k = 0; k < NDim; ++k) {
