@@ -1,14 +1,14 @@
 import os
-import re
-import sys
 import platform
+import re
 import subprocess
-import torch
-from setuptools import setup, Extension, find_packages
-from setuptools.command.build_ext import build_ext
+import sys
 from distutils.version import LooseVersion
-
 from pathlib import Path
+
+import torch
+from setuptools import Extension, find_packages, setup
+from setuptools.command.build_ext import build_ext
 
 # if 'LIBTORCH_ROOT' not in os.environ:
 #     raise ValueError("You must set LIBTORCH_ROOT to your torch c++ library.")
@@ -100,4 +100,3 @@ setup(
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
 )
-

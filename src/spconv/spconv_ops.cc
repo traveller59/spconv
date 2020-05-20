@@ -47,7 +47,7 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
   double totalGatherTime = 0;
   double totalGEMMTime = 0;
   double totalSAddTime = 0;
-  tv::torch_dispatch<float, double, at::Half>(
+  tv::dispatch_torch<float, double, at::Half>(
       features.scalar_type(), [&](auto I) {
         using T = decltype(I);
         for (int i = 0; i < kernelVolume; ++i) {
@@ -68,7 +68,7 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
                        tv::torch2tv<const int>(indicePairs).subview(i, inverse),
                        nHot);
           }
-#ifdef SPCONV_CUDA
+#ifdef TV_CUDA
           else if (device == torch::kCUDA) {
             functor::SparseGatherFunctor<tv::GPU, T, int> gatherFtor;
             gatherFtor(tv::TorchGPU(), tv::torch2tv<T>(inputBuffer),
@@ -99,7 +99,7 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
                 tv::torch2tv<const int>(indicePairs).subview(i, !inverse), nHot,
                 true);
           }
-#ifdef SPCONV_CUDA
+#ifdef TV_CUDA
           else if (device == torch::kCUDA) {
             functor::SparseScatterAddFunctor<tv::GPU, T, int> scatterFtor;
             scatterFtor(
@@ -158,7 +158,7 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
     torch::mm_out(filterGradSub, features.t(), outGrad);
     torch::mm_out(inputGrad, outGrad, filters[indicePairMaxOffset].t());
   }
-  tv::torch_dispatch<float, double,
+  tv::dispatch_torch<float, double,
                      at::Half>(features.scalar_type(), [&](auto I) {
     using T = decltype(I);
     for (int i = 0; i < kernelVolume; ++i) {
@@ -178,7 +178,7 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
                       tv::torch2tv<const int>(indicePairs).subview(i, !inverse),
                       nHot);
       }
-#ifdef SPCONV_CUDA
+#ifdef TV_CUDA
       else if (device == torch::kCUDA) {
         functor::SparseGatherFunctor<tv::GPU, T, int> gatherFtor;
         functor::SparseGatherFunctor<tv::GPU, T, int> gatherFtorOut;
@@ -213,7 +213,7 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
                     tv::torch2tv<const int>(indicePairs).subview(i, inverse),
                     nHot);
       }
-#ifdef SPCONV_CUDA
+#ifdef TV_CUDA
       else if (device == torch::kCUDA) {
         functor::SparseScatterAddFunctor<tv::GPU, T, int> scatterFtor;
         scatterFtor(tv::TorchGPU(), tv::torch2tv<T>(inputGrad),

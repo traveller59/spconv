@@ -15,11 +15,11 @@
 #include <ATen/ATen.h>
 #include <chrono>
 #include <limits>
-#include <spconv/mp_helper.h>
-#include <spconv/reordering.h>
 #include <spconv/reordering.cu.h>
-#include <tensorview/helper_kernel.cu.h>
-#include <tensorview/helper_launch.h>
+#include <spconv/reordering.h>
+#include <tensorview/cuda_utils.h>
+#include <tensorview/kernel_utils.h>
+#include <tensorview/mp_helper.h>
 #include <tensorview/tensorview.h>
 #include <type_traits>
 #include <utility/timer.h>
@@ -30,7 +30,7 @@ template <typename T, typename Index>
 struct SparseGatherFunctor<tv::GPU, T, Index> {
   using vecload_type_t =
       std::conditional_t<std::is_same<T, at::Half>::value, int2, int4>;
-  using kernel_block_t = mp_list_c<int, 64, 32, 16>;
+  using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
   void operator()(const tv::GPU &d, tv::TensorView<T> buffer,
                   tv::TensorView<const T> features,
                   tv::TensorView<const Index> indices, int size) {
@@ -39,8 +39,8 @@ struct SparseGatherFunctor<tv::GPU, T, Index> {
     int numPlanes = features.dim(1);
     bool notFound = true;
     constexpr int vecloadFactor = sizeof(vecload_type_t) / sizeof(T);
-    mp_for_each<kernel_block_t>([=, &buffer, &features, &indices,
-                                 &notFound](auto NumTLP) {
+    tv::mp_for_each<kernel_block_t>([=, &buffer, &features, &indices,
+                                     &notFound](auto NumTLP) {
       constexpr int NumILP = NumTLP / 4;
       // constexpr int NumILP = NumTLP / (64 / (NumTLP / vecloadFactor));
       int nHotBlock = (size / NumTLP) * NumTLP;
@@ -50,8 +50,9 @@ struct SparseGatherFunctor<tv::GPU, T, Index> {
             gatherVecBlockKernel<T, Index, int(NumTLP), NumILP, vecload_type_t>
                 <<<dim3(numPlanes / NumTLP, size / NumTLP),
                    dim3(NumTLP / vecloadFactor, NumTLP / NumILP), 0,
-                   d.getStream()>>>(buffer.data(), features.data(), indices.data(),
-                                 nHotBlock, numPlanes / vecloadFactor);
+                   d.getStream()>>>(buffer.data(), features.data(),
+                                    indices.data(), nHotBlock,
+                                    numPlanes / vecloadFactor);
 
             TV_CHECK_CUDA_ERR();
           }
@@ -60,8 +61,9 @@ struct SparseGatherFunctor<tv::GPU, T, Index> {
                 <<<dim3(1, numPlanes / NumTLP),
                    dim3(NumTLP / NumILP, NumTLP / vecloadFactor), 0,
                    d.getStream()>>>(buffer.data() + nHotBlock * numPlanes,
-                                 features.data(), indices.data() + nHotBlock,
-                                 size - nHotBlock, numPlanes / vecloadFactor);
+                                    features.data(), indices.data() + nHotBlock,
+                                    size - nHotBlock,
+                                    numPlanes / vecloadFactor);
             TV_CHECK_CUDA_ERR();
           }
           notFound = false;
@@ -73,8 +75,8 @@ struct SparseGatherFunctor<tv::GPU, T, Index> {
       constexpr int NumTLP = 64;
       constexpr int NumILP = NumTLP / 4;
       gatherGenericKernel<T, Index, NumTLP, NumILP>
-          <<<dim3(tv::launch::DivUp(size, NumTLP),
-                  tv::launch::DivUp(numPlanes, NumTLP)),
+          <<<dim3(tv::cuda::DivUp(size, NumTLP),
+                  tv::cuda::DivUp(numPlanes, NumTLP)),
              dim3(NumTLP / NumILP, NumTLP), 0, d.getStream()>>>(
               buffer.data(), features.data(), indices.data(), size, numPlanes);
       TV_CHECK_CUDA_ERR();
@@ -85,7 +87,7 @@ template <typename T, typename Index>
 struct SparseScatterAddFunctor<tv::GPU, T, Index> {
   using vecload_type_t =
       std::conditional_t<std::is_same<T, at::Half>::value, int2, int4>;
-  using kernel_block_t = mp_list_c<int, 64, 32, 16>;
+  using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
   void operator()(const tv::GPU &d, tv::TensorView<T> outFeatures,
                   tv::TensorView<const T> buffer,
                   tv::TensorView<const Index> indices, int size, bool stable) {
@@ -95,8 +97,8 @@ struct SparseScatterAddFunctor<tv::GPU, T, Index> {
     bool notFound = true;
     constexpr int vecloadFactor =
         sizeof(vecload_type_t) / sizeof(T); // important for half.
-    mp_for_each<kernel_block_t>([=, &d, &outFeatures, &buffer, &indices,
-                                 &notFound](auto NumTLP) {
+    tv::mp_for_each<kernel_block_t>([=, &d, &outFeatures, &buffer, &indices,
+                                     &notFound](auto NumTLP) {
       // constexpr int NumILP = NumTLP / (64 / (NumTLP / vecloadFactor));
       constexpr int NumILP = NumTLP / 4;
       int nHotBlock = (size / NumTLP) * NumTLP;
@@ -108,8 +110,8 @@ struct SparseScatterAddFunctor<tv::GPU, T, Index> {
                 <<<dim3(numPlanes / NumTLP, size / NumTLP),
                    dim3(NumTLP / vecloadFactor, NumTLP / NumILP), 0,
                    d.getStream()>>>(outFeatures.data(), buffer.data(),
-                                 indices.data(), nHotBlock,
-                                 numPlanes / vecloadFactor);
+                                    indices.data(), nHotBlock,
+                                    numPlanes / vecloadFactor);
             TV_CHECK_CUDA_ERR();
           }
           if (size - nHotBlock > 0) {
@@ -128,8 +130,8 @@ struct SparseScatterAddFunctor<tv::GPU, T, Index> {
       constexpr int NumTLP = 64;
       constexpr int NumILP = NumTLP / 4;
       scatterAddGenericKernel<T, Index, NumTLP, NumILP>
-          <<<dim3(tv::launch::DivUp(size, NumTLP),
-                  tv::launch::DivUp(numPlanes, NumTLP)),
+          <<<dim3(tv::cuda::DivUp(size, NumTLP),
+                  tv::cuda::DivUp(numPlanes, NumTLP)),
              dim3(NumTLP / NumILP, NumTLP), 0, d.getStream()>>>(
               outFeatures.data(), buffer.data(), indices.data(), size,
               numPlanes);
@@ -138,7 +140,6 @@ struct SparseScatterAddFunctor<tv::GPU, T, Index> {
   }
 };
 } // namespace functor
-
 
 #define DECLARE_GPU_SPECS_T_INDEX(T, Index)                                    \
   template struct functor::SparseGatherFunctor<tv::GPU, T, Index>;             \

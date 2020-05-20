@@ -1,11 +1,11 @@
 # Copyright 2019 Yan Yan
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -31,14 +31,14 @@ class TestCase(unittest.TestCase):
         """
         a = self._GetNdArray(a)
         b = self._GetNdArray(b)
-        self.assertEqual(a.shape, b.shape,
-                         "Shape mismatch: expected %s, got %s." % (a.shape,
-                                                                   b.shape))
+        self.assertEqual(
+            a.shape, b.shape,
+            "Shape mismatch: expected %s, got %s." % (a.shape, b.shape))
         same = (a == b)
 
         if a.dtype == np.float32 or a.dtype == np.float64:
-            same = np.logical_or(same, np.logical_and(
-                np.isnan(a), np.isnan(b)))
+            same = np.logical_or(same, np.logical_and(np.isnan(a),
+                                                      np.isnan(b)))
         if not np.all(same):
             # Prints more details than np.testing.assert_array_equal.
             diff = np.logical_not(same)
@@ -68,30 +68,29 @@ class TestCase(unittest.TestCase):
         """
         is_a_dict = isinstance(a, dict)
         if is_a_dict != isinstance(b, dict):
-            raise ValueError("Can't compare dict to non-dict, %s vs %s." % (a,
-                                                                            b))
+            raise ValueError("Can't compare dict to non-dict, %s vs %s." %
+                             (a, b))
         if is_a_dict:
-            self.assertCountEqual(
-                a.keys(),
-                b.keys(),
-                msg="mismatched keys, expected %s, got %s" % (a.keys(),
-                                                              b.keys()))
+            self.assertCountEqual(a.keys(),
+                                  b.keys(),
+                                  msg="mismatched keys, expected %s, got %s" %
+                                  (a.keys(), b.keys()))
             for k in a:
-                self._assertArrayLikeAllClose(
-                    a[k],
-                    b[k],
-                    rtol=rtol,
-                    atol=atol,
-                    msg="%s: expected %s, got %s." % (k, a, b))
+                self._assertArrayLikeAllClose(a[k],
+                                              b[k],
+                                              rtol=rtol,
+                                              atol=atol,
+                                              msg="%s: expected %s, got %s." %
+                                              (k, a, b))
         else:
             self._assertArrayLikeAllClose(a, b, rtol=rtol, atol=atol)
 
     def _assertArrayLikeAllClose(self, a, b, rtol=1e-6, atol=1e-6, msg=None):
         a = self._GetNdArray(a)
         b = self._GetNdArray(b)
-        self.assertEqual(a.shape, b.shape,
-                         "Shape mismatch: expected %s, got %s." % (a.shape,
-                                                                   b.shape))
+        self.assertEqual(
+            a.shape, b.shape,
+            "Shape mismatch: expected %s, got %s." % (a.shape, b.shape))
         if not np.allclose(a, b, rtol=rtol, atol=atol):
             # Prints more details than np.testing.assert_allclose.
             #
@@ -118,6 +117,7 @@ class TestCase(unittest.TestCase):
             print("dtype = %s, shape = %s" % (a.dtype, a.shape))
             np.testing.assert_allclose(a, b, rtol=rtol, atol=atol, err_msg=msg)
 
+
 def params_grid(*params):
     size = len(params)
     length = 1
@@ -127,7 +127,7 @@ def params_grid(*params):
     counter = [0] * size
     total = []
     for i in range(length):
-        total.append([0]* size)
+        total.append([0] * size)
     for i in range(length):
         for j in range(size):
             total[i][j] = params[j][counter[j]]
@@ -138,13 +138,14 @@ def params_grid(*params):
                 counter[c] = 0
     return total
 
+
 def generate_sparse_data(shape,
-                    num_points,
-                    num_channels,
-                    integer=False,
-                    data_range=(-1, 1),
-                    with_dense=True,
-                    dtype=np.float32):
+                         num_points,
+                         num_channels,
+                         integer=False,
+                         data_range=(-1, 1),
+                         with_dense=True,
+                         dtype=np.float32):
     dense_shape = shape
     ndim = len(dense_shape)
     # num_points = np.random.randint(10, 100, size=[batch_size, ndim])
@@ -152,32 +153,35 @@ def generate_sparse_data(shape,
     # num_points = np.array([3, 2])
     batch_size = len(num_points)
     batch_indices = []
-    coors_total = np.stack(
-        np.meshgrid(*[np.arange(0, s) for s in shape]), axis=-1)
+    coors_total = np.stack(np.meshgrid(*[np.arange(0, s) for s in shape]),
+                           axis=-1)
     coors_total = coors_total.reshape(-1, ndim)
     for i in range(batch_size):
         np.random.shuffle(coors_total)
         inds_total = coors_total[:num_points[i]]
-        inds_total = np.pad(
-            inds_total, ((0, 0), (0, 1)), mode="constant", constant_values=i)
+        inds_total = np.pad(inds_total, ((0, 0), (0, 1)),
+                            mode="constant",
+                            constant_values=i)
         batch_indices.append(inds_total)
     if integer:
-        sparse_data = np.random.randint(
-            data_range[0], data_range[1], size=[num_points.sum(), num_channels]).astype(dtype)
+        sparse_data = np.random.randint(data_range[0],
+                                        data_range[1],
+                                        size=[num_points.sum(),
+                                              num_channels]).astype(dtype)
     else:
-        sparse_data = np.random.uniform(
-            data_range[0], data_range[1], size=[num_points.sum(), num_channels]).astype(dtype)
+        sparse_data = np.random.uniform(data_range[0],
+                                        data_range[1],
+                                        size=[num_points.sum(),
+                                              num_channels]).astype(dtype)
 
     # sparse_data = np.arange(1, num_points.sum() + 1).astype(np.float32).reshape(5, 1)
-    
-        
-    res =  {
+
+    res = {
         "features": sparse_data.astype(dtype),
-        
     }
     if with_dense:
-        dense_data = np.zeros(
-            [batch_size, num_channels, *dense_shape], dtype=sparse_data.dtype)
+        dense_data = np.zeros([batch_size, num_channels, *dense_shape],
+                              dtype=sparse_data.dtype)
         start = 0
         for i, inds in enumerate(batch_indices):
             for j, ind in enumerate(inds):
@@ -187,4 +191,4 @@ def generate_sparse_data(shape,
         res["features_dense"] = dense_data.astype(dtype)
     batch_indices = np.concatenate(batch_indices, axis=0)
     res["indices"] = batch_indices.astype(np.int32)
-    return res 
+    return res

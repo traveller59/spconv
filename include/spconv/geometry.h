@@ -26,34 +26,27 @@ namespace detail {
 
 template <typename T> struct ToUnsigned;
 
-template <> struct ToUnsigned<int>{
-  using type = uint32_t;
-};
+template <> struct ToUnsigned<int> { using type = uint32_t; };
 
-template <> struct ToUnsigned<long>{
-  using type = uint64_t;
-};
+template <> struct ToUnsigned<long> { using type = uint64_t; };
 
 template <typename T> struct FNVInternal;
-template <> struct FNVInternal<uint32_t>
-{
+template <> struct FNVInternal<uint32_t> {
   constexpr static uint32_t defaultOffsetBasis = 0x811C9DC5;
   constexpr static uint32_t prime = 0x01000193;
 };
 
-template <> struct FNVInternal<uint64_t>
-{
+template <> struct FNVInternal<uint64_t> {
   constexpr static uint64_t defaultOffsetBasis = 0xcbf29ce484222325;
   constexpr static uint64_t prime = 0x100000001b3;
 };
 
-}
+} // namespace detail
 template <typename T>
 using to_unsigned_t = typename detail::ToUnsigned<std::remove_const_t<T>>::type;
 
-template <typename T>
-struct FNV1a : detail::FNVInternal<T>{
-  std::size_t operator()(const T* data, std::size_t size){
+template <typename T> struct FNV1a : detail::FNVInternal<T> {
+  std::size_t operator()(const T *data, std::size_t size) {
     to_unsigned_t<T> hash = detail::FNVInternal<T>::defaultOffsetBasis;
     for (std::size_t i = 0; i < size; ++i) {
       hash *= detail::FNVInternal<T>::prime;

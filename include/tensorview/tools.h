@@ -1,4 +1,4 @@
-// Copyright 2019 Yan Yan
+// Copyright 2019-2020 Yan Yan
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@
 #endif
 #include <iostream>
 
-namespace spconv {
+namespace tv {
 
 #ifdef TV_CUDA
 template <typename TimeT = std::chrono::microseconds> struct CudaContextTimer {
@@ -55,4 +55,4 @@ private:
   std::chrono::time_point<std::chrono::steady_clock> mCurTime;
 };
 
-} // namespace spconv
+} // namespace tv

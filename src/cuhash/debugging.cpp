@@ -3,10 +3,10 @@
 // -------------------------------------------------------------
 // $Revision:$
 // $Date:$
-// ------------------------------------------------------------- 
+// -------------------------------------------------------------
 // This source code is distributed under the terms of license.txt in
 // the root directory of this source distribution.
-// ------------------------------------------------------------- 
+// -------------------------------------------------------------
 
 /**
  * @file
@@ -24,18 +24,16 @@
 
 namespace cuhash {
 
-
-void OutputRetrievalStatistics(const unsigned  n_queries,
+void OutputRetrievalStatistics(const unsigned n_queries,
                                const unsigned *d_retrieval_probes,
-                               const unsigned  n_functions)
-{
+                               const unsigned n_functions) {
   unsigned *retrieval_probes = new unsigned[n_queries];
-  CUDA_SAFE_CALL(cudaMemcpy(retrieval_probes,
-                            d_retrieval_probes,
+  CUDA_SAFE_CALL(cudaMemcpy(retrieval_probes, d_retrieval_probes,
                             sizeof(unsigned) * n_queries,
                             cudaMemcpyDeviceToHost));
 
-  // Create a histogram showing how many items needed how many probes to be found.
+  // Create a histogram showing how many items needed how many probes to be
+  // found.
   unsigned possible_probes = n_functions + 2;
   unsigned *histogram = new unsigned[possible_probes];
   memset(histogram, 0, sizeof(unsigned) * (possible_probes));
@@ -51,16 +49,16 @@ void OutputRetrievalStatistics(const unsigned  n_queries,
     sprintf(buffer, "\t(%u, %u)", i, histogram[i]);
     PrintMessage(buffer);
   }
-  delete [] retrieval_probes;
-  delete [] histogram;
+  delete[] retrieval_probes;
+  delete[] histogram;
 }
 
-
-void OutputBuildStatistics(const unsigned  n,
+void OutputBuildStatistics(const unsigned n,
                            const unsigned *d_iterations_taken) {
   // Output how many iterations each thread took until it found an empty slot.
   unsigned *iterations_taken = new unsigned[n];
-  CUDA_SAFE_CALL(cudaMemcpy(iterations_taken, d_iterations_taken, sizeof(unsigned) * n, cudaMemcpyDeviceToHost));
+  CUDA_SAFE_CALL(cudaMemcpy(iterations_taken, d_iterations_taken,
+                            sizeof(unsigned) * n, cudaMemcpyDeviceToHost));
   std::sort(iterations_taken, iterations_taken + n);
   unsigned total_iterations = 0;
   unsigned max_iterations_taken = 0;
@@ -86,17 +84,18 @@ void OutputBuildStatistics(const unsigned  n,
   PrintMessage(buffer);
   sprintf(buffer, "Total iterations: %u", total_iterations);
   PrintMessage(buffer);
-  sprintf(buffer, "Avg/Med/Max iterations: (%f %u %u)", (float)total_iterations / n, iterations_taken[n/2], iterations_taken[n-1]);
+  sprintf(buffer, "Avg/Med/Max iterations: (%f %u %u)",
+          (float)total_iterations / n, iterations_taken[n / 2],
+          iterations_taken[n - 1]);
   PrintMessage(buffer);
-  delete [] iterations_taken;
+  delete[] iterations_taken;
 
   // Print the length of the longest eviction chain.
   sprintf(buffer, "Max iterations: %u", max_iterations_taken);
   PrintMessage(buffer);
 }
 
-
-}; // namespace CuckooHashing
+}; // namespace cuhash
 
 // Leave this at the end of the file
 // Local Variables:

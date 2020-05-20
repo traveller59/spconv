@@ -1,17 +1,16 @@
 // Copyright 2019 Yan Yan
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 
 #ifndef BOX_IOU_H
 #define BOX_IOU_H
@@ -99,9 +98,10 @@ rbbox_iou(py::array_t<DType> box_corners, py::array_t<DType> qbox_corners,
 }
 
 template <typename DType>
-py::array_t<DType>
-rbbox_intersection(py::array_t<DType> box_corners, py::array_t<DType> qbox_corners,
-          py::array_t<DType> standup_iou, DType standup_thresh) {
+py::array_t<DType> rbbox_intersection(py::array_t<DType> box_corners,
+                                      py::array_t<DType> qbox_corners,
+                                      py::array_t<DType> standup_iou,
+                                      DType standup_thresh) {
   namespace bg = boost::geometry;
   typedef bg::model::point<DType, 2, bg::cs::cartesian> point_t;
   typedef bg::model::polygon<point_t> polygon_t;
@@ -151,7 +151,6 @@ rbbox_intersection(py::array_t<DType> box_corners, py::array_t<DType> qbox_corne
   }
   return overlaps;
 }
-
 
 } // namespace spconv
 #endif

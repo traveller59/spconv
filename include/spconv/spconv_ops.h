@@ -17,8 +17,8 @@
 
 #include <spconv/indice.h>
 #include <spconv/reordering.h>
+#include <tensorview/torch_utils.h>
 #include <torch/script.h>
-#include <torch_utils.h>
 #include <utility/timer.h>
 
 namespace spconv {
@@ -101,7 +101,7 @@ getIndicePair(torch::Tensor indices, int64_t batchSize,
           tv::torch2tv<int>(indiceNum), kernelSize32, stride32, padding32,
           dilation32, outSpatialShape32, transpose, false, useHash);
     }
-#ifdef SPCONV_CUDA
+#ifdef TV_CUDA
     else if (indices.device().type() == torch::kCUDA) {
       auto getIndicePairFtor =
           functor::CreateSubMIndicePairFunctor<tv::GPU, int, int, NDim>();
@@ -149,7 +149,7 @@ getIndicePair(torch::Tensor indices, int64_t batchSize,
           kernelSize32, stride32, padding32, dilation32, outSpatialShape32,
           transpose);
     }
-#ifdef SPCONV_CUDA
+#ifdef TV_CUDA
     else if (indices.device().type() == torch::kCUDA) {
       auto getIndicePairFtorP1 =
           functor::CreateConvIndicePairFunctorP1<tv::GPU, int, int, NDim>();
@@ -269,7 +269,7 @@ std::vector<torch::Tensor> getIndicePairPreGrid(
           dilation32, outSpatialShape32, transpose);
       gridOut.fill_(-1);
     }
-#ifdef SPCONV_CUDA
+#ifdef TV_CUDA
     else if (indices.device().type() == torch::kCUDA) {
       auto getIndicePairFtor =
           functor::CreateSubMIndicePairFunctor<tv::GPU, int, int, NDim>();
@@ -299,7 +299,7 @@ std::vector<torch::Tensor> getIndicePairPreGrid(
           transpose, true);
       gridOut.fill_(-1);
     }
-#ifdef SPCONV_CUDA
+#ifdef TV_CUDA
     else if (indices.device().type() == torch::kCUDA) {
       auto getIndicePairFtorP1 =
           functor::CreateConvIndicePairFunctorP1<tv::GPU, int, int, NDim>();

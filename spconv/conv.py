@@ -16,14 +16,15 @@ import math
 import time
 
 import numpy as np
-import spconv
-import spconv.functional as Fsp
 import torch
-from spconv import ops
-from spconv.modules import SparseModule
 from torch import nn
 from torch.nn import init
 from torch.nn.parameter import Parameter
+
+import spconv
+import spconv.functional as Fsp
+from spconv import ops
+from spconv.modules import SparseModule
 
 
 def _calculate_fan_in_and_fan_out_hwio(tensor):
@@ -146,8 +147,9 @@ class SparseConvolution(SparseModule):
                 self.weight.view(self.in_channels, self.out_channels))
             if self.bias is not None:
                 features += self.bias
-            out_tensor = spconv.SparseConvTensor(
-                features, input.indices, input.spatial_shape, input.batch_size)
+            out_tensor = spconv.SparseConvTensor(features, input.indices,
+                                                 input.spatial_shape,
+                                                 input.batch_size)
             out_tensor.indice_dict = input.indice_dict
             out_tensor.grid = input.grid
             return out_tensor
@@ -181,9 +183,12 @@ class SparseConvolution(SparseModule):
                                                       spatial_shape)
         if self.fused_bn:
             assert self.bias is not None
-            out_features = ops.fused_indice_conv(
-                features, self.weight, self.bias, indice_pairs.to(device),
-                indice_pair_num, outids.shape[0], self.inverse, self.subm)
+            out_features = ops.fused_indice_conv(features, self.weight,
+                                                 self.bias,
+                                                 indice_pairs.to(device),
+                                                 indice_pair_num,
+                                                 outids.shape[0], self.inverse,
+                                                 self.subm)
         else:
             if self.subm:
                 out_features = Fsp.indice_subm_conv(features, self.weight,
@@ -222,18 +227,17 @@ class SparseConv2d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  use_hash=False):
-        super(SparseConv2d, self).__init__(
-            2,
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride,
-            padding,
-            dilation,
-            groups,
-            bias,
-            indice_key=indice_key,
-            use_hash=use_hash)
+        super(SparseConv2d, self).__init__(2,
+                                           in_channels,
+                                           out_channels,
+                                           kernel_size,
+                                           stride,
+                                           padding,
+                                           dilation,
+                                           groups,
+                                           bias,
+                                           indice_key=indice_key,
+                                           use_hash=use_hash)
 
 
 class SparseConv3d(SparseConvolution):
@@ -248,18 +252,17 @@ class SparseConv3d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  use_hash=False):
-        super(SparseConv3d, self).__init__(
-            3,
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride,
-            padding,
-            dilation,
-            groups,
-            bias,
-            indice_key=indice_key,
-            use_hash=use_hash)
+        super(SparseConv3d, self).__init__(3,
+                                           in_channels,
+                                           out_channels,
+                                           kernel_size,
+                                           stride,
+                                           padding,
+                                           dilation,
+                                           groups,
+                                           bias,
+                                           indice_key=indice_key,
+                                           use_hash=use_hash)
 
 
 class SparseConv4d(SparseConvolution):
@@ -274,18 +277,17 @@ class SparseConv4d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  use_hash=False):
-        super(SparseConv4d, self).__init__(
-            4,
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride,
-            padding,
-            dilation,
-            groups,
-            bias,
-            indice_key=indice_key,
-            use_hash=use_hash)
+        super(SparseConv4d, self).__init__(4,
+                                           in_channels,
+                                           out_channels,
+                                           kernel_size,
+                                           stride,
+                                           padding,
+                                           dilation,
+                                           groups,
+                                           bias,
+                                           indice_key=indice_key,
+                                           use_hash=use_hash)
 
 
 class SparseConvTranspose2d(SparseConvolution):
@@ -300,19 +302,18 @@ class SparseConvTranspose2d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  use_hash=False):
-        super(SparseConvTranspose2d, self).__init__(
-            2,
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride,
-            padding,
-            dilation,
-            groups,
-            bias,
-            transposed=True,
-            indice_key=indice_key,
-            use_hash=use_hash)
+        super(SparseConvTranspose2d, self).__init__(2,
+                                                    in_channels,
+                                                    out_channels,
+                                                    kernel_size,
+                                                    stride,
+                                                    padding,
+                                                    dilation,
+                                                    groups,
+                                                    bias,
+                                                    transposed=True,
+                                                    indice_key=indice_key,
+                                                    use_hash=use_hash)
 
 
 class SparseConvTranspose3d(SparseConvolution):
@@ -327,19 +328,18 @@ class SparseConvTranspose3d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  use_hash=False):
-        super(SparseConvTranspose3d, self).__init__(
-            3,
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride,
-            padding,
-            dilation,
-            groups,
-            bias,
-            transposed=True,
-            indice_key=indice_key,
-            use_hash=use_hash)
+        super(SparseConvTranspose3d, self).__init__(3,
+                                                    in_channels,
+                                                    out_channels,
+                                                    kernel_size,
+                                                    stride,
+                                                    padding,
+                                                    dilation,
+                                                    groups,
+                                                    bias,
+                                                    transposed=True,
+                                                    indice_key=indice_key,
+                                                    use_hash=use_hash)
 
 
 class SparseInverseConv2d(SparseConvolution):
@@ -349,14 +349,13 @@ class SparseInverseConv2d(SparseConvolution):
                  kernel_size,
                  indice_key,
                  bias=True):
-        super(SparseInverseConv2d, self).__init__(
-            2,
-            in_channels,
-            out_channels,
-            kernel_size,
-            bias=bias,
-            inverse=True,
-            indice_key=indice_key)
+        super(SparseInverseConv2d, self).__init__(2,
+                                                  in_channels,
+                                                  out_channels,
+                                                  kernel_size,
+                                                  bias=bias,
+                                                  inverse=True,
+                                                  indice_key=indice_key)
 
 
 class SparseInverseConv3d(SparseConvolution):
@@ -366,14 +365,13 @@ class SparseInverseConv3d(SparseConvolution):
                  kernel_size,
                  indice_key,
                  bias=True):
-        super(SparseInverseConv3d, self).__init__(
-            3,
-            in_channels,
-            out_channels,
-            kernel_size,
-            bias=bias,
-            inverse=True,
-            indice_key=indice_key)
+        super(SparseInverseConv3d, self).__init__(3,
+                                                  in_channels,
+                                                  out_channels,
+                                                  kernel_size,
+                                                  bias=bias,
+                                                  inverse=True,
+                                                  indice_key=indice_key)
 
 
 class SubMConv2d(SparseConvolution):
@@ -388,19 +386,18 @@ class SubMConv2d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  use_hash=False):
-        super(SubMConv2d, self).__init__(
-            2,
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride,
-            padding,
-            dilation,
-            groups,
-            bias,
-            True,
-            indice_key=indice_key,
-            use_hash=use_hash)
+        super(SubMConv2d, self).__init__(2,
+                                         in_channels,
+                                         out_channels,
+                                         kernel_size,
+                                         stride,
+                                         padding,
+                                         dilation,
+                                         groups,
+                                         bias,
+                                         True,
+                                         indice_key=indice_key,
+                                         use_hash=use_hash)
 
 
 class SubMConv3d(SparseConvolution):
@@ -415,19 +412,18 @@ class SubMConv3d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  use_hash=False):
-        super(SubMConv3d, self).__init__(
-            3,
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride,
-            padding,
-            dilation,
-            groups,
-            bias,
-            True,
-            indice_key=indice_key,
-            use_hash=use_hash)
+        super(SubMConv3d, self).__init__(3,
+                                         in_channels,
+                                         out_channels,
+                                         kernel_size,
+                                         stride,
+                                         padding,
+                                         dilation,
+                                         groups,
+                                         bias,
+                                         True,
+                                         indice_key=indice_key,
+                                         use_hash=use_hash)
 
 
 class SubMConv4d(SparseConvolution):
@@ -442,16 +438,15 @@ class SubMConv4d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  use_hash=False):
-        super(SubMConv4d, self).__init__(
-            4,
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride,
-            padding,
-            dilation,
-            groups,
-            bias,
-            True,
-            indice_key=indice_key,
-            use_hash=use_hash)
+        super(SubMConv4d, self).__init__(4,
+                                         in_channels,
+                                         out_channels,
+                                         kernel_size,
+                                         stride,
+                                         padding,
+                                         dilation,
+                                         groups,
+                                         bias,
+                                         True,
+                                         indice_key=indice_key,
+                                         use_hash=use_hash)

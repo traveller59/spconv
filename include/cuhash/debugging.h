@@ -3,10 +3,10 @@
 // -------------------------------------------------------------
 // $Revision:$
 // $Date:$
-// ------------------------------------------------------------- 
+// -------------------------------------------------------------
 // This source code is distributed under the terms of license.txt in
 // the root directory of this source distribution.
-// ------------------------------------------------------------- 
+// -------------------------------------------------------------
 
 /**
  * @file
@@ -29,44 +29,44 @@ namespace cuhash {
 //! @name Debugging functions
 /// @{
 
-void TakeHashFunctionStatistics(const unsigned   num_keys,
-                                const unsigned  *d_keys,
-                                const unsigned   table_size,
-                                const uint2     *constants,
-                                const unsigned   kNumHashFunctions);
+void TakeHashFunctionStatistics(const unsigned num_keys, const unsigned *d_keys,
+                                const unsigned table_size,
+                                const uint2 *constants,
+                                const unsigned kNumHashFunctions);
 
-
-//! Output how many probes were required by each thread to perform the retrieval.
+//! Output how many probes were required by each thread to perform the
+//! retrieval.
 /*! @param[in]  n_queries           Number of queries being performed.
- *  @param[in]  d_retrieval_probes  Device array: the number of probes taken for each thread's retrieval.
+ *  @param[in]  d_retrieval_probes  Device array: the number of probes taken for
+ * each thread's retrieval.
  *  @param[in]  n_functions         Number of hash functions used.
  */
-void OutputRetrievalStatistics(const unsigned  n_queries,
+void OutputRetrievalStatistics(const unsigned n_queries,
                                const unsigned *d_retrieval_probes,
-                               const unsigned  n_functions);
+                               const unsigned n_functions);
 
-
-//! Outputs information about how many iterations threads required to successfully cuckoo hash.
+//! Outputs information about how many iterations threads required to
+//! successfully cuckoo hash.
 /*! @param[in]  n                       Number of keys in the input.
- *  @param[in]  d_iterations_taken      Device mem: Number of iterations each thread took.
- *  @param[in]  d_max_iterations_taken  Device mem: Largest number of iterations taken by any thread.
+ *  @param[in]  d_iterations_taken      Device mem: Number of iterations each
+ * thread took.
+ *  @param[in]  d_max_iterations_taken  Device mem: Largest number of iterations
+ * taken by any thread.
  */
-void OutputBuildStatistics(const unsigned  n,
+void OutputBuildStatistics(const unsigned n,
                            const unsigned *d_iterations_taken);
 
 //! Prints out the contents of the stash.
 void PrintStashContents(const Entry *d_stash);
 
 //! Checks if a key is assigned the same slot by different hash functions.
-bool CheckAssignedSameSlot(const unsigned  N,
-                           const unsigned  num_keys,
-                           const unsigned *d_keys,
-                           const unsigned  table_size,
-                                 uint2    *constants);
+bool CheckAssignedSameSlot(const unsigned N, const unsigned num_keys,
+                           const unsigned *d_keys, const unsigned table_size,
+                           uint2 *constants);
 
 /// @}
 
-}; // namespace CuckooHashing
+}; // namespace cuhash
 
 #endif
 

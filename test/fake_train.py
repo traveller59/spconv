@@ -52,25 +52,47 @@ class FakeClassifier(nn.Module):
     def __init__(self):
         super().__init__()
         self.net = spconv.SparseSequential(
-            spconv.SubMConv3d(3, 8, 3, indice_key="subm1", padding=1, use_hash=False),
+            spconv.SubMConv3d(3,
+                              8,
+                              3,
+                              indice_key="subm1",
+                              padding=1,
+                              use_hash=False),
             nn.BatchNorm1d(8),
             nn.ReLU(),
             spconv.SparseConv3d(8, 16, 3, stride=2, padding=1, use_hash=False),
             nn.BatchNorm1d(16),
             nn.ReLU(),
-            spconv.SubMConv3d(16, 16, 3, indice_key="subm2", padding=1, use_hash=False),
+            spconv.SubMConv3d(16,
+                              16,
+                              3,
+                              indice_key="subm2",
+                              padding=1,
+                              use_hash=False),
             nn.BatchNorm1d(16),
             nn.ReLU(),
-            spconv.SparseConv3d(16, 32, 3, stride=2, padding=1, use_hash=False),
+            spconv.SparseConv3d(16, 32, 3, stride=2, padding=1,
+                                use_hash=False),
             nn.BatchNorm1d(32),
             nn.ReLU(),
-            spconv.SubMConv3d(32, 32, 3, indice_key="subm3", padding=1, use_hash=False),
+            spconv.SubMConv3d(32,
+                              32,
+                              3,
+                              indice_key="subm3",
+                              padding=1,
+                              use_hash=False),
             nn.BatchNorm1d(32),
             nn.ReLU(),
-            spconv.SparseConv3d(32, 64, 3, stride=2, padding=1, use_hash=False),
+            spconv.SparseConv3d(32, 64, 3, stride=2, padding=1,
+                                use_hash=False),
             nn.BatchNorm1d(64),
             nn.ReLU(),
-            spconv.SubMConv3d(64, 64, 3, indice_key="subm4", padding=1, use_hash=False),
+            spconv.SubMConv3d(64,
+                              64,
+                              3,
+                              indice_key="subm4",
+                              padding=1,
+                              use_hash=False),
             nn.BatchNorm1d(64),
             nn.ReLU(),
             spconv.ToDense()  # [64, 2, 8, 8]
@@ -97,7 +119,7 @@ def run():
     for i in tqdm.tqdm(list(range(100))):
         # for j in range(4):
         #     features, indices, label = ds[(i * 4 + j) % len(ds)]
-        
+
         features, indices, label = ds[i % len(ds)]
         features_t = torch.from_numpy(features)
         indices_t = torch.from_numpy(indices)

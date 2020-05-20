@@ -21,7 +21,7 @@ namespace spconv {
 
 namespace functor {
 template <typename T, typename Index>
-struct NonMaxSupressionFunctor<tv::CPU, T, Index>  {
+struct NonMaxSupressionFunctor<tv::CPU, T, Index> {
   Index operator()(const tv::CPU &d, tv::TensorView<Index> keep,
                    tv::TensorView<const T> boxes, T threshold, T eps) {
     auto ndets = boxes.dim(0);
@@ -131,7 +131,7 @@ struct rotateNonMaxSupressionFunctor<tv::CPU, T, Index> {
 
 #define DECLARE_CPU_INDEX(Index)                                               \
   DECLARE_CPU_T_INDEX(float, Index);                                           \
-  DECLARE_CPU_T_INDEX(double, Index);                                          
+  DECLARE_CPU_T_INDEX(double, Index);
 
 DECLARE_CPU_INDEX(int);
 DECLARE_CPU_INDEX(long);

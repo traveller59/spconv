@@ -15,10 +15,10 @@
 #include <ATen/ATen.h>
 #include <chrono>
 #include <limits>
-#include <spconv/mp_helper.h>
 #include <spconv/pillar_scatter_functor.h>
-#include <tensorview/helper_kernel.cu.h>
-#include <tensorview/helper_launch.h>
+#include <tensorview/cuda_utils.h>
+#include <tensorview/kernel_utils.h>
+#include <tensorview/mp_helper.h>
 #include <tensorview/tensorview.h>
 #include <type_traits>
 #include <utility/timer.h>
@@ -43,8 +43,8 @@ struct PointPillarScatter<tv::GPU, T, Index> {
   void operator()(const tv::GPU &d, tv::TensorView<T> canvas,
                   tv::TensorView<const T> features,
                   tv::TensorView<const T> coors) {
-    auto grid = dim3(tv::launch::DivUp(features.dim(1), 32),
-                     tv::launch::DivUp(features.dim(0), 32));
+    auto grid = dim3(tv::cuda::DivUp(features.dim(1), 32),
+                     tv::cuda::DivUp(features.dim(0), 32));
     pointPillarsScatterKernel<T, Index>
         <<<grid, dim3(32, 32), 0, d.getStream()>>>(canvas, features, coors);
     TV_CHECK_CUDA_ERR();

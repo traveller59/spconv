@@ -12,27 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import platform
 from pathlib import Path
 
-import platform
 import numpy as np
 import torch
-from spconv import utils
-from spconv.conv import SparseConv2d, SparseConv3d, SubMConv2d, SubMConv3d
-from spconv.conv import SparseConvTranspose2d, SparseConvTranspose3d
-from spconv.conv import SparseInverseConv2d, SparseInverseConv3d
+
+from spconv import ops, utils
+from spconv.conv import (SparseConv2d, SparseConv3d, SparseConvTranspose2d,
+                         SparseConvTranspose3d, SparseInverseConv2d,
+                         SparseInverseConv3d, SubMConv2d, SubMConv3d)
+from spconv.identity import Identity
 from spconv.modules import SparseModule, SparseSequential
 from spconv.pool import SparseMaxPool2d, SparseMaxPool3d
-from spconv.tables import ConcatTable, JoinTable, AddTable
-from spconv.identity import Identity
-
-from spconv import ops
+from spconv.tables import AddTable, ConcatTable, JoinTable
 
 _LIB_FILE_NAME = "libspconv.so"
 if platform.system() == "Windows":
     _LIB_FILE_NAME = "spconv.dll"
 _LIB_PATH = str(Path(__file__).parent / _LIB_FILE_NAME)
 torch.ops.load_library(_LIB_PATH)
+
 
 def scatter_nd(indices, updates, shape):
     """pytorch edition of tensorflow scatter_nd.
@@ -49,8 +49,10 @@ def scatter_nd(indices, updates, shape):
     ret[slices] = updates.view(*output_shape)
     return ret
 
+
 class SparseConvTensor(object):
-    def __init__(self, features, indices, spatial_shape, batch_size, grid=None):
+    def __init__(self, features, indices, spatial_shape, batch_size,
+                 grid=None):
         """
         Args:
             grid: pre-allocated grid tensor. should be used when the volume of spatial shape
@@ -77,7 +79,8 @@ class SparseConvTensor(object):
         return None
 
     def dense(self, channels_first=True):
-        output_shape = [self.batch_size] + list(self.spatial_shape) + [self.features.shape[1]]
+        output_shape = [self.batch_size] + list(
+            self.spatial_shape) + [self.features.shape[1]]
         res = scatter_nd(self.indices.long(), self.features, output_shape)
         if not channels_first:
             return res
@@ -88,7 +91,8 @@ class SparseConvTensor(object):
 
     @property
     def sparity(self):
-        return self.indices.shape[0] / np.prod(self.spatial_shape) / self.batch_size
+        return self.indices.shape[0] / np.prod(
+            self.spatial_shape) / self.batch_size
 
 
 class ToDense(SparseModule):
@@ -96,6 +100,7 @@ class ToDense(SparseModule):
     """
     def forward(self, x: SparseConvTensor):
         return x.dense()
+
 
 class RemoveGrid(SparseModule):
     """remove pre-allocated grid buffer.

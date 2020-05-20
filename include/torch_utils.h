@@ -13,18 +13,18 @@
 // limitations under the License.
 
 #pragma once
-#include <spconv/mp_helper.h>
+#include <tensorview/mp_helper.h>
 #include <tensorview/tensorview.h>
 
 #include <ATen/ATen.h>
 #include <torch/script.h>
-#ifdef SPCONV_CUDA
+#ifdef TV_CUDA
 #include <ATen/cuda/CUDAContext.h>
 #endif
 
 namespace tv {
 
-#ifdef SPCONV_CUDA
+#ifdef TV_CUDA
 struct TorchGPU : public tv::GPU {
   virtual cudaStream_t getStream() const override {
     return at::cuda::getCurrentCUDAStream();
@@ -103,10 +103,10 @@ template <> struct TypeToString<at::Half> {
 };
 } // namespace detail
 template <class... Ts, typename F>
-void torch_dispatch(at::ScalarType t, F &&f) {
+void dispatch_torch(at::ScalarType t, F &&f) {
   static_assert(sizeof...(Ts) > 0, "you need to provide at least one type");
   bool notFound = true;
-  spconv::mp_for_each<spconv::mp_list<Ts...>>([=, &notFound, &f](auto I) {
+  spconv::tv::mp_for_each<spconv::mp_list<Ts...>>([=, &notFound, &f](auto I) {
     if (torch_type_v<decltype(I)> == t) {
       std::forward<F>(f)(decltype(I)());
       notFound = false;
@@ -114,7 +114,7 @@ void torch_dispatch(at::ScalarType t, F &&f) {
   });
   if (notFound) {
     std::stringstream ss;
-    spconv::mp_for_each<spconv::mp_list<Ts...>>([=, &ss](auto I) {
+    spconv::tv::mp_for_each<spconv::mp_list<Ts...>>([=, &ss](auto I) {
       ss << tv::detail::TypeToString<decltype(I)>::value << " ";
     });
     TV_THROW_RT_ERR("unknown type", t, ", available: ", ss.str());

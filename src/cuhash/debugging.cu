@@ -3,10 +3,10 @@
 // -------------------------------------------------------------
 // $Revision:$
 // $Date:$
-// ------------------------------------------------------------- 
+// -------------------------------------------------------------
 // This source code is distributed under the terms of license.txt in
 // the root directory of this source distribution.
-// ------------------------------------------------------------- 
+// -------------------------------------------------------------
 
 /**
  * @file
@@ -24,24 +24,17 @@
 
 namespace cuhash {
 
-
 //! Debugging function: Takes statistics on the hash functions' distribution.
 /*! Determines:
  *    - How many unique slots each key has.
  *    - How many keys hash into each slot.
  *    - Whether any keys failed to get a full set of slots.
  */
-__global__
-void take_hash_function_statistics_kernel(const unsigned  *keys,
-                                          const unsigned   n_entries,
-                                          const unsigned   table_size,
-                                          const uint2     *constants,
-                                          const unsigned   num_functions,
-                                                unsigned  *num_slots_available,
-                                                unsigned  *num_hashing_in,
-                                                unsigned  *failed) {
-  unsigned thread_index = threadIdx.x +
-                          blockIdx.x * blockDim.x +
+__global__ void take_hash_function_statistics_kernel(
+    const unsigned *keys, const unsigned n_entries, const unsigned table_size,
+    const uint2 *constants, const unsigned num_functions,
+    unsigned *num_slots_available, unsigned *num_hashing_in, unsigned *failed) {
+  unsigned thread_index = threadIdx.x + blockIdx.x * blockDim.x +
                           blockIdx.y * blockDim.x * gridDim.x;
 
   if (thread_index >= n_entries)
@@ -83,12 +76,10 @@ void take_hash_function_statistics_kernel(const unsigned  *keys,
   }
 }
 
-
-void TakeHashFunctionStatistics(const unsigned   num_keys,
-                                const unsigned  *d_keys,
-                                const unsigned   table_size,
-                                const uint2     *constants,
-                                const unsigned   kNumHashFunctions) {
+void TakeHashFunctionStatistics(const unsigned num_keys, const unsigned *d_keys,
+                                const unsigned table_size,
+                                const uint2 *constants,
+                                const unsigned kNumHashFunctions) {
   char buffer[16000];
   PrintMessage("Hash function constants: ");
 
@@ -98,35 +89,34 @@ void TakeHashFunctionStatistics(const unsigned   num_keys,
   }
 
   unsigned *d_num_hashing_in = NULL;
- #ifdef COUNT_HOW_MANY_HASH_INTO_EACH_SLOT
-  CUDA_SAFE_CALL(cudaMalloc((void**)&d_num_hashing_in,
-                             sizeof(unsigned) * table_size));
-  CUDA_SAFE_CALL(cudaMemset(d_num_hashing_in, 0, sizeof(unsigned) * table_size));
- #endif
+#ifdef COUNT_HOW_MANY_HASH_INTO_EACH_SLOT
+  CUDA_SAFE_CALL(
+      cudaMalloc((void **)&d_num_hashing_in, sizeof(unsigned) * table_size));
+  CUDA_SAFE_CALL(
+      cudaMemset(d_num_hashing_in, 0, sizeof(unsigned) * table_size));
+#endif
 
   unsigned *d_num_slots_available = NULL;
- #ifdef COUNT_HOW_MANY_HAVE_CYCLES
-  CUDA_SAFE_CALL(cudaMalloc((void**)&d_num_slots_available,
-                            sizeof(unsigned) * num_keys));
- #endif
+#ifdef COUNT_HOW_MANY_HAVE_CYCLES
+  CUDA_SAFE_CALL(
+      cudaMalloc((void **)&d_num_slots_available, sizeof(unsigned) * num_keys));
+#endif
   uint2 *d_constants = NULL;
-  CUDA_SAFE_CALL(cudaMalloc((void**)&d_constants, sizeof(uint2) * kNumHashFunctions));
-  CUDA_SAFE_CALL(cudaMemcpy(d_constants, constants, sizeof(uint2) * kNumHashFunctions, cudaMemcpyHostToDevice));
+  CUDA_SAFE_CALL(
+      cudaMalloc((void **)&d_constants, sizeof(uint2) * kNumHashFunctions));
+  CUDA_SAFE_CALL(cudaMemcpy(d_constants, constants,
+                            sizeof(uint2) * kNumHashFunctions,
+                            cudaMemcpyHostToDevice));
 
-  take_hash_function_statistics_kernel<<<ComputeGridDim(num_keys), kBlockSize>>>
-                                      (d_keys, num_keys,
-                                       table_size,
-                                       d_constants,
-                                       kNumHashFunctions,
-                                       d_num_slots_available,
-                                       d_num_hashing_in,
-                                       NULL);
+  take_hash_function_statistics_kernel<<<ComputeGridDim(num_keys),
+                                         kBlockSize>>>(
+      d_keys, num_keys, table_size, d_constants, kNumHashFunctions,
+      d_num_slots_available, d_num_hashing_in, NULL);
   CUDA_SAFE_CALL(cudaFree(d_constants));
 
- #ifdef COUNT_HOW_MANY_HASH_INTO_EACH_SLOT
+#ifdef COUNT_HOW_MANY_HASH_INTO_EACH_SLOT
   unsigned *num_hashing_in = new unsigned[table_size];
-  CUDA_SAFE_CALL(cudaMemcpy(num_hashing_in,
-                            d_num_hashing_in,
+  CUDA_SAFE_CALL(cudaMemcpy(num_hashing_in, d_num_hashing_in,
                             sizeof(unsigned) * table_size,
                             cudaMemcpyDeviceToHost));
 
@@ -165,14 +155,13 @@ void TakeHashFunctionStatistics(const unsigned   num_keys,
   sprintf(buffer, "\t(%u, %u)", previous, count);
   PrintMessage(buffer);
 
-  delete [] num_hashing_in;
+  delete[] num_hashing_in;
   CUDA_SAFE_CALL(cudaFree(d_num_hashing_in));
- #endif
+#endif
 
- #ifdef COUNT_HOW_MANY_HAVE_CYCLES
+#ifdef COUNT_HOW_MANY_HAVE_CYCLES
   unsigned *num_slots_available = new unsigned[num_keys];
-  CUDA_SAFE_CALL(cudaMemcpy(num_slots_available,
-                            d_num_slots_available,
+  CUDA_SAFE_CALL(cudaMemcpy(num_slots_available, d_num_slots_available,
                             sizeof(unsigned) * num_keys,
                             cudaMemcpyDeviceToHost));
 
@@ -189,38 +178,32 @@ void TakeHashFunctionStatistics(const unsigned   num_keys,
   }
   PrintMessage(buffer);
 
-  delete [] histogram;
-  delete [] num_slots_available;
+  delete[] histogram;
+  delete[] num_slots_available;
   CUDA_SAFE_CALL(cudaFree(d_num_slots_available));
- #endif
+#endif
 }
 
-bool CheckAssignedSameSlot(const unsigned  N,
-                           const unsigned  num_keys,
-                           const unsigned *d_keys,
-                           const unsigned  table_size,
-                                 uint2    *constants) {
+bool CheckAssignedSameSlot(const unsigned N, const unsigned num_keys,
+                           const unsigned *d_keys, const unsigned table_size,
+                           uint2 *constants) {
   unsigned *d_cycle_exists = NULL;
-  uint2    *d_constants    = NULL;
+  uint2 *d_constants = NULL;
 
-  CUDA_SAFE_CALL(cudaMalloc((void**)&d_cycle_exists, sizeof(unsigned)));
-  CUDA_SAFE_CALL(cudaMalloc((void**)&d_constants, sizeof(uint2) * N));
+  CUDA_SAFE_CALL(cudaMalloc((void **)&d_cycle_exists, sizeof(unsigned)));
+  CUDA_SAFE_CALL(cudaMalloc((void **)&d_constants, sizeof(uint2) * N));
 
   CUDA_SAFE_CALL(cudaMemset(d_cycle_exists, 0, sizeof(unsigned)));
-  CUDA_SAFE_CALL(cudaMemcpy(d_constants,
-                            constants,
-                            sizeof(uint2) * N,
+  CUDA_SAFE_CALL(cudaMemcpy(d_constants, constants, sizeof(uint2) * N,
                             cudaMemcpyHostToDevice));
 
   // Check if all keys were given a full set of N slots by the functions.
-  take_hash_function_statistics_kernel<<<ComputeGridDim(num_keys), kBlockSize>>>
-                                      (d_keys, num_keys, table_size, d_constants, N,
-                                       NULL, NULL, d_cycle_exists);
+  take_hash_function_statistics_kernel<<<ComputeGridDim(num_keys),
+                                         kBlockSize>>>(
+      d_keys, num_keys, table_size, d_constants, N, NULL, NULL, d_cycle_exists);
 
   unsigned cycle_exists;
-  CUDA_SAFE_CALL(cudaMemcpy(&cycle_exists,
-                            d_cycle_exists,
-                            sizeof(unsigned),
+  CUDA_SAFE_CALL(cudaMemcpy(&cycle_exists, d_cycle_exists, sizeof(unsigned),
                             cudaMemcpyDeviceToHost));
 
   CUDA_SAFE_CALL(cudaFree(d_cycle_exists));
@@ -229,22 +212,22 @@ bool CheckAssignedSameSlot(const unsigned  N,
   return (cycle_exists != 0);
 }
 
-
 void PrintStashContents(const Entry *d_stash) {
   Entry *stash = new Entry[cuhash::kStashSize];
-  CUDA_SAFE_CALL(cudaMemcpy(stash, d_stash, sizeof(Entry) * cuhash::kStashSize, cudaMemcpyDeviceToHost));
+  CUDA_SAFE_CALL(cudaMemcpy(stash, d_stash, sizeof(Entry) * cuhash::kStashSize,
+                            cudaMemcpyDeviceToHost));
   for (unsigned i = 0; i < cuhash::kStashSize; ++i) {
     if (get_key(stash[i]) != kKeyEmpty) {
       char buffer[256];
-      sprintf(buffer, "Stash[%u]: %u = %u", i, get_key(stash[i]), get_value(stash[i]));
+      sprintf(buffer, "Stash[%u]: %u = %u", i, get_key(stash[i]),
+              get_value(stash[i]));
       PrintMessage(buffer, true);
     }
   }
-  delete [] stash;
+  delete[] stash;
 }
 
-
-}; // namespace CuckooHashing
+}; // namespace cuhash
 
 // Leave this at the end of the file
 // Local Variables:

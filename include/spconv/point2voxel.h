@@ -29,7 +29,8 @@ using namespace pybind11::literals;
 
 template <typename DType, int NDim>
 int points_to_voxel_3d_np(py::array_t<DType> points, py::array_t<DType> voxels,
-                          py::array_t<DType> voxel_point_mask, py::array_t<int> coors,
+                          py::array_t<DType> voxel_point_mask,
+                          py::array_t<int> coors,
                           py::array_t<int> num_points_per_voxel,
                           py::array_t<int> coor_to_voxelidx,
                           std::vector<DType> voxel_size,
@@ -94,14 +95,12 @@ int points_to_voxel_3d_np(py::array_t<DType> points, py::array_t<DType> voxels,
 }
 
 template <typename DType, int NDim>
-int points_to_voxel_3d_np_mean(py::array_t<DType> points,
-                               py::array_t<DType> voxel_point_mask, py::array_t<DType> voxels,
-                               py::array_t<DType> means, py::array_t<int> coors,
-                               py::array_t<int> num_points_per_voxel,
-                               py::array_t<int> coor_to_voxelidx,
-                               std::vector<DType> voxel_size,
-                               std::vector<DType> coors_range, int max_points,
-                               int max_voxels) {
+int points_to_voxel_3d_np_mean(
+    py::array_t<DType> points, py::array_t<DType> voxel_point_mask,
+    py::array_t<DType> voxels, py::array_t<DType> means, py::array_t<int> coors,
+    py::array_t<int> num_points_per_voxel, py::array_t<int> coor_to_voxelidx,
+    std::vector<DType> voxel_size, std::vector<DType> coors_range,
+    int max_points, int max_voxels) {
   auto points_rw = points.template mutable_unchecked<2>();
   auto means_rw = means.template mutable_unchecked<2>();
   auto voxels_rw = voxels.template mutable_unchecked<3>();
@@ -174,8 +173,8 @@ int points_to_voxel_3d_np_mean(py::array_t<DType> points,
 template <typename DType, int NDim>
 int points_to_voxel_3d_with_filtering(
     py::array_t<DType> points, py::array_t<DType> voxels,
-    py::array_t<DType> voxel_point_mask, py::array_t<int> voxel_mask, py::array_t<DType> mins,
-    py::array_t<DType> maxs, py::array_t<int> coors,
+    py::array_t<DType> voxel_point_mask, py::array_t<int> voxel_mask,
+    py::array_t<DType> mins, py::array_t<DType> maxs, py::array_t<int> coors,
     py::array_t<int> num_points_per_voxel, py::array_t<int> coor_to_voxelidx,
     std::vector<DType> voxel_size, std::vector<DType> coors_range,
     int max_points, int max_voxels, int block_factor, int block_size,

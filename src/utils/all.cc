@@ -20,7 +20,7 @@ using namespace pybind11::literals;
 
 PYBIND11_MODULE(spconv_utils, m) {
   m.doc() = "util pybind11 functions for spconv";
-#ifdef SPCONV_CUDA
+#ifdef TV_CUDA
   m.def("non_max_suppression", &spconv::non_max_suppression<double>,
         py::return_value_policy::reference_internal, "bbox iou", "boxes"_a = 1,
         "keep_out"_a = 2, "nms_overlap_thresh"_a = 3, "device_id"_a = 4);

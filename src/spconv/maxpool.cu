@@ -16,9 +16,9 @@
 #include <chrono>
 #include <limits>
 #include <spconv/maxpool.h>
-#include <spconv/mp_helper.h>
-#include <tensorview/helper_kernel.cu.h>
-#include <tensorview/helper_launch.h>
+#include <tensorview/cuda_utils.h>
+#include <tensorview/kernel_utils.h>
+#include <tensorview/mp_helper.h>
 #include <tensorview/tensorview.h>
 #include <type_traits>
 
@@ -255,7 +255,8 @@ maxPoolBwdVecBlockKernel(const T *outFeatures, const T *inFeatures,
           reinterpret_cast<const VecType *>(inFeatures)[idxi];
       reinterpret_cast<VecType *>(bufdo)[0] =
           reinterpret_cast<const VecType *>(dout)[idxo];
-      reinterpret_cast<VecType *>(bufdi)[0] = reinterpret_cast<VecType *>(din)[idxi];
+      reinterpret_cast<VecType *>(bufdi)[0] =
+          reinterpret_cast<VecType *>(din)[idxi];
 
 #pragma unroll
       for (int i = 0; i < vecloadFactor; i++) {
@@ -263,7 +264,8 @@ maxPoolBwdVecBlockKernel(const T *outFeatures, const T *inFeatures,
           bufdi[i] += bufdo[i];
         }
       }
-      reinterpret_cast<VecType *>(din)[idxi] = reinterpret_cast<VecType *>(bufdi)[0];
+      reinterpret_cast<VecType *>(din)[idxi] =
+          reinterpret_cast<VecType *>(bufdi)[0];
     }
   }
 }
@@ -309,7 +311,7 @@ template <typename T, typename Index>
 struct SparseMaxPoolForwardFunctor<tv::GPU, T, Index> {
   using vecload_type_t =
       std::conditional_t<std::is_same<T, at::Half>::value, int2, int4>;
-  using kernel_block_t = mp_list_c<int, 64, 32, 16>;
+  using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
   void operator()(const tv::GPU &d, tv::TensorView<T> outFeatures,
                   tv::TensorView<const T> inFeatures,
                   tv::TensorView<const Index> indices, int size) {
@@ -318,21 +320,22 @@ struct SparseMaxPoolForwardFunctor<tv::GPU, T, Index> {
     int numPlanes = inFeatures.dim(1);
     bool notFound = true;
     constexpr int vecloadFactor = sizeof(vecload_type_t) / sizeof(T);
-    mp_for_each<kernel_block_t>([=, &outFeatures, &inFeatures, &indices,
-                                 &notFound](auto NumTLP) {
+    tv::mp_for_each<kernel_block_t>([=, &outFeatures, &inFeatures, &indices,
+                                     &notFound](auto NumTLP) {
       constexpr int NumILP = NumTLP / 4;
 
       int numHotBlock = (size / NumTLP) * NumTLP;
       if (notFound) {
         if (numPlanes % NumTLP == 0) {
           if (numHotBlock >= NumTLP) {
-            maxPoolFwdVecBlockKernel<T, Index, int(NumTLP), NumILP, vecload_type_t>
+            maxPoolFwdVecBlockKernel<T, Index, int(NumTLP), NumILP,
+                                     vecload_type_t>
                 <<<dim3(std::min(size / NumTLP, 512), numPlanes / NumTLP),
                    dim3(NumTLP / vecloadFactor, NumTLP / NumILP), 0,
                    d.getStream()>>>(outFeatures.data(), inFeatures.data(),
-                                 indices.subview(0).data(),
-                                 indices.subview(1).data(), numHotBlock,
-                                 numPlanes / vecloadFactor);
+                                    indices.subview(0).data(),
+                                    indices.subview(1).data(), numHotBlock,
+                                    numPlanes / vecloadFactor);
             TV_CHECK_CUDA_ERR();
           }
 
@@ -340,9 +343,9 @@ struct SparseMaxPoolForwardFunctor<tv::GPU, T, Index> {
             maxPoolFwdGenericKernel<T, Index, int(NumTLP), NumILP>
                 <<<dim3(1, numPlanes / NumTLP), dim3(NumTLP / NumILP, NumTLP),
                    0, d.getStream()>>>(outFeatures.data(), inFeatures.data(),
-                                    indices.subview(0).data() + numHotBlock,
-                                    indices.subview(1).data() + numHotBlock,
-                                    size - numHotBlock, numPlanes);
+                                       indices.subview(0).data() + numHotBlock,
+                                       indices.subview(1).data() + numHotBlock,
+                                       size - numHotBlock, numPlanes);
             TV_CHECK_CUDA_ERR();
           }
           notFound = false;
@@ -356,7 +359,7 @@ struct SparseMaxPoolForwardFunctor<tv::GPU, T, Index> {
       int numHotBlock = (size / NumTLP) * NumTLP;
       if (numHotBlock >= NumTLP) {
         maxPoolFwdGenericBlockKernel<T, Index, NumTLP, NumILP>
-            <<<dim3(size / NumTLP, tv::launch::DivUp(numPlanes, NumTLP)),
+            <<<dim3(size / NumTLP, tv::cuda::DivUp(numPlanes, NumTLP)),
                dim3(NumTLP / NumILP, NumTLP), 0, d.getStream()>>>(
                 outFeatures.data(), inFeatures.data(),
                 indices.subview(0).data(), indices.subview(1).data(),
@@ -366,7 +369,7 @@ struct SparseMaxPoolForwardFunctor<tv::GPU, T, Index> {
 
       if (size > numHotBlock) {
         maxPoolFwdGenericKernel<T, Index, NumTLP, NumILP>
-            <<<dim3(1, tv::launch::DivUp(numPlanes, NumTLP)),
+            <<<dim3(1, tv::cuda::DivUp(numPlanes, NumTLP)),
                dim3(NumTLP / NumILP, NumTLP), 0, d.getStream()>>>(
                 outFeatures.data(), inFeatures.data(),
                 indices.subview(0).data() + numHotBlock,
@@ -382,7 +385,7 @@ template <typename T, typename Index>
 struct SparseMaxPoolBackwardFunctor<tv::GPU, T, Index> {
   using vecload_type_t =
       std::conditional_t<std::is_same<T, at::Half>::value, int2, int4>;
-  using kernel_block_t = mp_list_c<int, 64, 32, 16>;
+  using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
   void operator()(const tv::GPU &d, tv::TensorView<const T> outFeatures,
                   tv::TensorView<const T> inFeatures,
                   tv::TensorView<const T> dout, tv::TensorView<T> din,
@@ -392,22 +395,23 @@ struct SparseMaxPoolBackwardFunctor<tv::GPU, T, Index> {
     int numPlanes = inFeatures.dim(1);
     bool notFound = true;
     constexpr int vecloadFactor = sizeof(vecload_type_t) / sizeof(T);
-    mp_for_each<kernel_block_t>([=, &outFeatures, &inFeatures, &dout, &din,
-                                 &indices, &notFound](auto NumTLP) {
+    tv::mp_for_each<kernel_block_t>([=, &outFeatures, &inFeatures, &dout, &din,
+                                     &indices, &notFound](auto NumTLP) {
       constexpr int NumILP = NumTLP / 4;
 
       int numHotBlock = (size / NumTLP) * NumTLP;
       if (notFound) {
         if (numPlanes % NumTLP == 0) {
           if (numHotBlock >= NumTLP) {
-            maxPoolBwdVecBlockKernel<T, Index, int(NumTLP), NumILP, vecload_type_t>
+            maxPoolBwdVecBlockKernel<T, Index, int(NumTLP), NumILP,
+                                     vecload_type_t>
                 <<<dim3(std::min(size / NumTLP, 512), numPlanes / NumTLP),
                    dim3(NumTLP / vecloadFactor, NumTLP / NumILP), 0,
                    d.getStream()>>>(outFeatures.data(), inFeatures.data(),
-                                 dout.data(), din.data(),
-                                 indices.subview(0).data(),
-                                 indices.subview(1).data(), numHotBlock,
-                                 numPlanes / vecloadFactor);
+                                    dout.data(), din.data(),
+                                    indices.subview(0).data(),
+                                    indices.subview(1).data(), numHotBlock,
+                                    numPlanes / vecloadFactor);
             TV_CHECK_CUDA_ERR();
           }
 
@@ -415,10 +419,10 @@ struct SparseMaxPoolBackwardFunctor<tv::GPU, T, Index> {
             maxPoolBwdGenericKernel<T, Index, int(NumTLP), NumILP>
                 <<<dim3(1, numPlanes / NumTLP), dim3(NumTLP / NumILP, NumTLP),
                    0, d.getStream()>>>(outFeatures.data(), inFeatures.data(),
-                                    dout.data(), din.data(),
-                                    indices.subview(0).data() + numHotBlock,
-                                    indices.subview(1).data() + numHotBlock,
-                                    size - numHotBlock, numPlanes);
+                                       dout.data(), din.data(),
+                                       indices.subview(0).data() + numHotBlock,
+                                       indices.subview(1).data() + numHotBlock,
+                                       size - numHotBlock, numPlanes);
             TV_CHECK_CUDA_ERR();
           }
           notFound = false;
@@ -432,7 +436,7 @@ struct SparseMaxPoolBackwardFunctor<tv::GPU, T, Index> {
       int numHotBlock = (size / NumTLP) * NumTLP;
       if (numHotBlock >= NumTLP) {
         maxPoolBwdGenericBlockKernel<T, Index, NumTLP, NumILP>
-            <<<dim3(size / NumTLP, tv::launch::DivUp(numPlanes, NumTLP)),
+            <<<dim3(size / NumTLP, tv::cuda::DivUp(numPlanes, NumTLP)),
                dim3(NumTLP / NumILP, NumTLP), 0, d.getStream()>>>(
                 outFeatures.data(), inFeatures.data(), dout.data(), din.data(),
                 indices.subview(0).data(), indices.subview(1).data(),
@@ -442,7 +446,7 @@ struct SparseMaxPoolBackwardFunctor<tv::GPU, T, Index> {
 
       if (size > numHotBlock) {
         maxPoolBwdGenericKernel<T, Index, NumTLP, NumILP>
-            <<<dim3(1, tv::launch::DivUp(numPlanes, NumTLP)),
+            <<<dim3(1, tv::cuda::DivUp(numPlanes, NumTLP)),
                dim3(NumTLP / NumILP, NumTLP), 0, d.getStream()>>>(
                 outFeatures.data(), inFeatures.data(), dout.data(), din.data(),
                 indices.subview(0).data() + numHotBlock,

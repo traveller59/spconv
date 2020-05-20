@@ -14,7 +14,7 @@
 
 #ifndef REORDERING_CU_H_
 #define REORDERING_CU_H_
-#include <tensorview/helper_kernel.cu.h>
+#include <tensorview/kernel_utils.h>
 
 // see http://www.nvidia.com/content/GTC-2010/pdfs/2238_GTC2010.pdf.
 namespace spconv {

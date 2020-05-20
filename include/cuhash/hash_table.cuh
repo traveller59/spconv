@@ -3,10 +3,10 @@
 // -------------------------------------------------------------
 // $Revision:$
 // $Date:$
-// ------------------------------------------------------------- 
+// -------------------------------------------------------------
 // This source code is distributed under the terms of license.txt in
 // the root directory of this source distribution.
-// ------------------------------------------------------------- 
+// -------------------------------------------------------------
 
 /**
  * @file hash_table.cuh
@@ -19,8 +19,8 @@
 
 #include "definitions.h"
 #include "hash_table.h"
-#include <tensorview/tensorview.h>
 #include <driver_types.h>
+#include <tensorview/tensorview.h>
 
 namespace cuhash {
 
@@ -31,50 +31,41 @@ TV_HOST_DEVICE_INLINE Entry make_entry(unsigned key, unsigned value) {
 
 //! Returns the key of an Entry.
 TV_HOST_DEVICE_INLINE unsigned get_key(Entry entry) {
-  return (unsigned) (entry >> 32);
+  return (unsigned)(entry >> 32);
 }
 
 //! Returns the value of an Entry.
 TV_HOST_DEVICE_INLINE unsigned get_value(Entry entry) {
-  return (unsigned) (entry & 0xffffffff);
+  return (unsigned)(entry & 0xffffffff);
 }
-
 
 //! @name Internal
 //! @brief Functions used for building the hash table.
 //! @{
 
 //! Fills the entire array with a specific value.
-template <class T> __global__
-void clear_table(const unsigned  table_size,
-                 const T         value,
-                       T        *table)
-{       
-  unsigned thread_index = threadIdx.x +
-                          blockIdx.x * blockDim.x +
+template <class T>
+__global__ void clear_table(const unsigned table_size, const T value,
+                            T *table) {
+  unsigned thread_index = threadIdx.x + blockIdx.x * blockDim.x +
                           blockIdx.y * blockDim.x * gridDim.x;
   if (thread_index < table_size) {
     table[thread_index] = value;
   }
 }
 
-
 //! Determine where in the hash table the key could be located.
 template <unsigned kNumHashFunctions>
-__device__ void
-KeyLocations(const Functions<kNumHashFunctions> constants,
-             const unsigned  table_size,
-             const unsigned  key,
-                   unsigned  locations[kNumHashFunctions])
-{
-  // Compute all possible locations for the key in the big table.
-  #pragma unroll
+__device__ void KeyLocations(const Functions<kNumHashFunctions> constants,
+                             const unsigned table_size, const unsigned key,
+                             unsigned locations[kNumHashFunctions]) {
+// Compute all possible locations for the key in the big table.
+#pragma unroll
   for (int i = 0; i < kNumHashFunctions; ++i) {
     locations[i] = hash_function(constants, i, key) % table_size;
   }
 }
 //! @}
-
 
 /* --------------------------------------------------------------------------
    Retrieval functions.
@@ -87,28 +78,27 @@ KeyLocations(const Functions<kNumHashFunctions> constants,
  *  @param[in]  constants             The hash functions used to build the table
  *  @param[in]  stash_constants       The hash function used to build the stash
  *  @param[in]  stash_count           The number of items in the stash
- *  @param[out] num_probes_required   Debug only: The number of probes required to resolve the query.
- *  @returns The value of the query key, if the key exists in the table.  Otherwise, \ref kNotFound will be returned.
+ *  @param[out] num_probes_required   Debug only: The number of probes required
+ * to resolve the query.
+ *  @returns The value of the query key, if the key exists in the table.
+ * Otherwise, \ref kNotFound will be returned.
  */
-template <unsigned kNumHashFunctions> __device__
-unsigned retrieve(const unsigned                      query_key,
-                  const unsigned                      table_size,
-                  const Entry                        *table,
-                  const Functions<kNumHashFunctions>  constants,
-                  const uint2                         stash_constants,
-                  const unsigned                      stash_count,
-                        unsigned                     *num_probes_required = NULL)
-{
+template <unsigned kNumHashFunctions>
+__device__ unsigned
+retrieve(const unsigned query_key, const unsigned table_size,
+         const Entry *table, const Functions<kNumHashFunctions> constants,
+         const uint2 stash_constants, const unsigned stash_count,
+         unsigned *num_probes_required = NULL) {
   // Identify all of the locations that the key can be located in.
   unsigned locations[kNumHashFunctions];
   KeyLocations(constants, table_size, query_key, locations);
 
   // Check each location until the key is found.
   unsigned num_probes = 1;
-  Entry    entry      = table[locations[0]];
-  unsigned key        = get_key(entry);
+  Entry entry = table[locations[0]];
+  unsigned key = get_key(entry);
 
-  #pragma unroll
+#pragma unroll
   for (unsigned i = 1; i < kNumHashFunctions; ++i) {
     if (key != query_key && key != kNotFound) {
       num_probes++;
@@ -138,37 +128,26 @@ unsigned retrieve(const unsigned                      query_key,
   }
 }
 
-
-//! Perform a retrieval from a basic hash table.  Each thread manages a single query.
-template <unsigned kNumHashFunctions> __global__
-void hash_retrieve(const unsigned                      n_queries,
-                   const unsigned                     *keys_in,
-                   const unsigned                      table_size,
-                   const Entry                        *table,
-                   const Functions<kNumHashFunctions>  constants,
-                   const uint2                         stash_constants,
-                   const unsigned                      stash_count,
-                         unsigned                     *values_out,
-                         unsigned                     *num_probes_required = NULL)
-{
+//! Perform a retrieval from a basic hash table.  Each thread manages a single
+//! query.
+template <unsigned kNumHashFunctions>
+__global__ void hash_retrieve(const unsigned n_queries, const unsigned *keys_in,
+                              const unsigned table_size, const Entry *table,
+                              const Functions<kNumHashFunctions> constants,
+                              const uint2 stash_constants,
+                              const unsigned stash_count, unsigned *values_out,
+                              unsigned *num_probes_required = NULL) {
   // Get the key.
-  unsigned thread_index = threadIdx.x +
-                          blockIdx.x * blockDim.x +
+  unsigned thread_index = threadIdx.x + blockIdx.x * blockDim.x +
                           blockIdx.y * blockDim.x * gridDim.x;
   if (thread_index >= n_queries)
     return;
   unsigned key = keys_in[thread_index];
 
-  values_out[thread_index] = retrieve<kNumHashFunctions>
-                                     (key,
-                                      table_size,
-                                      table,
-                                      constants,
-                                      stash_constants,
-                                      stash_count,
-                                      (num_probes_required ? num_probes_required + thread_index : NULL));
-}       
-
+  values_out[thread_index] = retrieve<kNumHashFunctions>(
+      key, table_size, table, constants, stash_constants, stash_count,
+      (num_probes_required ? num_probes_required + thread_index : NULL));
+}
 
 /* --------------------------------------------------------------------------
    Build a cuckoo hash table.
@@ -176,29 +155,29 @@ void hash_retrieve(const unsigned                      n_queries,
 //! @name Internal
 //! @{
 
-//! Determine where to insert the key next.  The hash functions are used in round-robin order.
-template <unsigned kNumHashFunctions> __device__
-unsigned determine_next_location(const Functions<kNumHashFunctions> constants,
-                                 const unsigned                     table_size,
-                                 const unsigned                     key,
-                                 const unsigned                     previous_location) {
+//! Determine where to insert the key next.  The hash functions are used in
+//! round-robin order.
+template <unsigned kNumHashFunctions>
+__device__ unsigned
+determine_next_location(const Functions<kNumHashFunctions> constants,
+                        const unsigned table_size, const unsigned key,
+                        const unsigned previous_location) {
   // Identify all possible locations for the entry.
   unsigned locations[kNumHashFunctions];
-  #pragma unroll
+#pragma unroll
   for (unsigned i = 0; i < kNumHashFunctions; ++i) {
     locations[i] = hash_function(constants, i, key) % table_size;
   }
 
   // Figure out where the item should be inserted next.
   unsigned next_location = locations[0];
-  #pragma unroll
+#pragma unroll
   for (int i = kNumHashFunctions - 2; i >= 0; --i) {
-    next_location = (previous_location == locations[i] ? locations[i+1]
-                                                       : next_location);
+    next_location =
+        (previous_location == locations[i] ? locations[i + 1] : next_location);
   }
   return next_location;
 }
-
 
 //! Attempts to insert a single entry into the hash table.
 /*! This process stops after a certain number of iterations.  If the thread is
@@ -206,25 +185,23 @@ unsigned determine_next_location(const Functions<kNumHashFunctions> constants,
     If it fails to enter the stash, it returns false.
     Otherwise, it succeeds and returns true.
  */
-template <unsigned kNumHashFunctions> __device__
-bool insert(const unsigned                      table_size,
-            const Functions<kNumHashFunctions>  constants,
-            const uint2                         stash_constants,
-            const unsigned                      max_iteration_attempts,
-                  Entry                        *table,
-                  unsigned                     *stash_count,
-                  Entry                         entry,
-                  unsigned                     *iterations_used) {
+template <unsigned kNumHashFunctions>
+__device__ bool
+insert(const unsigned table_size, const Functions<kNumHashFunctions> constants,
+       const uint2 stash_constants, const unsigned max_iteration_attempts,
+       Entry *table, unsigned *stash_count, Entry entry,
+       unsigned *iterations_used) {
   unsigned key = get_key(entry);
 
   // The key is always inserted into its first slot at the start.
   unsigned location = hash_function(constants, 0, key) % table_size;
 
-  // Keep inserting until an empty slot is found or the eviction chain grows too large.
+  // Keep inserting until an empty slot is found or the eviction chain grows too
+  // large.
   for (unsigned its = 1; its <= max_iteration_attempts; its++) {
     // Insert the new entry.
     entry = atomicExch(&table[location], entry);
-    key   = get_key(entry);
+    key = get_key(entry);
 
     // If no key was evicted, we're done.
     if (key == kKeyEmpty) {
@@ -251,53 +228,45 @@ bool insert(const unsigned                      table_size,
   return true;
 }
 
-
-
 // Build a basic hash table, using one big table.
-template <unsigned kNumHashFunctions> __global__
-void CuckooHash(const unsigned   n_entries,
-                const unsigned  *keys,
-                const unsigned  *values,
-                const unsigned   table_size,
-                const Functions<kNumHashFunctions>  constants,
-                const unsigned   max_iteration_attempts,
-                      Entry     *table,
-                      uint2      stash_constants,
-                      unsigned  *stash_count,
-                      unsigned  *failures,
-                      unsigned  *iterations_taken = nullptr) {
+template <unsigned kNumHashFunctions>
+__global__ void CuckooHash(const unsigned n_entries, const unsigned *keys,
+                           const unsigned *values, const unsigned table_size,
+                           const Functions<kNumHashFunctions> constants,
+                           const unsigned max_iteration_attempts, Entry *table,
+                           uint2 stash_constants, unsigned *stash_count,
+                           unsigned *failures,
+                           unsigned *iterations_taken = nullptr) {
   // Check if this thread has an item and if any previous threads failed.
-  unsigned thread_index = threadIdx.x +
-                          blockIdx.x * blockDim.x +
+  unsigned thread_index = threadIdx.x + blockIdx.x * blockDim.x +
                           blockIdx.y * blockDim.x * gridDim.x;
   if (thread_index >= n_entries || *failures)
     return;
   Entry entry = make_entry(keys[thread_index], values[thread_index]);
 
   unsigned iterations = 0;
-  bool success = insert<kNumHashFunctions>
-                       (table_size, constants, stash_constants,
-                       max_iteration_attempts, table, stash_count, entry, &iterations);
+  bool success = insert<kNumHashFunctions>(
+      table_size, constants, stash_constants, max_iteration_attempts, table,
+      stash_count, entry, &iterations);
 
   if (success == false) {
     // The eviction chain grew too large.  Report failure.
-  #ifdef COUNT_UNINSERTED
+#ifdef COUNT_UNINSERTED
     atomicAdd(failures, 1);
-  #else
+#else
     *failures = 1;
-  #endif
+#endif
   }
 
 #ifdef TRACK_ITERATIONS
   iterations_taken[thread_index] = iterations;
 #endif
-}       
+}
 //! @}
 
-};  // namespace CuckooHashing
+}; // namespace cuhash
 
 #endif
-
 
 // Leave this at the end of the file
 // Local Variables:
