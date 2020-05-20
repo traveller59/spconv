@@ -4,15 +4,9 @@
 
 This is a spatially sparse convolution library like [SparseConvNet](https://github.com/facebookresearch/SparseConvNet) but faster and easy to read. This library provide sparse convolution/transposed, submanifold convolution, inverse convolution and sparse maxpool.
 
-The GPU Indice Generation algorithm is a unofficial implementation of paper [SECOND](http://www.mdpi.com/1424-8220/18/10/3337). That algorithm (don't include GPU SubM indice generation algorithm) may be protected by patent.
 
-This project only support CUDA 9.0+ or CPU only. If you are using cuda 8.0, please update it to 9.0.
+2020-5-2, we add ConcatTable, JoinTable, AddTable, and Identity function to build ResNet and Unet in this version of spconv.
 
-This project only support tensors with spatial volume less than ```std::numeric_limits<int>::max()``` (~2e9). if someone really need very large space, open an issue.
-
-## News:
-
-2019-5-24: spconv v1.1 released, now indice generation will use hash table as default (CPU code only support hash table). you can use ```use_hash=False``` to use dense table when using CUDA. In addition, add CPU only build support.
 
 ## Docker:
 
