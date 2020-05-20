@@ -15,6 +15,8 @@ from pathlib import Path
 
 LIBTORCH_ROOT = str(Path(torch.__file__).parent)
 
+SPCONV_FORCE_BUILD_CUDA = os.getenv("SPCONV_FORCE_BUILD_CUDA")
+
 PYTHON_VERSION = "{}.{}".format(sys.version_info.major, sys.version_info.minor)
 
 class CMakeExtension(Extension):
@@ -46,7 +48,7 @@ class CMakeBuild(build_ext):
                       '-DPYBIND11_PYTHON_VERSION={}'.format(PYTHON_VERSION),
                       '-DSPCONV_BuildTests=OFF',
                       ] #  -arch=sm_61
-        if not torch.cuda.is_available():
+        if not torch.cuda.is_available() and SPCONV_FORCE_BUILD_CUDA is None:
             cmake_args += ['-DSPCONV_BuildCUDA=OFF']
         else:
             cuda_flags = ["\"--expt-relaxed-constexpr\""]

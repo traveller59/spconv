@@ -1,9 +1,16 @@
 # SpConv: PyTorch Spatially Sparse Convolution Library
 
-This is a variation version of [spconv](https://github.com/traveller59/spconv)
+[![Build Status](https://github.com/traveller59/spconv/workflows/build/badge.svg)](https://github.com/traveller59/spconv/actions?query=workflow%3Abuild)
+
+This is a spatially sparse convolution library like [SparseConvNet](https://github.com/facebookresearch/SparseConvNet) but faster and easy to read. This library provide sparse convolution/transposed, submanifold convolution, inverse convolution and sparse maxpool.
+
 
 2020-5-2, we add ConcatTable, JoinTable, AddTable, and Identity function to build ResNet and Unet in this version of spconv.
 
+
+## Docker:
+
+```docker pull scrin/dev-spconv```, contains python 3.8, cuda 10.1, fish shell, newest pytorch and tensorflow.
 
 ## Install on Ubuntu 16.04/18.04
 
@@ -11,7 +18,7 @@ This is a variation version of [spconv](https://github.com/traveller59/spconv)
 
 0. Use ```git clone xxx.git --recursive``` to clone this repo.
 
-1. Install boost headers to your system include path, you can use either ```sudo apt-get install libboostall-dev``` or download compressed files from boost official website and copy headers to include path.
+1. Install boost headers to your system include path, you can use either ```sudo apt-get install libboost-all-dev``` or download compressed files from boost official website and copy headers to include path.
 
 2. Download cmake >= 3.13.2, then add cmake executables to PATH.
 
