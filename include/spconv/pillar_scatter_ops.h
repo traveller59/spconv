@@ -37,7 +37,7 @@ torch::Tensor pointPillarScatter(torch::Tensor features, torch::Tensor coors,
 
   tv::check_torch_dtype<int>(shape);
   tv::check_torch_dtype<T>(coors);
-  auto shapeData = shape.data<int>();
+  auto shapeData = shape.data_ptr<int>();
   torch::Tensor canvas =
       torch::zeros({shapeData[0], shapeData[1], shapeData[2], shapeData[3]},
                    features.options());

@@ -1,22 +1,24 @@
 # SpConv: PyTorch Spatially Sparse Convolution Library
 
+[![Build Status](https://github.com/traveller59/spconv/workflows/build/badge.svg)](https://github.com/traveller59/spconv/actions?query=workflow%3Abuild)
+
 This is a spatially sparse convolution library like [SparseConvNet](https://github.com/facebookresearch/SparseConvNet) but faster and easy to read. This library provide sparse convolution/transposed, submanifold convolution, inverse convolution and sparse maxpool.
 
-The GPU Indice Generation algorithm is a unofficial implementation of paper [SECOND](http://www.mdpi.com/1424-8220/18/10/3337). That algorithm (don't include GPU SubM indice generation algorithm) may be protected by patent.
 
-This project only support CUDA 9.0+ or CPU only. If you are using cuda 8.0, please update it to 9.0.
+2020-5-2, we add ConcatTable, JoinTable, AddTable, and Identity function to build ResNet and Unet in this version of spconv.
 
-This project only support tensors with spatial volume less than ```std::numeric_limits<int>::max()``` (~2e9). if someone really need very large space, open an issue.
 
-## News:
+## Docker:
 
-2019-5-24: spconv v1.1 released, now indice generation will use hash table as default (CPU code only support hash table). you can use ```use_hash=False``` to use dense table when using CUDA. In addition, add CPU only build support.
+```docker pull scrin/dev-spconv```, contains python 3.8, cuda 10.1, fish shell, newest pytorch and tensorflow.
 
 ## Install on Ubuntu 16.04/18.04
 
+* if you are using pytorch 1.4+ and encounter "nvcc fatal: unknown -Wall", you need to go to torch package dir and remove flags contains "-Wall" in INTERFACE_COMPILE_OPTIONS in Caffe2Targets.cmake. This problem can't be fixed in this project (to avoid this, I need to remove all torch dependency in cuda sources and drop half support).
+
 0. Use ```git clone xxx.git --recursive``` to clone this repo.
 
-1. Install boost headers to your system include path, you can use either ```sudo apt-get install libboostall-dev``` or download compressed files from boost official website and copy headers to include path.
+1. Install boost headers to your system include path, you can use either ```sudo apt-get install libboost-all-dev``` or download compressed files from boost official website and copy headers to include path.
 
 2. Download cmake >= 3.13.2, then add cmake executables to PATH.
 

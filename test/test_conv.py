@@ -581,7 +581,7 @@ def main():
         if all([s > 1, d > 1]):
             continue
         device = torch.device(dev)
-        num_points = [5] * bs
+        num_points = [500] * bs
 
         sparse_dict = generate_sparse_data(shape, num_points, IC)
 
@@ -601,7 +601,7 @@ def main():
         net.net[0].weight[:] = filters_t
         out_ref = net_ref(features_dense_t)
         times = []
-        for i in range(0):
+        for i in range(10):
             t = time.time()
             out = net(features_t, indices_t, bs)
             torch.cuda.synchronize()

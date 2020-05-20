@@ -37,12 +37,12 @@ torch::Tensor fusedIndiceConvBatchNorm(torch::Tensor features, torch::Tensor fil
   auto numOutPlanes = filters.size(ndim + 1);
   auto indicePairNumCpu = indiceNum.to({torch::kCPU});
   auto indicePairMaxSizeIter = std::max_element(
-      indicePairNumCpu.data<int>(), indicePairNumCpu.data<int>() + kernelVolume);
-  int indicePairMaxOffset = indicePairMaxSizeIter - indicePairNumCpu.data<int>();
+      indicePairNumCpu.data_ptr<int>(), indicePairNumCpu.data_ptr<int>() + kernelVolume);
+  int indicePairMaxOffset = indicePairMaxSizeIter - indicePairNumCpu.data_ptr<int>();
   int indicePairMaxSize = *indicePairMaxSizeIter;
   
   /*if (_subM){
-    std::vector<int> indicePairNumVec(indicePairNumCpu.data<int>(), indicePairNumCpu.data<int>() + kernelVolume);
+    std::vector<int> indicePairNumVec(indicePairNumCpu.data_ptr<int>(), indicePairNumCpu.data_ptr<int>() + kernelVolume);
     indicePairNumVec.erase(indicePairNumVec.begin() + indicePairMaxOffset);
 
     auto indicePairVecMaxSizeIter = std::max_element(
@@ -68,15 +68,15 @@ torch::Tensor fusedIndiceConvBatchNorm(torch::Tensor features, torch::Tensor fil
   double totalGEMMTime = 0;
   double totalSAddTime = 0;
   for (int i = 0; i < kernelVolume; ++i) {
-    auto nHot = indicePairNumCpu.data<int>()[i];
+    auto nHot = indicePairNumCpu.data_ptr<int>()[i];
     if (nHot <= 0 || (subM && i == indicePairMaxOffset)) {
       continue;
     }
     // auto timer = spconv::CudaContextTimer<>();
     auto outputBufferBlob =
-        torch::from_blob(outputBuffer.data<T>(), {nHot, numOutPlanes}, options);
+        torch::from_blob(outputBuffer.data_ptr<T>(), {nHot, numOutPlanes}, options);
     auto inputBufferBlob =
-        torch::from_blob(inputBuffer.data<T>(), {nHot, numInPlanes}, options);
+        torch::from_blob(inputBuffer.data_ptr<T>(), {nHot, numInPlanes}, options);
 
     if (device == torch::kCPU) {
       functor::SparseGatherFunctor<tv::CPU, T, int> gatherFtor;

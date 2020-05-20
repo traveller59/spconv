@@ -33,7 +33,7 @@ torch::Tensor indiceMaxPool(torch::Tensor features, torch::Tensor indicePairs,
   torch::Tensor output = torch::zeros({numAct, numInPlanes}, options);
   double totalTime = 0;
   for (int i = 0; i < kernelVolume; ++i) {
-    auto nHot = indicePairNumCpu.data<int>()[i];
+    auto nHot = indicePairNumCpu.data_ptr<int>()[i];
     if (nHot <= 0) {
       continue;
     }
@@ -75,7 +75,7 @@ torch::Tensor indiceMaxPoolBackward(torch::Tensor features,
   torch::Tensor inputGrad = torch::zeros(features.sizes(), options);
     auto kernelVolume = indicePairs.size(0);
   for (int i = 0; i < kernelVolume; ++i) {
-    auto nHot = indicePairNumCpu.data<int>()[i];
+    auto nHot = indicePairNumCpu.data_ptr<int>()[i];
     if (nHot <= 0) {
       continue;
     }
