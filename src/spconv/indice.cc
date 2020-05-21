@@ -16,6 +16,7 @@
 #include <spconv/geometry.h>
 #include <spconv/indice.h>
 #include <spconv/spconv_ops.h>
+#include <tensorview/tensor.h>
 #include <torch/script.h>
 
 namespace spconv {
@@ -252,6 +253,79 @@ Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
   return numActIn;
 }
 #endif
+
+int create_conv_indice_pair_cpu(
+    torch::Tensor indicesIn, torch::Tensor indicesOut, torch::Tensor gridsOut,
+    torch::Tensor indicePairs, torch::Tensor indiceNum,
+    std::vector<int64_t> kernelSize, std::vector<int64_t> stride,
+    std::vector<int64_t> padding, std::vector<int64_t> dilation,
+    std::vector<int64_t> outSpatialShape, bool transpose, bool resetGrid,
+    bool useHash) {
+  auto ndim = outSpatialShape.size();
+  auto numActIn = indicesIn.size(0);
+  int batchSize = gridsOut.size(0);
+  auto kernelVolume = indicePairs.size(0);
+  if (numActIn == 0)
+    return 0;
+  tv::dispatch_torch<int32_t, int64_t>(indicesIn.scalar_type(), [&](auto V) {
+    using Index = decltype(V);
+    using IndexGrid = int32_t;
+    tv::dispatch_int<2, 3, 4>(ndim, [&](auto I) {
+      constexpr int NDim = decltype(I)::value;
+      tv::SimpleVector<Index, NDim> ks(kernelSize.begin(), kernelSize.end());
+      tv::SimpleVector<Index, NDim> st(stride.begin(), stride.end());
+      tv::SimpleVector<Index, NDim> pa(padding.begin(), padding.end());
+      tv::SimpleVector<Index, NDim> di(dilation.begin(), dilation.end());
+      tv::SimpleVector<Index, NDim> ou(outSpatialShape.begin(),
+                                       outSpatialShape.end());
+      if (transpose)
+        numActIn = getIndicePairsDeConv<Index, IndexGrid, NDim>(
+            tv::torch2tv<Index>(indicesIn), tv::torch2tv<Index>(indicesOut),
+            tv::torch2tv<IndexGrid>(gridsOut), tv::torch2tv<Index>(indicePairs),
+            tv::torch2tv<Index>(indiceNum), ks.data(), st.data(), pa.data(),
+            di.data(), ou.data());
+      else
+        numActIn = getIndicePairsConv<Index, IndexGrid, NDim>(
+            tv::torch2tv<Index>(indicesIn), tv::torch2tv<Index>(indicesOut),
+            tv::torch2tv<IndexGrid>(gridsOut), tv::torch2tv<Index>(indicePairs),
+            tv::torch2tv<Index>(indiceNum), ks.data(), st.data(), pa.data(),
+            di.data(), ou.data());
+    });
+  });
+  return numActIn;
+}
+
+int create_submconv_indice_pair_cpu(
+    torch::Tensor indicesIn, torch::Tensor gridsOut, torch::Tensor indicePairs,
+    torch::Tensor indiceNum, std::vector<int64_t> kernelSize,
+    std::vector<int64_t> stride, std::vector<int64_t> padding,
+    std::vector<int64_t> dilation, std::vector<int64_t> outSpatialShape,
+    bool transpose, bool resetGrid, bool useHash) {
+  auto ndim = outSpatialShape.size();
+  auto numActIn = indicesIn.size(0);
+  int batchSize = gridsOut.size(0);
+  auto kernelVolume = indicePairs.size(0);
+  if (numActIn == 0)
+    return 0;
+  tv::dispatch_torch<int32_t, int64_t>(indicesIn.scalar_type(), [&](auto V) {
+    using Index = decltype(V);
+    using IndexGrid = int32_t;
+    tv::dispatch_int<2, 3, 4>(ndim, [&](auto I) {
+      constexpr int NDim = decltype(I)::value;
+      tv::SimpleVector<Index, NDim> ks(kernelSize.begin(), kernelSize.end());
+      tv::SimpleVector<Index, NDim> st(stride.begin(), stride.end());
+      tv::SimpleVector<Index, NDim> pa(padding.begin(), padding.end());
+      tv::SimpleVector<Index, NDim> di(dilation.begin(), dilation.end());
+      tv::SimpleVector<Index, NDim> ou(outSpatialShape.begin(),
+                                       outSpatialShape.end());
+      numActIn = getIndicePairsSubM<Index, IndexGrid, NDim>(
+          tv::torch2tv<Index>(indicesIn), tv::torch2tv<IndexGrid>(gridsOut),
+          tv::torch2tv<Index>(indicePairs), tv::torch2tv<Index>(indiceNum),
+          ks.data(), st.data(), pa.data(), di.data(), ou.data());
+    });
+  });
+  return numActIn;
+}
 
 namespace functor {
 template <typename Index, typename IndexGrid, unsigned NDim>

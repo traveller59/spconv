@@ -38,37 +38,43 @@ int create_conv_indice_pair_p1_cuda(
   auto stream = at::cuda::getCurrentCUDAStream();
   auto ndim = kernelSize.size();
   auto numActIn = indicesIn.size(0);
+  auto kernelVolume = indicePairs.size(0);
   if (numActIn == 0)
     return 0;
-  // dispatch_torch must be in outside, this is a gcc bug, fixed in gcc 8.
-  tv::dispatch_torch<int32_t>(indicesIn.scalar_type(), [&](auto V) {
-    using Index = decltype(V);
+  tv::dispatch_torch<int32_t>(indicesIn.scalar_type(), [&](auto IndexValue) {
+    using Index = decltype(IndexValue);
     using IndexGrid = int32_t;
     tv::dispatch_int<2, 3, 4>(ndim, [&](auto I) {
-      constexpr int NDim = I;
+      constexpr int NDim = decltype(I)::value;
       tv::SimpleVector<Index, NDim> ks(kernelSize.begin(), kernelSize.end());
       tv::SimpleVector<Index, NDim> st(stride.begin(), stride.end());
       tv::SimpleVector<Index, NDim> pa(padding.begin(), padding.end());
       tv::SimpleVector<Index, NDim> di(dilation.begin(), dilation.end());
       tv::SimpleVector<Index, NDim> ou(outSpatialShape.begin(),
                                        outSpatialShape.end());
-      if (transpose) {
-        prepareDeConvIndicePairsKernel<Index, NDim, 4096>
-            <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS, 0,
-               stream>>>(tv::torch2tv<Index>(indicesIn),
-                         tv::torch2tv<Index>(indicePairs),
-                         tv::torch2tv<Index>(indiceNum),
-                         tv::torch2tv<Index>(indicePairUnique), ks, st, pa, di,
-                         ou);
-      } else {
-        prepareIndicePairsKernel<Index, NDim, 4096>
-            <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS, 0,
-               stream>>>(tv::torch2tv<Index>(indicesIn),
-                         tv::torch2tv<Index>(indicePairs),
-                         tv::torch2tv<Index>(indiceNum),
-                         tv::torch2tv<Index>(indicePairUnique), ks, st, pa, di,
-                         ou);
-      }
+      tv::dispatch_int<16, 32, 256, 4096>(
+          kernelVolume, std::less_equal<int>(), [&](auto I2) {
+            constexpr int MaxKernelVolume = decltype(I2)::value;
+            if (transpose) {
+              prepareDeConvIndicePairsKernel<Index, NDim, MaxKernelVolume>
+                  <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS,
+                     0, stream>>>(tv::torch2tv<Index>(indicesIn),
+                                  tv::torch2tv<Index>(indicePairs),
+                                  tv::torch2tv<Index>(indiceNum),
+                                  tv::torch2tv<Index>(indicePairUnique), ks, st,
+                                  pa, di, ou);
+              TV_CHECK_CUDA_ERR_V2("prepareDeConvIndicePairsKernel failed");
+            } else {
+              prepareIndicePairsKernel<Index, NDim, MaxKernelVolume>
+                  <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS,
+                     0, stream>>>(tv::torch2tv<Index>(indicesIn),
+                                  tv::torch2tv<Index>(indicePairs),
+                                  tv::torch2tv<Index>(indiceNum),
+                                  tv::torch2tv<Index>(indicePairUnique), ks, st,
+                                  pa, di, ou);
+              TV_CHECK_CUDA_ERR_V2("prepareIndicePairsKernel failed");
+            }
+          });
     });
   });
   return 1;
@@ -88,12 +94,11 @@ int create_conv_indice_pair_p2_cuda(
   auto kernelVolume = indicePairs.size(0);
   if (numActIn == 0)
     return 0;
-  // dispatch_torch must be in outside, this is a gcc bug, fixed in gcc 8.
-  tv::dispatch_torch<int32_t>(indicesIn.scalar_type(), [&](auto V) {
-    using Index = decltype(V);
+  tv::dispatch_torch<int32_t>(indicesIn.scalar_type(), [&](auto IndexValue) {
+    using Index = decltype(IndexValue);
     using IndexGrid = int32_t;
     tv::dispatch_int<2, 3, 4>(ndim, [&](auto I) {
-      constexpr int NDim = I;
+      constexpr int NDim = decltype(I)::value;
       using IndexGrid = int32_t;
       tv::SimpleVector<Index, NDim> ou(outSpatialShape.begin(),
                                        outSpatialShape.end());
@@ -122,6 +127,8 @@ int create_conv_indice_pair_p2_cuda(
             <<<tv::cuda::getBlocks(numAct), tv::cuda::CUDA_NUM_THREADS, 0,
                stream>>>(tv::torch2tv<Index>(indicesOut), numAct,
                          tv::torch2tv<Index>(indicePairUnique), ou, batchSize);
+        TV_CHECK_CUDA_ERR_V2("assignIndiceOutKernel failed");
+
         auto tableSize = table.get_table_size();
         auto tableData = table.data();
         auto constants = table.get_constants_4();
@@ -133,6 +140,7 @@ int create_conv_indice_pair_p2_cuda(
                          tv::torch2tv<Index>(indicePairs),
                          tv::torch2tv<Index>(indicePairUnique), tableSize,
                          tableData, constants, stash_constants, stash_count);
+        TV_CHECK_CUDA_ERR_V2("assignIndicePairsHashKernel failed");
 
       } else {
         assignGridAndIndiceOutKernel<Index, IndexGrid, NDim>
@@ -145,7 +153,7 @@ int create_conv_indice_pair_p2_cuda(
         assignIndicePairsKernel<Index, IndexGrid, NDim>
             <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS, 0,
                stream>>>(tv::torch2tv<Index>(indicesOut),
-                         tv::torch2tv<IndexGrid>(gridsOut), numAct,
+                         tv::torch2tv<IndexGrid>(gridsOut), numActIn,
                          tv::torch2tv<Index>(indicePairs),
                          tv::torch2tv<Index>(indicePairUnique), ou);
         TV_CHECK_CUDA_ERR_V2("assignIndicePairsKernel failed");
@@ -177,11 +185,11 @@ int create_submconv_indice_pair_cuda(
   auto kernelVolume = indicePairs.size(0);
   if (numActIn == 0)
     return 0;
-  tv::dispatch_torch<int32_t>(indicesIn.scalar_type(), [&](auto V) {
-    using Index = decltype(V);
+  tv::dispatch_torch<int32_t>(indicesIn.scalar_type(), [&](auto IndexValue) {
+    using Index = decltype(IndexValue);
     using IndexGrid = int32_t;
     tv::dispatch_int<2, 3, 4>(ndim, [&](auto I) {
-      constexpr int NDim = I;
+      constexpr int NDim = decltype(I)::value;
       tv::SimpleVector<Index, NDim> ks(kernelSize.begin(), kernelSize.end());
       tv::SimpleVector<Index, NDim> st(stride.begin(), stride.end());
       tv::SimpleVector<Index, NDim> pa(padding.begin(), padding.end());
@@ -214,26 +222,36 @@ int create_submconv_indice_pair_cuda(
         auto constants = table.get_constants_4();
         auto stash_constants = table.get_stash_constants();
         auto stash_count = table.get_stash_count();
-        getSubMIndicePairsHashKernel<Index, NDim, 4096>
-            <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS, 0,
-               stream>>>(tv::torch2tv<Index>(indicesIn),
-                         tv::torch2tv<Index>(indicePairs),
-                         tv::torch2tv<Index>(indiceNum), ks, st, pa, di, ou,
-                         tableSize, tableData, constants, stash_constants,
-                         stash_count);
+        tv::dispatch_int<16, 32, 256, 4096>(
+            kernelVolume, std::less_equal<int>(), [&](auto I2) {
+              constexpr int MaxKernelVolume = decltype(I2)::value;
+              getSubMIndicePairsHashKernel<Index, NDim, MaxKernelVolume>
+                  <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS,
+                     0, stream>>>(tv::torch2tv<Index>(indicesIn),
+                                  tv::torch2tv<Index>(indicePairs),
+                                  tv::torch2tv<Index>(indiceNum), ks, st, pa,
+                                  di, ou, tableSize, tableData, constants,
+                                  stash_constants, stash_count);
+              TV_CHECK_CUDA_ERR_V2("getSubMIndicePairsHashKernel failed");
+            });
       } else {
         prepareSubMGridKernel<Index, IndexGrid, NDim>
             <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS, 0,
                stream>>>(tv::torch2tv<Index>(indicesIn),
                          tv::torch2tv<IndexGrid>(gridsOut), ou);
         TV_CHECK_CUDA_ERR_V2("prepareSubMGridKernel failed");
-        getSubMIndicePairsKernel<Index, IndexGrid, NDim, 4096>
-            <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS, 0,
-               stream>>>(tv::torch2tv<Index>(indicesIn),
-                         tv::torch2tv<IndexGrid>(gridsOut),
-                         tv::torch2tv<Index>(indicePairs),
-                         tv::torch2tv<Index>(indiceNum), ks, st, pa, di, ou);
-        TV_CHECK_CUDA_ERR_V2("assignIndicePairsKernel failed");
+        tv::dispatch_int<16, 32, 256, 4096>(
+            ndim, std::less_equal<int>(), [&](auto I2) {
+              constexpr int MaxKernelVolume = decltype(I2)::value;
+              getSubMIndicePairsKernel<Index, IndexGrid, NDim, MaxKernelVolume>
+                  <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS,
+                     0, stream>>>(tv::torch2tv<Index>(indicesIn),
+                                  tv::torch2tv<IndexGrid>(gridsOut),
+                                  tv::torch2tv<Index>(indicePairs),
+                                  tv::torch2tv<Index>(indiceNum), ks, st, pa,
+                                  di, ou);
+              TV_CHECK_CUDA_ERR_V2("assignIndicePairsKernel failed");
+            });
       }
 
       if (resetGrid && (!useHash)) {

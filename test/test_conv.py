@@ -392,7 +392,7 @@ class TestSpConv(TestCase):
 
     def testSpDeConv3d(self):
         np.random.seed(484)
-        devices = ["cuda:0", "cpu:0"]
+        devices = ["cuda:0"]
         shapes = [[19, 18, 17]]
         batchsizes = [1, 2]
 
@@ -598,9 +598,9 @@ def main():
     shapes = [[50, 30, 30]]
     batchsizes = [2]
 
-    in_channels = [256]
-    out_channels = [256]
-    ksizes = [(3, 1, 1)]
+    in_channels = [32]
+    out_channels = [64]
+    ksizes = [(3, 3, 3)]
     strides = [1]
     paddings = [0]
     dilations = [1]
@@ -654,5 +654,6 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # main()
     # unittest.main()
+    TestSpConv().testSpDeConv3d()

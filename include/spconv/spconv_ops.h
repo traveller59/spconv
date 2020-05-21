@@ -198,6 +198,15 @@ getIndicePair(torch::Tensor indices, int64_t batchSize,
   }
 }
 
+std::vector<torch::Tensor>
+getIndicePairV2(torch::Tensor indices, int64_t batchSize,
+                std::vector<int64_t> outSpatialShape,
+                std::vector<int64_t> spatialShape,
+                std::vector<int64_t> kernelSize, std::vector<int64_t> stride,
+                std::vector<int64_t> padding, std::vector<int64_t> dilation,
+                std::vector<int64_t> outPadding, int64_t _subM,
+                int64_t _transpose, int64_t _useHash);
+
 template <unsigned NDim>
 std::vector<torch::Tensor> getIndicePairPreGrid(
     torch::Tensor indices, torch::Tensor gridOut, int64_t batchSize,
@@ -333,7 +342,6 @@ std::vector<torch::Tensor> getIndicePairPreGrid(
 torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
                          torch::Tensor indicePairs, torch::Tensor indiceNum,
                          int64_t numActOut, int64_t _inverse, int64_t _subM);
-
 std::vector<torch::Tensor>
 indiceConvBackward(torch::Tensor features, torch::Tensor filters,
                    torch::Tensor outGrad, torch::Tensor indicePairs,

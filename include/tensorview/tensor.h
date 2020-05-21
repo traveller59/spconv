@@ -52,6 +52,10 @@ enum DType {
 
 namespace detail {
 
+using dtype_collection_t =
+    tv::mp_list_c<int, float32, int32, int16, int8, float64, bool_, uint8,
+                  float16, int64, uint16, uint32, uint64>;
+
 using all_tensor_types_t =
     std::tuple<float, double, int8_t, int16_t, int32_t, int64_t, uint8_t,
                uint16_t, uint32_t, uint64_t, bool>;
@@ -305,7 +309,7 @@ template <class... Ts, typename F> void dispatch(DType t, F &&f) {
   static_assert(sizeof...(Ts) > 0, "you need to provide at least one type");
   bool notFound = true;
   mp_for_each<mp_list<Ts...>>([=, &notFound, &f](auto I) {
-    if (type_v<decltype(I)> == t) {
+    if (type_v<decltype(I)> == t && notFound) {
       std::forward<F>(f)(decltype(I)());
       notFound = false;
     }
@@ -325,7 +329,7 @@ template <typename T, T... Is, typename F> void dispatch_scalar(T idx, F &&f) {
                 "you need to provide at least one candidate");
   bool notFound = true;
   mp_for_each<mp_list_c<T, Is...>>([=, &notFound, &f](auto I) {
-    if (T(I) == idx) {
+    if (T(I) == idx && notFound) {
       std::forward<F>(f)(I);
       notFound = false;
     }
@@ -343,7 +347,7 @@ template <int... Is, typename F> void dispatch_int(int idx, F &&f) {
                 "you need to provide at least one candidate");
   bool notFound = true;
   mp_for_each<mp_list_c<int, Is...>>([=, &notFound, &f](auto I) {
-    if (int(I) == idx) {
+    if (decltype(I)::value == idx && notFound) {
       std::forward<F>(f)(I);
       notFound = false;
     }
@@ -351,7 +355,27 @@ template <int... Is, typename F> void dispatch_int(int idx, F &&f) {
   if (notFound) {
     std::stringstream ss;
     mp_for_each<mp_list_c<int, Is...>>(
-        [=, &ss](auto I) { ss << int(I) << " "; });
+        [=, &ss](auto I) { ss << decltype(I)::value << " "; });
+    TV_THROW_RT_ERR("unknown value", idx, ", available:", ss.str());
+  }
+}
+
+template <int... Is, typename F, class BinaryPredicate>
+void dispatch_int(int idx, BinaryPredicate p, F &&f) {
+  // BinaryPredicate: BinaryPredicate(idx, candidate)
+  static_assert(sizeof...(Is) > 0,
+                "you need to provide at least one candidate");
+  bool notFound = true;
+  mp_for_each<mp_list_c<int, Is...>>([=, &notFound, &f](auto I) {
+    if (p(idx, decltype(I)::value) && notFound) {
+      std::forward<F>(f)(I);
+      notFound = false;
+    }
+  });
+  if (notFound) {
+    std::stringstream ss;
+    mp_for_each<mp_list_c<int, Is...>>(
+        [=, &ss](auto I) { ss << decltype(I)::value << " "; });
     TV_THROW_RT_ERR("unknown value", idx, ", available:", ss.str());
   }
 }
@@ -373,12 +397,16 @@ struct Dispatch<T<Args...>> {
 
 template <class T> struct DispatchInt;
 
-template <template <int...> class T, int... Ints>
-struct DispatchInt<T<Ints...>> {
+template <template<class...> class Tin, template<class, int> class T, int... Ints>
+struct DispatchInt<Tin<T<int, Ints>...>> {
   template <typename F> inline void operator()(int t, F &&f) {
     return dispatch_int<Ints...>(t, std::forward<F>(f));
   }
+  template <typename F, typename BinaryPredicate> inline void operator()(int t, BinaryPredicate p, F &&f) {
+    return dispatch_int<Ints...>(t, p, std::forward<F>(f));
+  }
 };
+
 constexpr size_t kTensorMaxDim = 10;
 using TensorShape = ShapeBase<kTensorMaxDim, int64_t>;
 

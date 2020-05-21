@@ -24,7 +24,6 @@
 namespace spconv {
 // torch.jit's doc says only support int64, so we need to convert to int32.
 
-template <typename T>
 torch::Tensor
 fusedIndiceConvBatchNorm(torch::Tensor features, torch::Tensor filters,
                          torch::Tensor bias, torch::Tensor indicePairs,
@@ -80,31 +79,17 @@ fusedIndiceConvBatchNorm(torch::Tensor features, torch::Tensor filters,
       continue;
     }
     // auto timer = spconv::CudaContextTimer<>();
-    auto outputBufferBlob = torch::from_blob(outputBuffer.data_ptr<T>(),
+    auto outputBufferBlob = torch::from_blob(outputBuffer.data_ptr(),
                                              {nHot, numOutPlanes}, options);
-    auto inputBufferBlob = torch::from_blob(inputBuffer.data_ptr<T>(),
+    auto inputBufferBlob = torch::from_blob(inputBuffer.data_ptr(),
                                             {nHot, numInPlanes}, options);
 
     if (device == torch::kCPU) {
-      functor::SparseGatherFunctor<tv::CPU, T, int> gatherFtor;
-      gatherFtor(tv::CPU(), tv::torch2tv<T>(inputBuffer),
-                 tv::torch2tv<const T>(features),
-                 tv::torch2tv<const int>(indicePairs).subview(i, inverse),
-                 nHot);
+      sparse_gather_cpu(inputBuffer, features, indicePairs[i][inverse], nHot);
     }
 #ifdef TV_CUDA
     else if (device == torch::kCUDA) {
-      functor::SparseGatherFunctor<tv::GPU, T, int> gatherFtor;
-      gatherFtor(tv::TorchGPU(), tv::torch2tv<T>(inputBuffer),
-                 tv::torch2tv<const T>(features),
-                 tv::torch2tv<const int>(indicePairs).subview(i, inverse),
-                 nHot);
-      TV_CHECK_CUDA_ERR();
-      /* slower than SparseGatherFunctor, may due to int->long conversion
-      auto indicePairLong = indicePairs[i][inverse].to(torch::kInt64);
-      auto indicePairBlob = torch::from_blob(indicePairLong.data<long>(),
-      {nHot}, indicePairOptions); torch::index_select_out(inputBufferBlob,
-      features, 0, indicePairBlob);*/
+      sparse_gather_cuda(inputBuffer, features, indicePairs[i][inverse], nHot);
     }
 #endif
     else {
@@ -116,20 +101,11 @@ fusedIndiceConvBatchNorm(torch::Tensor features, torch::Tensor filters,
     // totalGEMMTime += timer.report() / 1000.0;
 
     if (device == torch::kCPU) {
-      functor::SparseScatterAddFunctor<tv::CPU, T, int> scatterFtor;
-      scatterFtor(tv::CPU(), tv::torch2tv<T>(output),
-                  tv::torch2tv<const T>(outputBuffer),
-                  tv::torch2tv<const int>(indicePairs).subview(i, !inverse),
-                  nHot, true);
+      sparse_scatter_add_cpu(outputBuffer, output, indicePairs[i][!inverse], nHot);
     }
 #ifdef TV_CUDA
     else if (device == torch::kCUDA) {
-      functor::SparseScatterAddFunctor<tv::GPU, T, int> scatterFtor;
-      scatterFtor(tv::TorchGPU(), tv::torch2tv<T>(output),
-                  tv::torch2tv<const T>(outputBuffer),
-                  tv::torch2tv<const int>(indicePairs).subview(i, !inverse),
-                  nHot, true);
-      TV_CHECK_CUDA_ERR();
+      sparse_scatter_add_cuda(outputBuffer, output, indicePairs[i][!inverse], nHot);
     }
 #endif
     else {

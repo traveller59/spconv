@@ -81,16 +81,7 @@ def get_indice_pairs(indices,
     else:
         out_shape = spatial_shape
     if grid is None:
-        if ndim == 2:
-            get_indice_pairs_func = torch.ops.spconv.get_indice_pairs_2d
-        elif ndim == 3:
-            get_indice_pairs_func = torch.ops.spconv.get_indice_pairs_3d
-        elif ndim == 4:
-            get_indice_pairs_func = torch.ops.spconv.get_indice_pairs_4d
-        else:
-            raise NotImplementedError
-
-        res = get_indice_pairs_func(indices, batch_size, out_shape,
+        res = torch.ops.spconv.get_indice_pairs_v2(indices, batch_size, out_shape,
                                     spatial_shape, ksize, stride, padding,
                                     dilation, out_padding, int(subm),
                                     int(transpose), int(use_hash))
@@ -115,7 +106,7 @@ def indice_conv(features,
                 num_activate_out,
                 inverse=False,
                 subm=False):
-    return torch.ops.spconv.indice_conv(features, filters, indice_pairs,
+    return torch.ops.spconv.indice_conv_v2(features, filters, indice_pairs,
                                         indice_pair_num, num_activate_out,
                                         int(inverse), int(subm))
 

@@ -97,6 +97,21 @@ int create_submconv_indice_pair_cuda(
     std::vector<int64_t> dilation, std::vector<int64_t> outSpatialShape,
     bool transpose, bool resetGrid, bool useHash);
 
+int create_conv_indice_pair_cpu(
+    torch::Tensor indicesIn, torch::Tensor indicesOut, torch::Tensor gridsOut,
+    torch::Tensor indicePairs, torch::Tensor indiceNum,
+    std::vector<int64_t> kernelSize, std::vector<int64_t> stride,
+    std::vector<int64_t> padding, std::vector<int64_t> dilation,
+    std::vector<int64_t> outSpatialShape, bool transpose, bool resetGrid,
+    bool useHash);
+
+int create_submconv_indice_pair_cpu(
+    torch::Tensor indicesIn, torch::Tensor gridsOut, torch::Tensor indicePairs,
+    torch::Tensor indiceNum, std::vector<int64_t> kernelSize,
+    std::vector<int64_t> stride, std::vector<int64_t> padding,
+    std::vector<int64_t> dilation, std::vector<int64_t> outSpatialShape,
+    bool transpose, bool resetGrid, bool useHash);
+
 } // namespace spconv
 
 #endif
