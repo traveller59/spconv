@@ -55,10 +55,10 @@ __global__ void prepareIndicePairsKernel(
       pointPtr = validPoints + i * (NDim + 1);
       auto offset = pointPtr[NDim];
       auto oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
-      indicePairs(offset, 0, oldNum) = ix;
+      indicePairs(0, offset, oldNum) = ix;
       index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape.data()) +
               spatialVolume * indicesIn(ix, 0);
-      indicePairs(offset, 1, oldNum) = index;
+      indicePairs(1, offset, oldNum) = index;
       indicePairUnique[offset * indicePairsDim2 + oldNum] = index;
     }
   }
@@ -98,10 +98,10 @@ __global__ void prepareDeConvIndicePairsKernel(
       pointPtr = validPoints + i * (NDim + 1);
       auto offset = pointPtr[NDim];
       auto oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
-      indicePairs(offset, 0, oldNum) = ix;
+      indicePairs(0, offset, oldNum) = ix;
       index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape.data()) +
               spatialVolume * indicesIn(ix, 0);
-      indicePairs(offset, 1, oldNum) = index;
+      indicePairs(1, offset, oldNum) = index;
       indicePairUnique[offset * indicePairsDim2 + oldNum] = index;
     }
   }
@@ -152,15 +152,16 @@ assignIndicePairsHashKernel(tv::TensorView<Index> indicesOut, int numActIn,
                             uint2 stash_constants, unsigned stash_count) {
 
   Index index;
-  int kernelVolume = indicePairs.dim(0);
+  int kernelVolume = indicePairs.dim(1);
+  auto indicePairsOut = indicePairs.subview(1);
   for (int ix : tv::KernelLoopX<int>(numActIn)) {
     for (int i = 0; i < kernelVolume; ++i) {
-      index = indicePairs(i, 1, ix);
+      index = indicePairsOut(i, ix);
       if (index > -1) {
         auto val = cuhash::retrieve((unsigned)(index), table_size, table,
                                     constants, stash_constants, stash_count);
         assert(val != cuhash::kNotFound);
-        indicePairs(i, 1, ix) = (unsigned)val;
+        indicePairsOut(i, ix) = (unsigned)val;
       }
     }
   }
@@ -175,12 +176,14 @@ assignIndicePairsKernel(tv::TensorView<Index> indicesOut,
                         const tv::SimpleVector<Index, NDim> outSpatialShape) {
 
   Index index;
-  int kernelVolume = indicePairs.dim(0);
+  int kernelVolume = indicePairs.dim(1);
+  auto indicePairsOut = indicePairs.subview(1);
+
   for (int ix : tv::KernelLoopX<int>(numActIn)) {
     for (int i = 0; i < kernelVolume; ++i) {
-      index = indicePairs(i, 1, ix);
+      index = indicePairsOut(i, ix);
       if (index > -1) {
-        indicePairs(i, 1, ix) = gridsOut[index];
+        indicePairsOut(i, ix) = gridsOut[index];
       }
     }
   }
@@ -259,8 +262,8 @@ __global__ void getSubMIndicePairsKernel(
               spatialVolume * indicesIn(ix, 0);
       if (gridsOut[index] > -1) {
         auto oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
-        indicePairs(offset, 1, oldNum) = gridsOut[index];
-        indicePairs(offset, 0, oldNum) = ix;
+        indicePairs(1, offset, oldNum) = gridsOut[index];
+        indicePairs(0, offset, oldNum) = ix;
       }
     }
   }
@@ -302,8 +305,8 @@ __global__ void getSubMIndicePairsHashKernel(
                                   constants, stash_constants, stash_count);
       if (val != cuhash::kNotFound) {
         auto oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
-        indicePairs(offset, 1, oldNum) = val;
-        indicePairs(offset, 0, oldNum) = ix;
+        indicePairs(1, offset, oldNum) = val;
+        indicePairs(0, offset, oldNum) = ix;
       }
     }
   }

@@ -72,8 +72,8 @@ Index getIndicePairsConv(tv::TensorView<const Index> indicesIn,
         hashval = iter->second;
       }
       // indicePairs: [K, 2, L]
-      indicePairs(offset, 0, indiceNum[offset]) = j;
-      indicePairs(offset, 1, indiceNum[offset]++) = hashval;
+      indicePairs(0, offset, indiceNum[offset]) = j;
+      indicePairs(1, offset, indiceNum[offset]++) = hashval;
     }
   }
   return numAct;
@@ -130,8 +130,8 @@ Index getIndicePairsDeConv(tv::TensorView<const Index> indicesIn,
         hashval = iter->second;
       }
       // indicePairs: [K, 2, L]
-      indicePairs(offset, 0, indiceNum[offset]) = j;
-      indicePairs(offset, 1, indiceNum[offset]++) = hashval;
+      indicePairs(0, offset, indiceNum[offset]) = j;
+      indicePairs(1, offset, indiceNum[offset]++) = hashval;
     }
   }
   return numAct;
@@ -189,8 +189,8 @@ Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
         if (iter != hash.end()) {
 #pragma omp atomic capture
           oldOffset = indiceNum[offset]++;
-          indicePairs(offset, 0, oldOffset) = j;
-          indicePairs(offset, 1, oldOffset) = iter->second;
+          indicePairs(0, offset, oldOffset) = j;
+          indicePairs(1, offset, oldOffset) = iter->second;
         }
       }
     }
@@ -245,8 +245,8 @@ Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
               spatialVolume * indicesIn(j, 0);
       auto iter = hash.find(index);
       if (iter != hash.end()) {
-        indicePairs(offset, 0, indiceNum[offset]) = j;
-        indicePairs(offset, 1, indiceNum[offset]++) = iter->second;
+        indicePairs(0, offset, indiceNum[offset]) = j;
+        indicePairs(1, offset, indiceNum[offset]++) = iter->second;
       }
     }
   }
@@ -264,7 +264,7 @@ int create_conv_indice_pair_cpu(
   auto ndim = outSpatialShape.size();
   auto numActIn = indicesIn.size(0);
   int batchSize = gridsOut.size(0);
-  auto kernelVolume = indicePairs.size(0);
+  auto kernelVolume = indiceNum.size(0);
   if (numActIn == 0)
     return 0;
   tv::dispatch_torch<int32_t, int64_t>(indicesIn.scalar_type(), [&](auto V) {
@@ -304,7 +304,7 @@ int create_submconv_indice_pair_cpu(
   auto ndim = outSpatialShape.size();
   auto numActIn = indicesIn.size(0);
   int batchSize = gridsOut.size(0);
-  auto kernelVolume = indicePairs.size(0);
+  auto kernelVolume = indiceNum.size(0);
   if (numActIn == 0)
     return 0;
   tv::dispatch_torch<int32_t, int64_t>(indicesIn.scalar_type(), [&](auto V) {

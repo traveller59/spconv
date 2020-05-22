@@ -29,6 +29,8 @@
 
 namespace spconv {
 
+using max_kernel_vol_t = tv::mp_list_c<int, 16, 32, 256, 4096>;
+
 int create_conv_indice_pair_p1_cuda(
     torch::Tensor indicesIn, torch::Tensor indicePairs, torch::Tensor indiceNum,
     torch::Tensor indicePairUnique, std::vector<int64_t> kernelSize,
@@ -38,7 +40,7 @@ int create_conv_indice_pair_p1_cuda(
   auto stream = at::cuda::getCurrentCUDAStream();
   auto ndim = kernelSize.size();
   auto numActIn = indicesIn.size(0);
-  auto kernelVolume = indicePairs.size(0);
+  auto kernelVolume = indiceNum.size(0);
   if (numActIn == 0)
     return 0;
   tv::dispatch_torch<int32_t>(indicesIn.scalar_type(), [&](auto IndexValue) {
@@ -52,7 +54,7 @@ int create_conv_indice_pair_p1_cuda(
       tv::SimpleVector<Index, NDim> di(dilation.begin(), dilation.end());
       tv::SimpleVector<Index, NDim> ou(outSpatialShape.begin(),
                                        outSpatialShape.end());
-      tv::dispatch_int<16, 32, 256, 4096>(
+      tv::DispatchInt<max_kernel_vol_t>()(
           kernelVolume, std::less_equal<int>(), [&](auto I2) {
             constexpr int MaxKernelVolume = decltype(I2)::value;
             if (transpose) {
@@ -91,7 +93,7 @@ int create_conv_indice_pair_p2_cuda(
   int batchSize = gridsOut.size(0);
   int numAct = indicePairUnique.size(0) - 1;
 
-  auto kernelVolume = indicePairs.size(0);
+  auto kernelVolume = indiceNum.size(0);
   if (numActIn == 0)
     return 0;
   tv::dispatch_torch<int32_t>(indicesIn.scalar_type(), [&](auto IndexValue) {
@@ -113,11 +115,10 @@ int create_conv_indice_pair_p2_cuda(
             <<<tv::cuda::getBlocks(numAct), tv::cuda::CUDA_NUM_THREADS, 0,
                stream>>>(d_values, numAct);
         TV_CHECK_CUDA_ERR_V2("arangeKernel failed");
-        bool res =
-            table.Build(numAct,
-                        reinterpret_cast<unsigned *>(
-                            tv::torch2tv<Index>(indicePairUnique).data()),
-                        d_values);
+        bool res = table.Build(
+            numAct,
+            reinterpret_cast<unsigned *>(indicePairUnique.data_ptr<Index>()),
+            d_values);
         cudaFree(d_values);
         TV_CHECK_CUDA_ERR_V2("cudaFree failed");
         if (!res) {
@@ -182,7 +183,7 @@ int create_submconv_indice_pair_cuda(
   auto numActIn = indicesIn.size(0);
   int batchSize = gridsOut.size(0);
 
-  auto kernelVolume = indicePairs.size(0);
+  auto kernelVolume = indiceNum.size(0);
   if (numActIn == 0)
     return 0;
   tv::dispatch_torch<int32_t>(indicesIn.scalar_type(), [&](auto IndexValue) {
@@ -212,7 +213,7 @@ int create_submconv_indice_pair_cuda(
         bool res =
             table.Build(numActIn, reinterpret_cast<unsigned *>(d_keyvalues),
                         reinterpret_cast<unsigned *>(d_values));
-        cudaFree(d_values);
+        cudaFree(d_keyvalues);
         TV_CHECK_CUDA_ERR_V2("cudaFree failed");
         if (!res) {
           return -1; // use -1 to tell outside use CPU implementation
@@ -222,7 +223,7 @@ int create_submconv_indice_pair_cuda(
         auto constants = table.get_constants_4();
         auto stash_constants = table.get_stash_constants();
         auto stash_count = table.get_stash_count();
-        tv::dispatch_int<16, 32, 256, 4096>(
+        tv::DispatchInt<max_kernel_vol_t>()(
             kernelVolume, std::less_equal<int>(), [&](auto I2) {
               constexpr int MaxKernelVolume = decltype(I2)::value;
               getSubMIndicePairsHashKernel<Index, NDim, MaxKernelVolume>
@@ -240,7 +241,7 @@ int create_submconv_indice_pair_cuda(
                stream>>>(tv::torch2tv<Index>(indicesIn),
                          tv::torch2tv<IndexGrid>(gridsOut), ou);
         TV_CHECK_CUDA_ERR_V2("prepareSubMGridKernel failed");
-        tv::dispatch_int<16, 32, 256, 4096>(
+        tv::DispatchInt<max_kernel_vol_t>()(
             ndim, std::less_equal<int>(), [&](auto I2) {
               constexpr int MaxKernelVolume = decltype(I2)::value;
               getSubMIndicePairsKernel<Index, IndexGrid, NDim, MaxKernelVolume>
@@ -315,7 +316,7 @@ struct CreateConvIndicePairFunctorP2<tv::GPU, Index, IndexGrid, NDim> {
                    const tv::SimpleVector<Index, NDim> outSpatialShape,
                    bool transpose, bool resetGrid, bool useHash) {
     Index batchSize = gridsOut.dim(0);
-    auto kernelVolume = indicePairs.dim(0);
+    auto kernelVolume = indiceNum.dim(0);
     auto numActIn = indicesIn.dim(0);
     if (numActIn == 0)
       return 0;

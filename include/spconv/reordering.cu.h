@@ -97,6 +97,90 @@ __global__ void gatherVecBlockKernel(T *buffer, const T *features,
 }
 
 template <typename T, typename Index, int NumTLP, int NumILP>
+__global__ void batchGatherGenericKernel(T *buffer, const T *features,
+                                         const Index *indices, int size,
+                                         int numPlanes, int batch_stride,
+                                         int feature_batch_stride) {
+  int ILPStrideX[NumILP];
+  Index inds[NumILP];
+  Index batchIdx[NumILP];
+
+#pragma unroll
+  for (int ilp = 0; ilp < NumILP; ilp++)
+    ILPStrideX[ilp] = ilp * gridDim.x * blockDim.x;
+
+  for (int ix : tv::KernelLoopX<int, NumILP>(size)) {
+#pragma unroll
+    for (int ilp = 0; ilp < NumILP; ilp++) {
+      if (ix + ILPStrideX[ilp] < size) {
+        batchIdx[ilp] = ix / feature_batch_stride;
+        inds[ilp] = indices[ix + ILPStrideX[ilp]] * numPlanes;
+      }
+    }
+    for (int iy : tv::KernelLoopY<int>(numPlanes)) {
+#pragma unroll
+      for (int ilp = 0; ilp < NumILP; ++ilp) {
+        if (ix + ILPStrideX[ilp] < size)
+          buffer[(ix + ILPStrideX[ilp]) * numPlanes + iy] =
+              features[inds[ilp] + iy];
+      }
+    }
+  }
+}
+
+template <typename T, typename Index, int NumTLP, int NumILP, typename VecType>
+__global__ void batchGatherVecKernel(T *buffer, const T *features,
+                                     const Index *indices, int size,
+                                     int numPlanes) {
+  int ILPStrideX[NumILP];
+  Index inds[NumILP];
+#pragma unroll
+  for (int ilp = 0; ilp < NumILP; ilp++)
+    ILPStrideX[ilp] = ilp * gridDim.x * blockDim.x;
+
+  for (int ix : tv::KernelLoopX<int, NumILP>(size)) {
+#pragma unroll
+    for (int ilp = 0; ilp < NumILP; ilp++) {
+      if (ix + ILPStrideX[ilp] < size)
+        inds[ilp] = indices[ix + ILPStrideX[ilp]] * numPlanes;
+    }
+    for (int iy : tv::KernelLoopY<int>(numPlanes)) {
+#pragma unroll
+      for (int ilp = 0; ilp < NumILP; ++ilp) {
+        if (ix + ILPStrideX[ilp] < size)
+          reinterpret_cast<VecType *>(
+              buffer)[(ix + ILPStrideX[ilp]) * numPlanes + iy] =
+              reinterpret_cast<const VecType *>(features)[inds[ilp] + iy];
+      }
+    }
+  }
+}
+
+template <typename T, typename Index, int NumTLP, int NumILP,
+          typename VecType = int4>
+__global__ void batchGatherVecBlockKernel(T *buffer, const T *features,
+                                          const Index *indices, int size,
+                                          int numPlanes) {
+  int ILPStrideY[NumILP];
+#pragma unroll
+  for (int ilp = 0; ilp < NumILP; ilp++)
+    ILPStrideY[ilp] = ilp * gridDim.y * blockDim.y;
+  features += blockIdx.x * NumTLP;
+  buffer += blockIdx.x * NumTLP;
+
+  for (int iy : tv::KernelLoopY<int, NumILP>(size)) {
+#pragma unroll
+    for (int ilp = 0; ilp < NumILP; ++ilp) {
+      reinterpret_cast<VecType *>(
+          buffer)[(iy + ILPStrideY[ilp]) * numPlanes + threadIdx.x] =
+          reinterpret_cast<const VecType *>(
+              features)[indices[iy + ILPStrideY[ilp]] * numPlanes +
+                        threadIdx.x];
+    }
+  }
+}
+
+template <typename T, typename Index, int NumTLP, int NumILP>
 __global__ void scatterAddGenericKernel(T *outFeatures, const T *buffer,
                                         const Index *indices, int size,
                                         int numPlanes) {

@@ -77,14 +77,15 @@ def get_indice_pairs(indices,
         else:
             out_shape = get_conv_output_size(spatial_shape, ksize, stride,
                                              padding, dilation)
-
     else:
         out_shape = spatial_shape
     if grid is None:
-        res = torch.ops.spconv.get_indice_pairs_v2(indices, batch_size, out_shape,
-                                    spatial_shape, ksize, stride, padding,
-                                    dilation, out_padding, int(subm),
-                                    int(transpose), int(use_hash))
+        res = torch.ops.spconv.get_indice_pairs_v2(indices, batch_size,
+                                                   out_shape, spatial_shape,
+                                                   ksize, stride, padding,
+                                                   dilation, out_padding,
+                                                   int(subm), int(transpose),
+                                                   int(use_hash))
         return res
     else:
         if ndim == 2:
@@ -106,22 +107,17 @@ def indice_conv(features,
                 num_activate_out,
                 inverse=False,
                 subm=False):
-    return torch.ops.spconv.indice_conv_v2(features, filters, indice_pairs,
+    return torch.ops.spconv.indice_conv(features, filters, indice_pairs,
                                         indice_pair_num, num_activate_out,
                                         int(inverse), int(subm))
 
 
 def fused_indice_conv(features, filters, bias, indice_pairs, indice_pair_num,
                       num_activate_out, inverse, subm):
-    if features.dtype == torch.half:
-        func = torch.ops.spconv.fused_indice_conv_half
-    elif filters.dtype == torch.float32:
-        func = torch.ops.spconv.fused_indice_conv_fp32
-    else:
-        raise NotImplementedError
-
-    return func(features, filters, bias, indice_pairs, indice_pair_num,
-                num_activate_out, int(inverse), int(subm))
+    return torch.ops.spconv.fused_indice_conv_bn(features, filters, bias,
+                                                 indice_pairs, indice_pair_num,
+                                                 num_activate_out,
+                                                 int(inverse), int(subm))
 
 
 def indice_conv_backward(features,
@@ -137,28 +133,15 @@ def indice_conv_backward(features,
 
 
 def indice_maxpool(features, indice_pairs, indice_pair_num, num_activate_out):
-    if features.dtype == torch.float32:
-        return torch.ops.spconv.indice_maxpool_fp32(features, indice_pairs,
-                                                    indice_pair_num,
-                                                    num_activate_out)
-    elif features.dtype == torch.half:
-        return torch.ops.spconv.indice_maxpool_half(features, indice_pairs,
-                                                    indice_pair_num,
-                                                    num_activate_out)
-    else:
-        raise NotImplementedError
+    return torch.ops.spconv.indice_maxpool(features, indice_pairs,
+                                           indice_pair_num, num_activate_out)
 
 
 def indice_maxpool_backward(features, out_features, out_bp, indice_pairs,
                             indice_pair_num):
-    if features.dtype == torch.float32:
-        return torch.ops.spconv.indice_maxpool_backward_fp32(
-            features, out_features, out_bp, indice_pairs, indice_pair_num)
-    elif features.dtype == torch.half:
-        return torch.ops.spconv.indice_maxpool_backward_half(
-            features, out_features, out_bp, indice_pairs, indice_pair_num)
-    else:
-        raise NotImplementedError
+    return torch.ops.spconv.indice_maxpool_backward(features, out_features,
+                                                    out_bp, indice_pairs,
+                                                    indice_pair_num)
 
 
 def nms(boxes, scores, pre_max_size, post_max_size, thresh, eps):

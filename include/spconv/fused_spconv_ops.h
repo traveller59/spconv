@@ -81,8 +81,8 @@ fusedIndiceConvBatchNorm(torch::Tensor features, torch::Tensor filters,
     // auto timer = spconv::CudaContextTimer<>();
     auto outputBufferBlob = torch::from_blob(outputBuffer.data_ptr(),
                                              {nHot, numOutPlanes}, options);
-    auto inputBufferBlob = torch::from_blob(inputBuffer.data_ptr(),
-                                            {nHot, numInPlanes}, options);
+    auto inputBufferBlob =
+        torch::from_blob(inputBuffer.data_ptr(), {nHot, numInPlanes}, options);
 
     if (device == torch::kCPU) {
       sparse_gather_cpu(inputBuffer, features, indicePairs[i][inverse], nHot);
@@ -101,11 +101,13 @@ fusedIndiceConvBatchNorm(torch::Tensor features, torch::Tensor filters,
     // totalGEMMTime += timer.report() / 1000.0;
 
     if (device == torch::kCPU) {
-      sparse_scatter_add_cpu(outputBuffer, output, indicePairs[i][!inverse], nHot);
+      sparse_scatter_add_cpu(outputBuffer, output, indicePairs[i][!inverse],
+                             nHot);
     }
 #ifdef TV_CUDA
     else if (device == torch::kCUDA) {
-      sparse_scatter_add_cuda(outputBuffer, output, indicePairs[i][!inverse], nHot);
+      sparse_scatter_add_cuda(outputBuffer, output, indicePairs[i][!inverse],
+                              nHot);
     }
 #endif
     else {

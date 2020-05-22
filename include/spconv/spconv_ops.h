@@ -61,7 +61,7 @@ getIndicePair(torch::Tensor indices, int64_t batchSize,
   TV_ASSERT_RT_ERR(batchSize * outputVolume < std::numeric_limits<int>::max(),
                    msg);
   torch::Tensor indicePairs =
-      torch::full({kernelVolume, 2, numAct}, -1,
+      torch::full({2, kernelVolume, numAct}, -1,
                   torch::dtype(torch::kInt32).device(indices.device()));
   torch::Tensor indiceNum = torch::zeros(
       {kernelVolume}, torch::dtype(torch::kInt32).device(indices.device()));

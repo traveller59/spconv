@@ -306,170 +306,177 @@ maxPoolBwdGenericKernel(const T *outFeatures, const T *inFeatures,
   }
 }
 
-namespace functor {
-template <typename T, typename Index>
-struct SparseMaxPoolForwardFunctor<tv::GPU, T, Index> {
-  using vecload_type_t =
-      std::conditional_t<std::is_same<T, at::Half>::value, int2, int4>;
-  using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
-  void operator()(const tv::GPU &d, tv::TensorView<T> outFeatures,
-                  tv::TensorView<const T> inFeatures,
-                  tv::TensorView<const Index> indices, int size) {
-    if (size <= 0)
-      return;
-    int numPlanes = inFeatures.dim(1);
-    bool notFound = true;
-    constexpr int vecloadFactor = sizeof(vecload_type_t) / sizeof(T);
-    tv::mp_for_each<kernel_block_t>([=, &outFeatures, &inFeatures, &indices,
-                                     &notFound](auto NumTLP) {
-      constexpr int NumILP = NumTLP / 4;
+using float_types_t = tv::mp_list<float, double, at::Half>;
+using int_types_t = tv::mp_list<int32_t, int64_t>;
 
-      int numHotBlock = (size / NumTLP) * NumTLP;
+void maxpool_fwd_cuda(torch::Tensor outFeatures, torch::Tensor inFeatures,
+                      torch::Tensor indicesIn, torch::Tensor indicesOut,
+                      int size) {
+  if (size <= 0)
+    return;
+  int numPlanes = inFeatures.size(1);
+  auto dtype = inFeatures.scalar_type();
+  auto int_dtype = indicesIn.scalar_type();
+  auto stream = at::cuda::getCurrentCUDAStream();
+
+  tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
+    using T = decltype(TValue);
+    using vecload_type_t =
+        std::conditional_t<std::is_same<T, at::Half>::value, int2, int4>;
+    using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
+
+    tv::DispatchTorch<int_types_t>()(int_dtype, [&](auto IndexValue) {
+      using Index = decltype(IndexValue);
+      bool notFound = true;
+      constexpr int vecloadFactor = sizeof(vecload_type_t) / sizeof(T);
+      tv::mp_for_each<kernel_block_t>([=, &outFeatures, &inFeatures, &indicesIn,
+                                       &indicesOut, &notFound](auto NumTLP) {
+        constexpr int NumILP = NumTLP / 4;
+
+        int numHotBlock = (size / NumTLP) * NumTLP;
+        if (notFound) {
+          if (numPlanes % NumTLP == 0) {
+            if (numHotBlock >= NumTLP) {
+              maxPoolFwdVecBlockKernel<T, Index, int(NumTLP), NumILP,
+                                       vecload_type_t>
+                  <<<dim3(std::min(size / NumTLP, 512), numPlanes / NumTLP),
+                     dim3(NumTLP / vecloadFactor, NumTLP / NumILP), 0,
+                     stream>>>(
+                      outFeatures.data_ptr<T>(), inFeatures.data_ptr<T>(),
+                      indicesIn.data_ptr<Index>(), indicesOut.data_ptr<Index>(),
+                      numHotBlock, numPlanes / vecloadFactor);
+              TV_CHECK_CUDA_ERR();
+            }
+
+            if (size > numHotBlock) {
+              maxPoolFwdGenericKernel<T, Index, int(NumTLP), NumILP>
+                  <<<dim3(1, numPlanes / NumTLP), dim3(NumTLP / NumILP, NumTLP),
+                     0, stream>>>(outFeatures.data_ptr<T>(),
+                                  inFeatures.data_ptr<T>(),
+                                  indicesIn.data_ptr<Index>() + numHotBlock,
+                                  indicesOut.data_ptr<Index>() + numHotBlock,
+                                  size - numHotBlock, numPlanes);
+              TV_CHECK_CUDA_ERR();
+            }
+            notFound = false;
+          }
+        }
+      });
+
       if (notFound) {
-        if (numPlanes % NumTLP == 0) {
-          if (numHotBlock >= NumTLP) {
-            maxPoolFwdVecBlockKernel<T, Index, int(NumTLP), NumILP,
-                                     vecload_type_t>
-                <<<dim3(std::min(size / NumTLP, 512), numPlanes / NumTLP),
-                   dim3(NumTLP / vecloadFactor, NumTLP / NumILP), 0,
-                   d.getStream()>>>(outFeatures.data(), inFeatures.data(),
-                                    indices.subview(0).data(),
-                                    indices.subview(1).data(), numHotBlock,
-                                    numPlanes / vecloadFactor);
-            TV_CHECK_CUDA_ERR();
-          }
+        constexpr int NumTLP = 64;
+        constexpr int NumILP = NumTLP / 4;
+        int numHotBlock = (size / NumTLP) * NumTLP;
+        if (numHotBlock >= NumTLP) {
+          maxPoolFwdGenericBlockKernel<T, Index, NumTLP, NumILP>
+              <<<dim3(size / NumTLP, tv::cuda::DivUp(numPlanes, NumTLP)),
+                 dim3(NumTLP / NumILP, NumTLP), 0, stream>>>(
+                  outFeatures.data_ptr<T>(), inFeatures.data_ptr<T>(),
+                  indicesIn.data_ptr<Index>(), indicesOut.data_ptr<Index>(),
+                  numHotBlock, numPlanes);
+          TV_CHECK_CUDA_ERR();
+        }
 
-          if (size > numHotBlock) {
-            maxPoolFwdGenericKernel<T, Index, int(NumTLP), NumILP>
-                <<<dim3(1, numPlanes / NumTLP), dim3(NumTLP / NumILP, NumTLP),
-                   0, d.getStream()>>>(outFeatures.data(), inFeatures.data(),
-                                       indices.subview(0).data() + numHotBlock,
-                                       indices.subview(1).data() + numHotBlock,
-                                       size - numHotBlock, numPlanes);
-            TV_CHECK_CUDA_ERR();
-          }
-          notFound = false;
+        if (size > numHotBlock) {
+          maxPoolFwdGenericKernel<T, Index, NumTLP, NumILP>
+              <<<dim3(1, tv::cuda::DivUp(numPlanes, NumTLP)),
+                 dim3(NumTLP / NumILP, NumTLP), 0, stream>>>(
+                  outFeatures.data_ptr<T>(), inFeatures.data_ptr<T>(),
+                  indicesIn.data_ptr<Index>() + numHotBlock,
+                  indicesOut.data_ptr<Index>() + numHotBlock,
+                  size - numHotBlock, numPlanes);
+          TV_CHECK_CUDA_ERR();
         }
       }
     });
+  });
+}
 
-    if (notFound) {
-      constexpr int NumTLP = 64;
-      constexpr int NumILP = NumTLP / 4;
-      int numHotBlock = (size / NumTLP) * NumTLP;
-      if (numHotBlock >= NumTLP) {
-        maxPoolFwdGenericBlockKernel<T, Index, NumTLP, NumILP>
-            <<<dim3(size / NumTLP, tv::cuda::DivUp(numPlanes, NumTLP)),
-               dim3(NumTLP / NumILP, NumTLP), 0, d.getStream()>>>(
-                outFeatures.data(), inFeatures.data(),
-                indices.subview(0).data(), indices.subview(1).data(),
-                numHotBlock, numPlanes);
-        TV_CHECK_CUDA_ERR();
-      }
+void maxpool_bwd_cuda(torch::Tensor outFeatures, torch::Tensor inFeatures,
+                      torch::Tensor dout, torch::Tensor din,
+                      torch::Tensor indicesIn, torch::Tensor indicesOut,
+                      int size) {
+  if (size <= 0)
+    return;
+  int numPlanes = inFeatures.size(1);
+  auto dtype = inFeatures.scalar_type();
+  auto int_dtype = indicesIn.scalar_type();
+  auto stream = at::cuda::getCurrentCUDAStream();
 
-      if (size > numHotBlock) {
-        maxPoolFwdGenericKernel<T, Index, NumTLP, NumILP>
-            <<<dim3(1, tv::cuda::DivUp(numPlanes, NumTLP)),
-               dim3(NumTLP / NumILP, NumTLP), 0, d.getStream()>>>(
-                outFeatures.data(), inFeatures.data(),
-                indices.subview(0).data() + numHotBlock,
-                indices.subview(1).data() + numHotBlock, size - numHotBlock,
-                numPlanes);
-        TV_CHECK_CUDA_ERR();
-      }
-    }
-  }
-};
+  tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
+    using T = decltype(TValue);
+    using vecload_type_t =
+        std::conditional_t<std::is_same<T, at::Half>::value, int2, int4>;
+    using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
+    tv::DispatchTorch<int_types_t>()(int_dtype, [&](auto IndexValue) {
+      using Index = decltype(IndexValue);
+      bool notFound = true;
+      constexpr int vecloadFactor = sizeof(vecload_type_t) / sizeof(T);
+      tv::mp_for_each<kernel_block_t>([=, &outFeatures, &inFeatures, &dout,
+                                       &din, &indicesIn, &indicesOut,
+                                       &notFound](auto NumTLP) {
+        constexpr int NumILP = NumTLP / 4;
+        int numHotBlock = (size / NumTLP) * NumTLP;
+        if (notFound) {
+          if (numPlanes % NumTLP == 0) {
+            if (numHotBlock >= NumTLP) {
+              maxPoolBwdVecBlockKernel<T, Index, int(NumTLP), NumILP,
+                                       vecload_type_t>
+                  <<<dim3(std::min(size / NumTLP, 512), numPlanes / NumTLP),
+                     dim3(NumTLP / vecloadFactor, NumTLP / NumILP), 0,
+                     stream>>>(outFeatures.data_ptr<T>(),
+                               inFeatures.data_ptr<T>(), dout.data_ptr<T>(),
+                               din.data_ptr<T>(), indicesIn.data_ptr<Index>(),
+                               indicesOut.data_ptr<Index>(), numHotBlock,
+                               numPlanes / vecloadFactor);
+              TV_CHECK_CUDA_ERR();
+            }
 
-template <typename T, typename Index>
-struct SparseMaxPoolBackwardFunctor<tv::GPU, T, Index> {
-  using vecload_type_t =
-      std::conditional_t<std::is_same<T, at::Half>::value, int2, int4>;
-  using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
-  void operator()(const tv::GPU &d, tv::TensorView<const T> outFeatures,
-                  tv::TensorView<const T> inFeatures,
-                  tv::TensorView<const T> dout, tv::TensorView<T> din,
-                  tv::TensorView<const Index> indices, int size) {
-    if (size <= 0)
-      return;
-    int numPlanes = inFeatures.dim(1);
-    bool notFound = true;
-    constexpr int vecloadFactor = sizeof(vecload_type_t) / sizeof(T);
-    tv::mp_for_each<kernel_block_t>([=, &outFeatures, &inFeatures, &dout, &din,
-                                     &indices, &notFound](auto NumTLP) {
-      constexpr int NumILP = NumTLP / 4;
+            if (size > numHotBlock) {
+              maxPoolBwdGenericKernel<T, Index, int(NumTLP), NumILP>
+                  <<<dim3(1, numPlanes / NumTLP), dim3(NumTLP / NumILP, NumTLP),
+                     0, stream>>>(outFeatures.data_ptr<T>(),
+                                  inFeatures.data_ptr<T>(), dout.data_ptr<T>(),
+                                  din.data_ptr<T>(),
+                                  indicesIn.data_ptr<Index>() + numHotBlock,
+                                  indicesOut.data_ptr<Index>() + numHotBlock,
+                                  size - numHotBlock, numPlanes);
+              TV_CHECK_CUDA_ERR();
+            }
+            notFound = false;
+          }
+        }
+      });
 
-      int numHotBlock = (size / NumTLP) * NumTLP;
       if (notFound) {
-        if (numPlanes % NumTLP == 0) {
-          if (numHotBlock >= NumTLP) {
-            maxPoolBwdVecBlockKernel<T, Index, int(NumTLP), NumILP,
-                                     vecload_type_t>
-                <<<dim3(std::min(size / NumTLP, 512), numPlanes / NumTLP),
-                   dim3(NumTLP / vecloadFactor, NumTLP / NumILP), 0,
-                   d.getStream()>>>(outFeatures.data(), inFeatures.data(),
-                                    dout.data(), din.data(),
-                                    indices.subview(0).data(),
-                                    indices.subview(1).data(), numHotBlock,
-                                    numPlanes / vecloadFactor);
-            TV_CHECK_CUDA_ERR();
-          }
+        constexpr int NumTLP = 64;
+        constexpr int NumILP = NumTLP / 4;
+        int numHotBlock = (size / NumTLP) * NumTLP;
+        if (numHotBlock >= NumTLP) {
+          maxPoolBwdGenericBlockKernel<T, Index, NumTLP, NumILP>
+              <<<dim3(size / NumTLP, tv::cuda::DivUp(numPlanes, NumTLP)),
+                 dim3(NumTLP / NumILP, NumTLP), 0, stream>>>(
+                  outFeatures.data_ptr<T>(), inFeatures.data_ptr<T>(),
+                  dout.data_ptr<T>(), din.data_ptr<T>(),
+                  indicesIn.data_ptr<Index>(), indicesOut.data_ptr<Index>(),
+                  numHotBlock, numPlanes);
+          TV_CHECK_CUDA_ERR();
+        }
 
-          if (size > numHotBlock) {
-            maxPoolBwdGenericKernel<T, Index, int(NumTLP), NumILP>
-                <<<dim3(1, numPlanes / NumTLP), dim3(NumTLP / NumILP, NumTLP),
-                   0, d.getStream()>>>(outFeatures.data(), inFeatures.data(),
-                                       dout.data(), din.data(),
-                                       indices.subview(0).data() + numHotBlock,
-                                       indices.subview(1).data() + numHotBlock,
-                                       size - numHotBlock, numPlanes);
-            TV_CHECK_CUDA_ERR();
-          }
-          notFound = false;
+        if (size > numHotBlock) {
+          maxPoolBwdGenericKernel<T, Index, NumTLP, NumILP>
+              <<<dim3(1, tv::cuda::DivUp(numPlanes, NumTLP)),
+                 dim3(NumTLP / NumILP, NumTLP), 0, stream>>>(
+                  outFeatures.data_ptr<T>(), inFeatures.data_ptr<T>(),
+                  dout.data_ptr<T>(), din.data_ptr<T>(),
+                  indicesIn.data_ptr<Index>() + numHotBlock,
+                  indicesOut.data_ptr<Index>() + numHotBlock,
+                  size - numHotBlock, numPlanes);
+          TV_CHECK_CUDA_ERR();
         }
       }
     });
+  });
+}
 
-    if (notFound) {
-      constexpr int NumTLP = 64;
-      constexpr int NumILP = NumTLP / 4;
-      int numHotBlock = (size / NumTLP) * NumTLP;
-      if (numHotBlock >= NumTLP) {
-        maxPoolBwdGenericBlockKernel<T, Index, NumTLP, NumILP>
-            <<<dim3(size / NumTLP, tv::cuda::DivUp(numPlanes, NumTLP)),
-               dim3(NumTLP / NumILP, NumTLP), 0, d.getStream()>>>(
-                outFeatures.data(), inFeatures.data(), dout.data(), din.data(),
-                indices.subview(0).data(), indices.subview(1).data(),
-                numHotBlock, numPlanes);
-        TV_CHECK_CUDA_ERR();
-      }
-
-      if (size > numHotBlock) {
-        maxPoolBwdGenericKernel<T, Index, NumTLP, NumILP>
-            <<<dim3(1, tv::cuda::DivUp(numPlanes, NumTLP)),
-               dim3(NumTLP / NumILP, NumTLP), 0, d.getStream()>>>(
-                outFeatures.data(), inFeatures.data(), dout.data(), din.data(),
-                indices.subview(0).data() + numHotBlock,
-                indices.subview(1).data() + numHotBlock, size - numHotBlock,
-                numPlanes);
-        TV_CHECK_CUDA_ERR();
-      }
-    }
-  }
-};
-
-} // namespace functor
-
-#define DECLARE_GPU_SPECS_T_INDEX(T, Index)                                    \
-  template struct functor::SparseMaxPoolForwardFunctor<tv::GPU, T, Index>;     \
-  template struct functor::SparseMaxPoolBackwardFunctor<tv::GPU, T, Index>;
-
-#define DECLARE_GPU_SPECS(T) DECLARE_GPU_SPECS_T_INDEX(T, int);
-
-DECLARE_GPU_SPECS(float);
-DECLARE_GPU_SPECS(double);
-DECLARE_GPU_SPECS(at::Half);
-
-#undef DECLARE_GPU_SPECS
-#undef DECLARE_GPU_SPECS_T_INDEX
 } // namespace spconv

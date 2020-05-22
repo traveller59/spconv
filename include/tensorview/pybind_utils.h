@@ -27,13 +27,13 @@
 namespace py = pybind11;
 namespace tv {
 
-template <typename Tarr> bool is_c_stype(const Tarr &arr) {
+template <typename Tarr> bool is_c_style(const Tarr &arr) {
   return bool(arr.flags() & py::array::c_style);
 }
 
 template <typename T, int Rank = -1>
 TensorView<T, Rank> arrayt2tv(py::array_t<T> arr) {
-  TV_ASSERT_INVALID_ARG(is_c_stype(arr), "array must be c-contiguous array");
+  TV_ASSERT_INVALID_ARG(is_c_style(arr), "array must be c-contiguous array");
   Shape shape;
   for (int i = 0; i < arr.ndim(); ++i) {
     shape.push_back(arr.shape(i));
@@ -46,7 +46,7 @@ TensorView<T, Rank> arrayt2tv(py::array_t<T> arr) {
 
 template <typename T, int Rank = -1>
 TensorView<const T> carrayt2tv(py::array_t<T> arr) {
-  TV_ASSERT_INVALID_ARG(is_c_stype(arr), "array must be c-contiguous array");
+  TV_ASSERT_INVALID_ARG(is_c_style(arr), "array must be c-contiguous array");
   Shape shape;
   for (int i = 0; i < arr.ndim(); ++i) {
     shape.push_back(arr.shape(i));
@@ -106,7 +106,7 @@ template <typename Tarr> tv::DType get_array_tv_dtype(const Tarr &arr) {
 }
 
 template <typename Tarr> Tensor array2tensor(Tarr &arr) {
-  TV_ASSERT_INVALID_ARG(is_c_stype(arr), "array must be c-contiguous array");
+  TV_ASSERT_INVALID_ARG(is_c_style(arr), "array must be c-contiguous array");
   TensorShape shape;
   for (int i = 0; i < arr.ndim(); ++i) {
     shape.push_back(arr.shape(i));
@@ -115,7 +115,7 @@ template <typename Tarr> Tensor array2tensor(Tarr &arr) {
 }
 
 template <typename T> Tensor arrayt2tensor(py::array_t<T> &arr) {
-  TV_ASSERT_INVALID_ARG(is_c_stype(arr), "array must be c-contiguous array");
+  TV_ASSERT_INVALID_ARG(is_c_style(arr), "array must be c-contiguous array");
   TensorShape shape;
   for (int i = 0; i < arr.ndim(); ++i) {
     shape.push_back(arr.shape(i));

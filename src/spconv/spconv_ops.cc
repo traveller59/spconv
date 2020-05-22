@@ -39,7 +39,7 @@ getIndicePairV2(torch::Tensor indices, int64_t batchSize,
   TV_ASSERT_RT_ERR(batchSize * outputVolume < std::numeric_limits<int>::max(),
                    msg);
   torch::Tensor indicePairs =
-      torch::full({kernelVolume, 2, numAct}, -1,
+      torch::full({2, kernelVolume, numAct}, -1,
                   torch::dtype(torch::kInt32).device(indices.device()));
   torch::Tensor indiceNum = torch::zeros(
       {kernelVolume}, torch::dtype(torch::kInt32).device(indices.device()));
@@ -68,6 +68,18 @@ getIndicePairV2(torch::Tensor indices, int64_t batchSize,
       numActOut = create_submconv_indice_pair_cuda(
           indices, gridOut, indicePairs, indiceNum, kernelSize, stride, padding,
           dilation, outSpatialShape, transpose, false, useHash);
+      if (numActOut == -1) {
+        auto device = indices.device();
+        indicePairs = indicePairs.to({torch::kCPU});
+        indiceNum = indiceNum.to({torch::kCPU});
+        indices = indices.to({torch::kCPU});
+        numActOut = create_submconv_indice_pair_cpu(
+            indices, gridOut, indicePairs, indiceNum, kernelSize, stride,
+            padding, dilation, outSpatialShape, transpose, false, useHash);
+        return {indices.to(device), indicePairs.to(device),
+                indiceNum.to(device)};
+      }
+
     }
 #endif
     else {
@@ -97,6 +109,20 @@ getIndicePairV2(torch::Tensor indices, int64_t batchSize,
         numActOut = create_conv_indice_pair_p2_cuda(
             indices, outInds, gridOut, indicePairs, indiceNum, indicePairUnique,
             outSpatialShape, transpose, false, useHash);
+        if (numActOut == -1) {
+          auto device = indices.device();
+          outInds = outInds.to({torch::kCPU});
+          indicePairs = indicePairs.to({torch::kCPU});
+          indiceNum = indiceNum.to({torch::kCPU});
+          indices = indices.to({torch::kCPU});
+          numActOut = create_conv_indice_pair_cpu(
+              indices, outInds, gridOut, indicePairs, indiceNum, kernelSize,
+              stride, padding, dilation, outSpatialShape, transpose, false,
+              useHash);
+
+          return {outInds.to(device).slice(0, 0, numActOut),
+                  indicePairs.to(device), indiceNum.to(device)};
+        }
       }
     }
 #endif
@@ -114,7 +140,7 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
   bool inverse = _inverse != 0;
   auto device = features.device().type();
   auto ndim = filters.dim() - 2;
-  auto kernelVolume = indicePairs.size(0);
+  auto kernelVolume = indiceNum.size(0);
   auto numInPlanes = features.size(1);
   auto numOutPlanes = filters.size(ndim + 1);
   auto indicePairNumCpu = indiceNum.to({torch::kCPU});
@@ -125,21 +151,8 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
       indicePairMaxSizeIter - indicePairNumCpu.data_ptr<int>();
   int indicePairMaxSize = *indicePairMaxSizeIter;
 
-  /*if (_subM){
-  std::vector<int> indicePairNumVec(indicePairNumCpu.data_ptr<int>(),
-  indicePairNumCpu.data_ptr<int>() + kernelVolume);
-  indicePairNumVec.erase(indicePairNumVec.begin() + indicePairMaxOffset);
-
-  auto indicePairVecMaxSizeIter = std::max_element(
-      indicePairNumVec.begin(), indicePairNumVec.end());
-  indicePairMaxSize = *indicePairVecMaxSizeIter;
-  }*/
-
   auto options =
       torch::TensorOptions().dtype(features.dtype()).device(features.device());
-  // auto indicePairOptions =
-  //     torch::TensorOptions().dtype(torch::kInt64).device(indicePairs.device());
-
   torch::Tensor output = torch::zeros({numActOut, numOutPlanes}, options);
   torch::Tensor inputBuffer =
       torch::zeros({indicePairMaxSize, numInPlanes}, options);
@@ -159,17 +172,17 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
       continue;
     }
     // auto timer = spconv::CudaContextTimer<>();
-    auto outputBufferBlob = torch::from_blob(
-        outputBuffer.data_ptr(), {nHot, numOutPlanes}, options);
-    auto inputBufferBlob = torch::from_blob(inputBuffer.data_ptr(),
-                                            {nHot, numInPlanes}, options);
+    auto outputBufferBlob = torch::from_blob(outputBuffer.data_ptr(),
+                                             {nHot, numOutPlanes}, options);
+    auto inputBufferBlob =
+        torch::from_blob(inputBuffer.data_ptr(), {nHot, numInPlanes}, options);
 
     if (device == torch::kCPU) {
-      sparse_gather_cpu(inputBuffer, features, indicePairs[i][inverse], nHot);
+      sparse_gather_cpu(inputBuffer, features, indicePairs[inverse][i], nHot);
     }
 #ifdef TV_CUDA
     else if (device == torch::kCUDA) {
-      sparse_gather_cuda(inputBuffer, features, indicePairs[i][inverse], nHot);
+      sparse_gather_cuda(inputBuffer, features, indicePairs[inverse][i], nHot);
       /* slower than SparseGatherFunctor, may due to int->long conversion
       auto indicePairLong = indicePairs[i][inverse].to(torch::kInt64);
       auto indicePairBlob = torch::from_blob(indicePairLong.data<long>(),
@@ -180,31 +193,23 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
     else {
       TV_ASSERT_INVALID_ARG(false, "unknown device type");
     }
-
-    // totalGatherTime += timer.report() / 1000.0;
     torch::mm_out(outputBufferBlob, inputBufferBlob, filters[i]);
-    // totalGEMMTime += timer.report() / 1000.0;
-
     if (device == torch::kCPU) {
-      sparse_scatter_add_cpu(outputBuffer, output, indicePairs[i][!inverse], nHot);
+      sparse_scatter_add_cpu(outputBuffer, output, indicePairs[!inverse][i],
+                             nHot);
     }
 #ifdef TV_CUDA
     else if (device == torch::kCUDA) {
-      sparse_scatter_add_cuda(outputBuffer, output, indicePairs[i][!inverse], nHot);
+      sparse_scatter_add_cuda(outputBuffer, output, indicePairs[!inverse][i],
+                              nHot);
     }
 #endif
     else {
       TV_ASSERT_INVALID_ARG(false, "unknown device type");
     }
-    // totalSAddTime += timer.report() / 1000.0;
   }
-
-  // std::cout << "gather time " << totalGatherTime << std::endl;
-  // std::cout << "gemm time " << totalGEMMTime << std::endl;
-  // std::cout << "scatteradd time " << totalSAddTime << std::endl;
   return output;
 }
-
 
 std::vector<torch::Tensor>
 indiceConvBackward(torch::Tensor features, torch::Tensor filters,
@@ -215,7 +220,7 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
 
   auto device = features.device().type();
   auto ndim = filters.dim() - 2;
-  auto kernelVolume = indicePairs.size(0);
+  auto kernelVolume = indiceNum.size(0);
   auto numInPlanes = features.size(1);
   auto numOutPlanes = filters.size(ndim + 1);
   auto indicePairNumCpu = indiceNum.to({torch::kCPU});
@@ -248,13 +253,13 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
       continue;
     }
     if (device == torch::kCPU) {
-      sparse_gather_cpu(inputBuffer, features, indicePairs[i][inverse], nHot);
-      sparse_gather_cpu(outputBuffer, outGrad, indicePairs[i][!inverse], nHot);
+      sparse_gather_cpu(inputBuffer, features, indicePairs[inverse][i], nHot);
+      sparse_gather_cpu(outputBuffer, outGrad, indicePairs[!inverse][i], nHot);
     }
 #ifdef TV_CUDA
     else if (device == torch::kCUDA) {
-      sparse_gather_cuda(inputBuffer, features, indicePairs[i][inverse], nHot);
-      sparse_gather_cuda(outputBuffer, outGrad, indicePairs[i][!inverse], nHot);
+      sparse_gather_cuda(inputBuffer, features, indicePairs[inverse][i], nHot);
+      sparse_gather_cuda(outputBuffer, outGrad, indicePairs[!inverse][i], nHot);
     }
 #endif
     else {
@@ -263,18 +268,20 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
 
     auto filterGradSub = filtersGrad[i];
     auto outputBufferBlob = torch::from_blob(outputBuffer.data_ptr(),
-                                              {nHot, numOutPlanes}, options);
-    auto inputBufferBlob = torch::from_blob(inputBuffer.data_ptr(),
-                                            {nHot, numInPlanes}, options);
+                                             {nHot, numOutPlanes}, options);
+    auto inputBufferBlob =
+        torch::from_blob(inputBuffer.data_ptr(), {nHot, numInPlanes}, options);
 
     torch::mm_out(filterGradSub, inputBufferBlob.t(), outputBufferBlob);
     torch::mm_out(inputBufferBlob, outputBufferBlob, filters[i].t());
     if (device == torch::kCPU) {
-      sparse_scatter_add_cpu(inputBuffer, inputGrad, indicePairs[i][inverse], nHot);
+      sparse_scatter_add_cpu(inputBuffer, inputGrad, indicePairs[inverse][i],
+                             nHot);
     }
 #ifdef TV_CUDA
     else if (device == torch::kCUDA) {
-      sparse_scatter_add_cuda(inputBuffer, inputGrad, indicePairs[i][inverse], nHot);
+      sparse_scatter_add_cuda(inputBuffer, inputGrad, indicePairs[inverse][i],
+                              nHot);
     }
 #endif
     else {
@@ -283,6 +290,5 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
   }
   return {inputGrad, filtersGrad.view(filterShape)};
 }
-
 
 } // namespace spconv

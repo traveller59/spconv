@@ -21,87 +21,14 @@
 #include <utility/timer.h>
 
 namespace spconv {
-template <typename T>
 torch::Tensor indiceMaxPool(torch::Tensor features, torch::Tensor indicePairs,
-                            torch::Tensor indiceNum, int64_t numAct) {
-  auto device = features.device().type();
-  auto kernelVolume = indicePairs.size(0);
-  auto numInPlanes = features.size(1);
-  auto indicePairNumCpu = indiceNum.to({torch::kCPU});
-  auto options =
-      torch::TensorOptions().dtype(features.dtype()).device(features.device());
-  torch::Tensor output = torch::zeros({numAct, numInPlanes}, options);
-  double totalTime = 0;
-  for (int i = 0; i < kernelVolume; ++i) {
-    auto nHot = indicePairNumCpu.data_ptr<int>()[i];
-    if (nHot <= 0) {
-      continue;
-    }
-    // auto timer = spconv::CudaContextTimer<>();
-    if (device == torch::kCPU) {
-      functor::SparseMaxPoolForwardFunctor<tv::CPU, T, int> forwardFtor;
-      forwardFtor(tv::CPU(), tv::torch2tv<T>(output),
-                  tv::torch2tv<const T>(features),
-                  tv::torch2tv<const int>(indicePairs).subview(i), nHot);
-    }
-#ifdef TV_CUDA
-    else if (device == torch::kCUDA) {
-      functor::SparseMaxPoolForwardFunctor<tv::GPU, T, int> forwardFtor;
-      forwardFtor(tv::TorchGPU(), tv::torch2tv<T>(output),
-                  tv::torch2tv<const T>(features),
-                  tv::torch2tv<const int>(indicePairs).subview(i), nHot);
-      TV_CHECK_CUDA_ERR();
-    }
-#endif
-    else {
-      TV_ASSERT_INVALID_ARG(false, "unknown device type");
-    }
-    // totalTime += timer.report() / 1000.0;
-  }
-  // std::cout << "maxpool forward time " << totalTime << std::endl;
-  return output;
-}
+                            torch::Tensor indiceNum, int64_t numAct);
 
-template <typename T>
-torch::Tensor
-indiceMaxPoolBackward(torch::Tensor features, torch::Tensor outFeatures,
-                      torch::Tensor outGrad, torch::Tensor indicePairs,
-                      torch::Tensor indiceNum) {
-  auto device = features.device().type();
-  auto numInPlanes = features.size(1);
-  auto indicePairNumCpu = indiceNum.to({torch::kCPU});
-  auto options =
-      torch::TensorOptions().dtype(features.dtype()).device(features.device());
-  torch::Tensor inputGrad = torch::zeros(features.sizes(), options);
-  auto kernelVolume = indicePairs.size(0);
-  for (int i = 0; i < kernelVolume; ++i) {
-    auto nHot = indicePairNumCpu.data_ptr<int>()[i];
-    if (nHot <= 0) {
-      continue;
-    }
-    if (device == torch::kCPU) {
-      functor::SparseMaxPoolBackwardFunctor<tv::CPU, T, int> backwardFtor;
-      backwardFtor(tv::CPU(), tv::torch2tv<const T>(outFeatures),
-                   tv::torch2tv<const T>(features),
-                   tv::torch2tv<const T>(outGrad), tv::torch2tv<T>(inputGrad),
-                   tv::torch2tv<const int>(indicePairs).subview(i), nHot);
-    }
-#ifdef TV_CUDA
-    else if (device == torch::kCUDA) {
-      functor::SparseMaxPoolBackwardFunctor<tv::GPU, T, int> backwardFtor;
-      backwardFtor(tv::TorchGPU(), tv::torch2tv<const T>(outFeatures),
-                   tv::torch2tv<const T>(features),
-                   tv::torch2tv<const T>(outGrad), tv::torch2tv<T>(inputGrad),
-                   tv::torch2tv<const int>(indicePairs).subview(i), nHot);
-      TV_CHECK_CUDA_ERR();
-    }
-#endif
-    else {
-      TV_ASSERT_INVALID_ARG(false, "unknown device type");
-    }
-  }
-  return inputGrad;
-}
+torch::Tensor indiceMaxPoolBackward(torch::Tensor features,
+                                    torch::Tensor outFeatures,
+                                    torch::Tensor outGrad,
+                                    torch::Tensor indicePairs,
+                                    torch::Tensor indiceNum);
 
 } // namespace spconv
 

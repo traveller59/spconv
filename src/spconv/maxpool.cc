@@ -17,66 +17,66 @@
 
 namespace spconv {
 
-namespace functor {
-template <typename T, typename Index>
-struct SparseMaxPoolForwardFunctor<tv::CPU, T, Index> {
-  void operator()(const tv::CPU &d, tv::TensorView<T> outFeatures,
-                  tv::TensorView<const T> inFeatures,
-                  tv::TensorView<const Index> indices, int size) {
-    int stride = outFeatures.dim(1);
-    auto outFeaturesData = outFeatures.data();
-    auto inFeaturesData = inFeatures.data();
-    auto indicesIn = indices.subview(0).data();
-    auto indicesOut = indices.subview(1).data();
-    Index idxi, idxo;
-    for (int row = 0; row < size; row++) {
-      idxi = indicesIn[row] * stride;
-      idxo = indicesOut[row] * stride;
-      for (int plane = 0; plane < stride; ++plane)
-        if (outFeaturesData[idxo + plane] < inFeaturesData[idxi + plane])
-          outFeaturesData[idxo + plane] = inFeaturesData[idxi + plane];
-    }
-  }
-};
+using float_types_t = tv::mp_list<float, double, at::Half>;
+using int_types_t = tv::mp_list<int32_t, int64_t>;
 
-template <typename T, typename Index>
-struct SparseMaxPoolBackwardFunctor<tv::CPU, T, Index> {
-  void operator()(const tv::CPU &d, tv::TensorView<const T> outFeatures,
-                  tv::TensorView<const T> inFeatures,
-                  tv::TensorView<const T> dout, tv::TensorView<T> din,
-                  tv::TensorView<const Index> indices, int size) {
-    int stride = outFeatures.dim(1);
-    auto outFeaturesData = outFeatures.data();
-    auto inFeaturesData = inFeatures.data();
-    auto doutData = dout.data();
-    auto dinData = din.data();
-    auto indicesIn = indices.subview(0).data();
-    auto indicesOut = indices.subview(1).data();
-    Index idxi, idxo;
-    for (int row = 0; row < size; row++) {
-      idxi = indicesIn[row] * stride;
-      idxo = indicesOut[row] * stride;
-      for (int plane = 0; plane < stride; ++plane)
-        if (outFeaturesData[idxo + plane] == inFeaturesData[idxi + plane])
-          dinData[idxi + plane] += doutData[idxo + plane];
-    }
-  }
-};
-} // namespace functor
+void maxpool_fwd_cpu(torch::Tensor outFeatures, torch::Tensor inFeatures,
+                     torch::Tensor indicesIn, torch::Tensor indicesOut,
+                     int size) {
+  if (size <= 0)
+    return;
+  int stride = inFeatures.size(1);
+  auto dtype = inFeatures.scalar_type();
+  auto int_dtype = indicesIn.scalar_type();
+  tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
+    using T = decltype(TValue);
+    tv::DispatchTorch<int_types_t>()(int_dtype, [&](auto IndexValue) {
+      using Index = decltype(IndexValue);
+      auto outFeaturesData = outFeatures.data_ptr<T>();
+      auto inFeaturesData = inFeatures.data_ptr<T>();
+      auto indicesInData = indicesIn.data_ptr<Index>();
+      auto indicesOutData = indicesOut.data_ptr<Index>();
+      Index idxi, idxo;
+      for (int row = 0; row < size; row++) {
+        idxi = indicesInData[row] * stride;
+        idxo = indicesOutData[row] * stride;
+        for (int plane = 0; plane < stride; ++plane)
+          if (outFeaturesData[idxo + plane] < inFeaturesData[idxi + plane])
+            outFeaturesData[idxo + plane] = inFeaturesData[idxi + plane];
+      }
+    });
+  });
+}
 
-#define DECLARE_CPU_SPECS_T_INDEX(T, Index)                                    \
-  template struct functor::SparseMaxPoolForwardFunctor<tv::CPU, T, Index>;     \
-  template struct functor::SparseMaxPoolBackwardFunctor<tv::CPU, T, Index>;
-
-#define DECLARE_CPU_SPECS(T)                                                   \
-  DECLARE_CPU_SPECS_T_INDEX(T, int);                                           \
-  DECLARE_CPU_SPECS_T_INDEX(T, long);
-
-DECLARE_CPU_SPECS(float);
-DECLARE_CPU_SPECS(double);
-DECLARE_CPU_SPECS(at::Half);
-
-#undef DECLARE_CPU_SPECS
-#undef DECLARE_CPU_SPECS_T_INDEX
+void maxpool_bwd_cpu(torch::Tensor outFeatures, torch::Tensor inFeatures,
+                     torch::Tensor dout, torch::Tensor din,
+                     torch::Tensor indicesIn, torch::Tensor indicesOut,
+                     int size) {
+  if (size <= 0)
+    return;
+  int stride = inFeatures.size(1);
+  auto dtype = inFeatures.scalar_type();
+  auto int_dtype = indicesIn.scalar_type();
+  tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
+    using T = decltype(TValue);
+    tv::DispatchTorch<int_types_t>()(int_dtype, [&](auto IndexValue) {
+      using Index = decltype(IndexValue);
+      auto outFeaturesData = outFeatures.data_ptr<T>();
+      auto inFeaturesData = inFeatures.data_ptr<T>();
+      auto doutData = dout.data_ptr<T>();
+      auto dinData = din.data_ptr<T>();
+      auto indicesInData = indicesIn.data_ptr<Index>();
+      auto indicesOutData = indicesOut.data_ptr<Index>();
+      Index idxi, idxo;
+      for (int row = 0; row < size; row++) {
+        idxi = indicesInData[row] * stride;
+        idxo = indicesOutData[row] * stride;
+        for (int plane = 0; plane < stride; ++plane)
+          if (outFeaturesData[idxo + plane] == inFeaturesData[idxi + plane])
+            dinData[idxi + plane] += doutData[idxo + plane];
+      }
+    });
+  });
+}
 
 } // namespace spconv

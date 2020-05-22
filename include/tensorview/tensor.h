@@ -305,7 +305,7 @@ template <> struct TypeToDtypeTraits<const bool> {
 
 template <class T> constexpr DType type_v = detail::TypeToDtypeTraits<T>::dtype;
 
-template <class... Ts, typename F> void dispatch(DType t, F &&f) {
+template <class... Ts, typename F> bool dispatch_noexcept(DType t, F &&f) {
   static_assert(sizeof...(Ts) > 0, "you need to provide at least one type");
   bool notFound = true;
   mp_for_each<mp_list<Ts...>>([=, &notFound, &f](auto I) {
@@ -314,7 +314,11 @@ template <class... Ts, typename F> void dispatch(DType t, F &&f) {
       notFound = false;
     }
   });
-  if (notFound) {
+  return !notFound;
+}
+
+template <class... Ts, typename F> void dispatch(DType t, F &&f) {
+  if (!dispatch_noexcept<Ts...>(t, std::forward<F>(f))) {
     std::stringstream ss;
     mp_for_each<mp_list<Ts...>>([=, &ss](auto I) {
       ss << detail::TypeToString<decltype(I)>::value << " ";
@@ -341,8 +345,7 @@ template <typename T, T... Is, typename F> void dispatch_scalar(T idx, F &&f) {
   }
 }
 
-template <int... Is, typename F> void dispatch_int(int idx, F &&f) {
-  // used for kernel parameter selection
+template <int... Is, typename F> bool dispatch_int_noexcept(int idx, F &&f) {
   static_assert(sizeof...(Is) > 0,
                 "you need to provide at least one candidate");
   bool notFound = true;
@@ -352,7 +355,25 @@ template <int... Is, typename F> void dispatch_int(int idx, F &&f) {
       notFound = false;
     }
   });
-  if (notFound) {
+  return !notFound;
+}
+
+template <int... Is, typename F, class BinaryPredicate>
+bool dispatch_int_noexcept(int idx, BinaryPredicate p, F &&f) {
+  static_assert(sizeof...(Is) > 0,
+                "you need to provide at least one candidate");
+  bool notFound = true;
+  mp_for_each<mp_list_c<int, Is...>>([=, &notFound, &f](auto I) {
+    if (p(idx, decltype(I)::value) && notFound) {
+      std::forward<F>(f)(I);
+      notFound = false;
+    }
+  });
+  return !notFound;
+}
+
+template <int... Is, typename F> void dispatch_int(int idx, F &&f) {
+  if (!dispatch_int_noexcept<Is...>(idx, std::forward<F>(f))) {
     std::stringstream ss;
     mp_for_each<mp_list_c<int, Is...>>(
         [=, &ss](auto I) { ss << decltype(I)::value << " "; });
@@ -363,16 +384,7 @@ template <int... Is, typename F> void dispatch_int(int idx, F &&f) {
 template <int... Is, typename F, class BinaryPredicate>
 void dispatch_int(int idx, BinaryPredicate p, F &&f) {
   // BinaryPredicate: BinaryPredicate(idx, candidate)
-  static_assert(sizeof...(Is) > 0,
-                "you need to provide at least one candidate");
-  bool notFound = true;
-  mp_for_each<mp_list_c<int, Is...>>([=, &notFound, &f](auto I) {
-    if (p(idx, decltype(I)::value) && notFound) {
-      std::forward<F>(f)(I);
-      notFound = false;
-    }
-  });
-  if (notFound) {
+  if (!dispatch_int_noexcept<Is...>(idx, p, std::forward<F>(f))) {
     std::stringstream ss;
     mp_for_each<mp_list_c<int, Is...>>(
         [=, &ss](auto I) { ss << decltype(I)::value << " "; });
@@ -397,13 +409,18 @@ struct Dispatch<T<Args...>> {
 
 template <class T> struct DispatchInt;
 
-template <template<class...> class Tin, template<class, int> class T, int... Ints>
-struct DispatchInt<Tin<T<int, Ints>...>> {
+// Args should be std::integral_constant<int, value>
+// you need to use type_container<std::integral_constant<int, value>...>
+// as template parameter of DispatchInt.
+// tv::mp_list_c is ok.
+template <template <class...> class T, class... Args>
+struct DispatchInt<T<Args...>> {
   template <typename F> inline void operator()(int t, F &&f) {
-    return dispatch_int<Ints...>(t, std::forward<F>(f));
+    return dispatch_int<Args::value...>(t, std::forward<F>(f));
   }
-  template <typename F, typename BinaryPredicate> inline void operator()(int t, BinaryPredicate p, F &&f) {
-    return dispatch_int<Ints...>(t, p, std::forward<F>(f));
+  template <typename F, typename BinaryPredicate>
+  inline void operator()(int t, BinaryPredicate p, F &&f) {
+    return dispatch_int<Args::value...>(t, p, std::forward<F>(f));
   }
 };
 

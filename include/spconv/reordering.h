@@ -18,15 +18,16 @@
 #include <torch/script.h>
 
 namespace spconv {
+
 void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
                         torch::Tensor indices, int size);
 void sparse_scatter_add_cuda(torch::Tensor buffer, torch::Tensor outFeatures,
                              torch::Tensor indices, int size);
 
 void sparse_gather_cpu(torch::Tensor buffer, torch::Tensor features,
-                        torch::Tensor indices, int size);
+                       torch::Tensor indices, int size);
 void sparse_scatter_add_cpu(torch::Tensor buffer, torch::Tensor outFeatures,
-                             torch::Tensor indices, int size);
+                            torch::Tensor indices, int size);
 
 } // namespace spconv
 

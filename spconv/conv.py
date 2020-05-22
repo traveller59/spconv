@@ -157,7 +157,7 @@ class SparseConvolution(SparseModule):
         if self.inverse:
             assert datas is not None and self.indice_key is not None
             _, outids, indice_pairs, indice_pair_num, out_spatial_shape = datas
-            assert indice_pairs.shape[0] == np.prod(
+            assert indice_pair_num.shape[0] == np.prod(
                 self.kernel_size
             ), "inverse conv must have same kernel size as its couple conv"
         else:

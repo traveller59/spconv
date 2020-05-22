@@ -14,26 +14,31 @@
 
 #ifndef SPARSE_MAXPOOL_FUNCTOR_H_
 #define SPARSE_MAXPOOL_FUNCTOR_H_
-#include <tensorview/tensorview.h>
+#include <tensorview/mp_helper.h>
+#include <tensorview/tensor.h>
+#include <tensorview/torch_utils.h>
+#include <torch/script.h>
 
 namespace spconv {
-namespace functor {
-template <typename Device, typename T, typename Index>
-struct SparseMaxPoolForwardFunctor {
-  void operator()(const Device &d, tv::TensorView<T> outFeatures,
-                  tv::TensorView<const T> inFeatures,
-                  tv::TensorView<const Index> indices, int size);
-};
 
-template <typename Device, typename T, typename Index>
-struct SparseMaxPoolBackwardFunctor {
-  void operator()(const Device &d, tv::TensorView<const T> outFeatures,
-                  tv::TensorView<const T> inFeatures,
-                  tv::TensorView<const T> dout, tv::TensorView<T> din,
-                  tv::TensorView<const Index> indices, int size);
-};
+void maxpool_bwd_cpu(torch::Tensor outFeatures, torch::Tensor inFeatures,
+                     torch::Tensor dout, torch::Tensor din,
+                     torch::Tensor indicesIn, torch::Tensor indicesOut,
+                     int size);
 
-} // namespace functor
+void maxpool_fwd_cpu(torch::Tensor outFeatures, torch::Tensor inFeatures,
+                     torch::Tensor indicesIn, torch::Tensor indicesOut,
+                     int size);
+
+void maxpool_bwd_cuda(torch::Tensor outFeatures, torch::Tensor inFeatures,
+                      torch::Tensor dout, torch::Tensor din,
+                      torch::Tensor indicesIn, torch::Tensor indicesOut,
+                      int size);
+
+void maxpool_fwd_cuda(torch::Tensor outFeatures, torch::Tensor inFeatures,
+                      torch::Tensor indicesIn, torch::Tensor indicesOut,
+                      int size);
+
 } // namespace spconv
 
 #endif

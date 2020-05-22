@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <spconv/fused_spconv_ops.h>
 #include <spconv/nms_ops.h>
 #include <spconv/pillar_scatter_ops.h>
 #include <spconv/pool_ops.h>
 #include <spconv/spconv_ops.h>
 #include <torch/script.h>
-#include <spconv/fused_spconv_ops.h>
 
 static auto registry =
     torch::RegisterOperators()
@@ -31,14 +31,9 @@ static auto registry =
             &spconv::getIndicePairPreGrid<3>)
         .op("spconv::indice_conv", &spconv::indiceConv)
         .op("spconv::indice_conv_backward", &spconv::indiceConvBackward)
-        .op("spconv::fused_indice_conv_bn",
-            &spconv::fusedIndiceConvBatchNorm)
-        .op("spconv::indice_maxpool_fp32", &spconv::indiceMaxPool<float>)
-        .op("spconv::indice_maxpool_backward_fp32",
-            &spconv::indiceMaxPoolBackward<float>)
-        .op("spconv::indice_maxpool_half", &spconv::indiceMaxPool<at::Half>)
-        .op("spconv::indice_maxpool_backward_half",
-            &spconv::indiceMaxPoolBackward<at::Half>)
+        .op("spconv::fused_indice_conv_bn", &spconv::fusedIndiceConvBatchNorm)
+        .op("spconv::indice_maxpool", &spconv::indiceMaxPool)
+        .op("spconv::indice_maxpool_backward", &spconv::indiceMaxPoolBackward)
         .op("spconv::nms", &spconv::nonMaxSuppression<float>)
         .op("spconv::pillar_scatter_float", &spconv::pointPillarScatter<float>)
         .op("spconv::pillar_scatter_half",
