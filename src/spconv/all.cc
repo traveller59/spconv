@@ -30,6 +30,7 @@ static auto registry =
         .op("spconv::get_indice_pairs_grid_3d",
             &spconv::getIndicePairPreGrid<3>)
         .op("spconv::indice_conv", &spconv::indiceConv)
+        .op("spconv::indice_conv_batch", &spconv::indiceConvBatch)
         .op("spconv::indice_conv_backward", &spconv::indiceConvBackward)
         .op("spconv::fused_indice_conv_bn", &spconv::fusedIndiceConvBatchNorm)
         .op("spconv::indice_maxpool", &spconv::indiceMaxPool)

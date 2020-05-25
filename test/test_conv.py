@@ -720,6 +720,6 @@ def main_subm():
 
 
 if __name__ == '__main__':
-    main_subm()
+    main()
     # unittest.main()
     # TestSpConv().testSpConv3d()

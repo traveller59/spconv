@@ -161,4 +161,154 @@ void sparse_scatter_add_cuda(torch::Tensor buffer, torch::Tensor outFeatures,
   });
 }
 
+void batch_sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
+                              torch::Tensor indices, int size) {
+  // indices: [volume, inds_stride]
+  // buffer: [volume, num_points, num_features]
+  // size == volume * num_points
+  if (size <= 0)
+    return;
+  int numPlanes = features.size(1);
+  auto stream = at::cuda::getCurrentCUDAStream();
+  auto dtype = features.scalar_type();
+  auto inds_dtype = indices.scalar_type();
+  int inds_stride = indices.size(1);
+  int feature_stride = buffer.size(1);
+  tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
+    using T = decltype(TValue);
+    using vecload_type_t =
+        std::conditional_t<std::is_same<T, at::Half>::value, int2, int4>;
+    using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
+    tv::DispatchTorch<int_types_t>()(inds_dtype, [&](auto IndexValue) {
+      using Index = decltype(IndexValue);
+      bool notFound = true;
+      constexpr int vecloadFactor = sizeof(vecload_type_t) / sizeof(T);
+      
+      tv::mp_for_each<kernel_block_t>(
+          [=, &buffer, &features, &indices, &notFound](auto NumTLP) {
+            constexpr int NumILP = NumTLP / 4;
+            // constexpr int NumILP = NumTLP / (64 / (NumTLP / vecloadFactor));
+            int nHotBlock = (size / NumTLP) * NumTLP;
+            if (notFound) {
+              if (numPlanes % NumTLP == 0) {
+                if (nHotBlock >= NumTLP) {
+                  batchGatherVecBlockKernel<T, Index, int(NumTLP), NumILP,
+                                            vecload_type_t>
+                      <<<dim3(numPlanes / NumTLP, size / NumTLP),
+                         dim3(NumTLP / vecloadFactor, NumTLP / NumILP), 0,
+                         stream>>>(buffer.data_ptr<T>(), features.data_ptr<T>(),
+                                   indices.data_ptr<Index>(), nHotBlock,
+                                   numPlanes / vecloadFactor, inds_stride,
+                                   feature_stride);
+
+                  TV_CHECK_CUDA_ERR();
+                }
+                if (size - nHotBlock > 0) {
+                auto indices_offset = (nHotBlock / feature_stride) * inds_stride + nHotBlock % feature_stride;
+                  batchGatherVecKernel<T, Index, int(NumTLP), NumILP, vecload_type_t>
+                      <<<dim3(1, numPlanes / NumTLP),
+                         dim3(NumTLP / NumILP, NumTLP / vecloadFactor), 0,
+                         stream>>>(buffer.data_ptr<T>() + nHotBlock * numPlanes,
+                                   features.data_ptr<T>(),
+                                   indices.data_ptr<Index>() + indices_offset,
+                                   size - nHotBlock, nHotBlock, numPlanes / vecloadFactor,
+                                   inds_stride, feature_stride);
+                  TV_CHECK_CUDA_ERR();
+                }
+                notFound = false;
+              }
+            }
+          });
+      
+      if (notFound) {
+        constexpr int NumTLP = 64;
+        constexpr int NumILP = NumTLP / 4;
+        batchGatherGenericKernel<T, Index, NumTLP, NumILP>
+            <<<dim3(tv::cuda::DivUp(size, NumTLP),
+                    tv::cuda::DivUp(numPlanes, NumTLP)),
+               dim3(NumTLP / NumILP, NumTLP), 0, stream>>>(
+                buffer.data_ptr<T>(), features.data_ptr<T>(),
+                indices.data_ptr<Index>(), size, numPlanes, inds_stride,
+                feature_stride);
+        TV_CHECK_CUDA_ERR();
+      }
+    });
+  });
+}
+
+void batch_sparse_scatter_add_cuda(torch::Tensor buffer,
+                                   torch::Tensor outFeatures,
+                                   torch::Tensor indices, int size) {
+  // indices: [volume, inds_stride]
+  // buffer: [volume, num_points, num_features]
+  // size == volume * num_points
+  if (size <= 0)
+    return;
+  int numPlanes = outFeatures.size(1);
+  auto stream = at::cuda::getCurrentCUDAStream();
+  auto dtype = outFeatures.scalar_type();
+  auto inds_dtype = indices.scalar_type();
+  int inds_stride = indices.size(1);
+  int feature_stride = buffer.size(1);
+
+  tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
+    using T = decltype(TValue);
+    using vecload_type_t =
+        std::conditional_t<std::is_same<T, at::Half>::value, int2, int4>;
+    using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
+    tv::DispatchTorch<int_types_t>()(inds_dtype, [&](auto IndexValue) {
+      using Index = decltype(IndexValue);
+      bool notFound = true;
+      constexpr int vecloadFactor = 1; // important for half.
+      
+      tv::mp_for_each<kernel_block_t>([=, &outFeatures, &buffer, &indices,
+                                       &notFound](auto NumTLP) {
+        // constexpr int NumILP = NumTLP / (64 / (NumTLP /
+        // vecloadFactor));
+        constexpr int NumILP = NumTLP / 4;
+        int nHotBlock = (size / NumTLP) * NumTLP;
+        if (notFound) {
+          if (numPlanes % NumTLP == 0) {
+            if (nHotBlock >= NumTLP) {
+              batchScatterAddBlockKernel<T, Index, int(NumTLP), NumILP>
+                  <<<dim3(numPlanes / NumTLP, size / NumTLP),
+                     dim3(NumTLP / vecloadFactor, NumTLP / NumILP), 0,
+                     stream>>>(outFeatures.data_ptr<T>(), buffer.data_ptr<T>(),
+                               indices.data_ptr<Index>(), nHotBlock,
+                               numPlanes / vecloadFactor, inds_stride,
+                                  feature_stride);
+              TV_CHECK_CUDA_ERR();
+            }
+            if (size - nHotBlock > 0) {
+              // int indices_offset = (nHotBlock / feature_stride) * inds_stride + nHotBlock % feature_stride;
+              batchScatterAddGenericKernel<T, Index, int(NumTLP), NumILP>
+                  <<<dim3(1, numPlanes / NumTLP), dim3(NumTLP / NumILP, NumTLP),
+                     0, stream>>>(outFeatures.data_ptr<T>(),
+                                  buffer.data_ptr<T>() + nHotBlock * numPlanes,
+                                  indices.data_ptr<Index>(),
+                                  size - nHotBlock, nHotBlock, numPlanes, inds_stride,
+                                  feature_stride);
+              TV_CHECK_CUDA_ERR();
+            }
+            notFound = false;
+          }
+        }
+      });
+      
+      if (notFound) {
+        constexpr int NumTLP = 64;
+        constexpr int NumILP = NumTLP / 4;
+        batchScatterAddGenericKernel<T, Index, NumTLP, NumILP>
+            <<<dim3(tv::cuda::DivUp(size, NumTLP),
+                    tv::cuda::DivUp(numPlanes, NumTLP)),
+               dim3(NumTLP / NumILP, NumTLP), 0, stream>>>(
+                outFeatures.data_ptr<T>(), buffer.data_ptr<T>(),
+                indices.data_ptr<Index>(), size, 0, numPlanes, inds_stride,
+                feature_stride);
+        TV_CHECK_CUDA_ERR();
+      }
+    });
+  });
+}
+
 } // namespace spconv

@@ -19,6 +19,12 @@
 
 namespace spconv {
 
+void batch_sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
+                                torch::Tensor indices, int size);
+void batch_sparse_scatter_add_cuda(torch::Tensor buffer, torch::Tensor outFeatures,
+                                    torch::Tensor indices, int size);
+
+
 void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
                         torch::Tensor indices, int size);
 void sparse_scatter_add_cuda(torch::Tensor buffer, torch::Tensor outFeatures,

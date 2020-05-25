@@ -338,6 +338,9 @@ std::vector<torch::Tensor> getIndicePairPreGrid(
     return {outInds.slice(0, 0, numActOut), indicePairs, indiceNum};
   }
 }
+torch::Tensor indiceConvBatch(torch::Tensor features, torch::Tensor filters,
+                         torch::Tensor indicePairs, torch::Tensor indiceNum,
+                         int64_t numActOut, int64_t _inverse, int64_t _subM);
 
 torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
                          torch::Tensor indicePairs, torch::Tensor indiceNum,

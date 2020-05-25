@@ -107,7 +107,7 @@ def indice_conv(features,
                 num_activate_out,
                 inverse=False,
                 subm=False):
-    return torch.ops.spconv.indice_conv(features, filters, indice_pairs,
+    return torch.ops.spconv.indice_conv_batch(features, filters, indice_pairs,
                                         indice_pair_num, num_activate_out,
                                         int(inverse), int(subm))
 
