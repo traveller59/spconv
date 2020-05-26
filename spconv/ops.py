@@ -16,6 +16,11 @@ import torch
 
 import spconv
 
+from enum import Enum 
+
+class ConvAlgo(Enum):
+    Native = 0
+    BatchGemm = 1
 
 def get_conv_output_size(input_size, kernel_size, stride, padding, dilation):
     ndim = len(input_size)
@@ -106,10 +111,11 @@ def indice_conv(features,
                 indice_pair_num,
                 num_activate_out,
                 inverse=False,
-                subm=False):
-    return torch.ops.spconv.indice_conv_batch(features, filters, indice_pairs,
+                subm=False,
+                algo=ConvAlgo.Native.value):
+    return torch.ops.spconv.indice_conv(features, filters, indice_pairs,
                                         indice_pair_num, num_activate_out,
-                                        int(inverse), int(subm))
+                                        int(inverse), int(subm), algo)
 
 
 def fused_indice_conv(features, filters, bias, indice_pairs, indice_pair_num,
@@ -126,10 +132,11 @@ def indice_conv_backward(features,
                          indice_pairs,
                          indice_pair_num,
                          inverse=False,
-                         subm=False):
+                         subm=False,
+                algo=ConvAlgo.Native.value):
     return torch.ops.spconv.indice_conv_backward(features, filters, out_bp,
                                                  indice_pairs, indice_pair_num,
-                                                 int(inverse), int(subm))
+                                                 int(inverse), int(subm), algo)
 
 
 def indice_maxpool(features, indice_pairs, indice_pair_num, num_activate_out):

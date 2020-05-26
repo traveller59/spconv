@@ -19,6 +19,7 @@ import numpy as np
 import torch
 
 from spconv import ops, utils
+from spconv.ops import ConvAlgo
 from spconv.conv import (SparseConv2d, SparseConv3d, SparseConvTranspose2d,
                          SparseConvTranspose3d, SparseInverseConv2d,
                          SparseInverseConv3d, SubMConv2d, SubMConv3d)
@@ -81,7 +82,7 @@ class SparseConvTensor(object):
     def dense(self, channels_first=True):
         output_shape = [self.batch_size] + list(
             self.spatial_shape) + [self.features.shape[1]]
-        res = scatter_nd(self.indices.long(), self.features, output_shape)
+        res = scatter_nd(self.indices.long().to(self.features.device), self.features, output_shape)
         if not channels_first:
             return res
         ndim = len(self.spatial_shape)

@@ -83,7 +83,7 @@ getIndicePairV2(torch::Tensor indices, int64_t batchSize,
     }
 #endif
     else {
-      TV_ASSERT_INVALID_ARG(false, "unknown device type");
+      TV_THROW_INVALID_ARG("unknown device type");
     }
     return {indices, indicePairs, indiceNum};
   } else {
@@ -127,7 +127,7 @@ getIndicePairV2(torch::Tensor indices, int64_t batchSize,
     }
 #endif
     else {
-      TV_ASSERT_INVALID_ARG(false, "unknown device type");
+      TV_THROW_INVALID_ARG("unknown device type");
     }
     return {outInds.slice(0, 0, numActOut), indicePairs, indiceNum};
   }
@@ -135,12 +135,27 @@ getIndicePairV2(torch::Tensor indices, int64_t batchSize,
 
 torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
                          torch::Tensor indicePairs, torch::Tensor indiceNum,
-                         int64_t numActOut, int64_t _inverse, int64_t _subM) {
+                         int64_t numActOut, int64_t _inverse, int64_t _subM,
+                         int64_t algo) {
+  auto kernelVolume = indiceNum.size(0);
+  switch (algo) {
+  case kBatchGemm: {
+    if (kernelVolume != 1) {
+      return indiceConvBatch(features, filters, indicePairs, indiceNum,
+                             numActOut, _inverse, _subM);
+    } else {
+      break;
+    }
+  }
+  case kNative:
+    break;
+  default:
+    TV_THROW_RT_ERR("unknown algo");
+  }
   bool subM = _subM != 0;
   bool inverse = _inverse != 0;
   auto device = features.device().type();
   auto ndim = filters.dim() - 2;
-  auto kernelVolume = indiceNum.size(0);
   auto numInPlanes = features.size(1);
   auto numOutPlanes = filters.size(ndim + 1);
   auto indicePairNumCpu = indiceNum.to({torch::kCPU});
@@ -157,7 +172,7 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
   torch::Tensor inputBuffer =
       torch::zeros({indicePairMaxSize, numInPlanes}, options);
   torch::Tensor outputBuffer =
-      torch::zeros({indicePairMaxSize, numOutPlanes}, options);
+      torch::empty({indicePairMaxSize, numOutPlanes}, options);
   filters = filters.view({-1, numInPlanes, numOutPlanes});
   if (subM) { // the center index of subm conv don't need gather and scatter
     // add.
@@ -191,7 +206,7 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
     }
 #endif
     else {
-      TV_ASSERT_INVALID_ARG(false, "unknown device type");
+      TV_THROW_INVALID_ARG("unknown device type");
     }
     torch::mm_out(outputBufferBlob, inputBufferBlob, filters[i]);
     if (device == torch::kCPU) {
@@ -205,7 +220,7 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
     }
 #endif
     else {
-      TV_ASSERT_INVALID_ARG(false, "unknown device type");
+      TV_THROW_INVALID_ARG("unknown device type");
     }
   }
   return output;
@@ -220,33 +235,38 @@ torch::Tensor indiceConvBatch(torch::Tensor features, torch::Tensor filters,
   auto device = features.device().type();
   auto ndim = filters.dim() - 2;
   auto kernelVolume = indiceNum.size(0);
+  TV_ASSERT_INVALID_ARG(kernelVolume > 1, "error");
   auto numInPlanes = features.size(1);
   auto numOutPlanes = filters.size(ndim + 1);
   auto indicePairNumCpu = indiceNum.to({torch::kCPU});
-  auto indicePairMaxSizeIter =
-      std::max_element(indicePairNumCpu.data_ptr<int>(),
+  auto indicePairNumVec =
+      std::vector<int>(indicePairNumCpu.data_ptr<int>(),
                        indicePairNumCpu.data_ptr<int>() + kernelVolume);
-  int indicePairMaxOffset =
-      indicePairMaxSizeIter - indicePairNumCpu.data_ptr<int>();
+  auto indicePairMaxSizeIter =
+      std::max_element(indicePairNumVec.begin(), indicePairNumVec.end());
+  int indicePairMaxOffset = indicePairMaxSizeIter - indicePairNumVec.begin();
   int indicePairMaxSize = *indicePairMaxSizeIter;
+  std::nth_element(indicePairNumVec.begin(), indicePairNumVec.begin() + 1,
+                   indicePairNumVec.end(), std::greater<int>());
+  int indicePairTop2Size = indicePairNumVec[1];
   auto options =
       torch::TensorOptions().dtype(features.dtype()).device(features.device());
+  auto indice_dtype = indicePairs.scalar_type();
   torch::Tensor output = torch::zeros({numActOut, numOutPlanes}, options);
+  // we cant use batch conv in subm directly because
+  // number of indice in the center of filter is much more than other
+  // filter location.
+  // so we first use top2 indice num to do batch conv, then
+  // do native conv in center.
+  int bufferSize = subM ? indicePairTop2Size : indicePairMaxSize;
   torch::Tensor inputBuffer =
-      torch::zeros({kernelVolume, indicePairMaxSize, numInPlanes}, options);
+      torch::zeros({kernelVolume, bufferSize, numInPlanes}, options);
   torch::Tensor outputBuffer =
-      torch::zeros({kernelVolume, indicePairMaxSize, numOutPlanes}, options);
+      torch::empty({kernelVolume, bufferSize, numOutPlanes}, options);
   filters = filters.view({kernelVolume, numInPlanes, numOutPlanes});
-  if (subM) { // the center index of subm conv don't need gather and scatter
-    // add.
-    torch::mm_out(output, features, filters[indicePairMaxOffset]);
-  }
-  double totalGatherTime = 0;
-  double totalGEMMTime = 0;
-  double totalSAddTime = 0;
-  auto size = kernelVolume * indicePairMaxSize;
+  int64_t size = kernelVolume * bufferSize;
   if (device == torch::kCPU) {
-    TV_ASSERT_INVALID_ARG(false, "unknown device type");
+    TV_THROW_INVALID_ARG("unknown device type");
   }
 #ifdef TV_CUDA
   else if (device == torch::kCUDA) {
@@ -254,11 +274,11 @@ torch::Tensor indiceConvBatch(torch::Tensor features, torch::Tensor filters,
   }
 #endif
   else {
-    TV_ASSERT_INVALID_ARG(false, "unknown device type");
+    TV_THROW_INVALID_ARG("unknown device type");
   }
   torch::bmm_out(outputBuffer, inputBuffer, filters);
   if (device == torch::kCPU) {
-    TV_ASSERT_INVALID_ARG(false, "unknown device type");
+    TV_THROW_INVALID_ARG("unknown device type");
   }
 #ifdef TV_CUDA
   else if (device == torch::kCUDA) {
@@ -267,7 +287,54 @@ torch::Tensor indiceConvBatch(torch::Tensor features, torch::Tensor filters,
   }
 #endif
   else {
-    TV_ASSERT_INVALID_ARG(false, "unknown device type");
+    TV_THROW_INVALID_ARG("unknown device type");
+  }
+  if (subM) {
+    auto remain_size = indicePairMaxSize - indicePairTop2Size;
+    if (remain_size <= 0) {
+      return output;
+    }
+    inputBuffer = torch::empty({remain_size, numInPlanes}, options);
+    outputBuffer = torch::empty({remain_size, numOutPlanes}, options);
+    if (device == torch::kCPU) {
+      TV_THROW_INVALID_ARG("unknown device type");
+    }
+#ifdef TV_CUDA
+    else if (device == torch::kCUDA) {
+      tv::dispatch_torch<int32_t, int64_t>(indice_dtype, [&](auto I) {
+        using Index = decltype(I);
+        auto indicePairsRemain = torch::from_blob(
+            indicePairs[inverse][indicePairMaxOffset].data_ptr<Index>() +
+                indicePairTop2Size,
+            {remain_size}, indicePairs.options());
+        sparse_gather_cuda(inputBuffer, features, indicePairsRemain,
+                           remain_size);
+      });
+    }
+#endif
+    else {
+      TV_THROW_INVALID_ARG("unknown device type");
+    }
+    torch::mm_out(outputBuffer, inputBuffer, filters[indicePairMaxOffset]);
+    if (device == torch::kCPU) {
+      TV_THROW_INVALID_ARG("unknown device type");
+    }
+#ifdef TV_CUDA
+    else if (device == torch::kCUDA) {
+      tv::dispatch_torch<int32_t, int64_t>(indice_dtype, [&](auto I) {
+        using Index = decltype(I);
+        auto indicePairsRemain = torch::from_blob(
+            indicePairs[!inverse][indicePairMaxOffset].data_ptr<Index>() +
+                indicePairTop2Size,
+            {remain_size}, indicePairs.options());
+        sparse_scatter_add_cuda(outputBuffer, output, indicePairsRemain,
+                                remain_size);
+      });
+    }
+#endif
+    else {
+      TV_THROW_INVALID_ARG("unknown device type");
+    }
   }
   return output;
 }
@@ -275,13 +342,29 @@ torch::Tensor indiceConvBatch(torch::Tensor features, torch::Tensor filters,
 std::vector<torch::Tensor>
 indiceConvBackward(torch::Tensor features, torch::Tensor filters,
                    torch::Tensor outGrad, torch::Tensor indicePairs,
-                   torch::Tensor indiceNum, int64_t _inverse, int64_t _subM) {
+                   torch::Tensor indiceNum, int64_t _inverse, int64_t _subM,
+                   int64_t algo) {
+  auto kernelVolume = indiceNum.size(0);
+  switch (algo) {
+  case kBatchGemm: {
+    if (kernelVolume != 1) {
+      return indiceConvBackwardBatch(features, filters, outGrad, indicePairs,
+                                     indiceNum, _inverse, _subM);
+    } else {
+      break;
+    }
+  }
+  case kNative:
+    break;
+  default:
+    TV_THROW_RT_ERR("unknown algo");
+  }
+
   bool subM = _subM != 0;
   bool inverse = _inverse != 0;
 
   auto device = features.device().type();
   auto ndim = filters.dim() - 2;
-  auto kernelVolume = indiceNum.size(0);
   auto numInPlanes = features.size(1);
   auto numOutPlanes = filters.size(ndim + 1);
   auto indicePairNumCpu = indiceNum.to({torch::kCPU});
@@ -324,7 +407,7 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
     }
 #endif
     else {
-      TV_ASSERT_INVALID_ARG(false, "unknown device type");
+      TV_THROW_INVALID_ARG("unknown device type");
     }
 
     auto filterGradSub = filtersGrad[i];
@@ -346,9 +429,139 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
     }
 #endif
     else {
-      TV_ASSERT_INVALID_ARG(false, "unknown device type");
+      TV_THROW_INVALID_ARG("unknown device type");
     }
   }
+  return {inputGrad, filtersGrad.view(filterShape)};
+}
+
+std::vector<torch::Tensor>
+indiceConvBackwardBatch(torch::Tensor features, torch::Tensor filters,
+                        torch::Tensor outGrad, torch::Tensor indicePairs,
+                        torch::Tensor indiceNum, int64_t _inverse,
+                        int64_t _subM) {
+  bool subM = _subM != 0;
+  bool inverse = _inverse != 0;
+
+  auto device = features.device().type();
+  auto ndim = filters.dim() - 2;
+  auto kernelVolume = indiceNum.size(0);
+  TV_ASSERT_INVALID_ARG(kernelVolume > 1, "error");
+  auto numInPlanes = features.size(1);
+  auto numOutPlanes = filters.size(ndim + 1);
+  auto indicePairNumCpu = indiceNum.to({torch::kCPU});
+  auto indicePairNumVec =
+      std::vector<int>(indicePairNumCpu.data_ptr<int>(),
+                       indicePairNumCpu.data_ptr<int>() + kernelVolume);
+  auto indicePairMaxSizeIter =
+      std::max_element(indicePairNumVec.begin(), indicePairNumVec.end());
+  int indicePairMaxOffset = indicePairMaxSizeIter - indicePairNumVec.begin();
+  int indicePairMaxSize = *indicePairMaxSizeIter;
+  std::nth_element(indicePairNumVec.begin(), indicePairNumVec.begin() + 1,
+                   indicePairNumVec.end(), std::greater<int>());
+  int indicePairTop2Size = indicePairNumVec[1];
+  auto options =
+      torch::TensorOptions().dtype(features.dtype()).device(features.device());
+  auto indice_dtype = indicePairs.scalar_type();
+  auto filterShape = filters.sizes();
+  torch::Tensor inputGrad = torch::zeros(features.sizes(), options);
+  torch::Tensor filtersGrad = torch::zeros(filterShape, options);
+  int bufferSize = subM ? indicePairTop2Size : indicePairMaxSize;
+  torch::Tensor inputBuffer =
+      torch::zeros({kernelVolume, bufferSize, numInPlanes}, options);
+  torch::Tensor outputBuffer =
+      torch::zeros({kernelVolume, bufferSize, numOutPlanes}, options);
+
+  filters = filters.view({-1, numInPlanes, numOutPlanes});
+  filtersGrad = filtersGrad.view({-1, numInPlanes, numOutPlanes});
+  int64_t size = kernelVolume * bufferSize;
+
+  if (device == torch::kCPU) {
+    TV_THROW_INVALID_ARG("unknown device type");
+  }
+#ifdef TV_CUDA
+  else if (device == torch::kCUDA) {
+    batch_sparse_gather_cuda(inputBuffer, features, indicePairs[inverse], size);
+    batch_sparse_gather_cuda(outputBuffer, outGrad, indicePairs[!inverse],
+                             size);
+  }
+#endif
+  else {
+    TV_THROW_INVALID_ARG("unknown device type");
+  }
+  // filters: KV, I, O, inputBuffer: [KV, buffer, I]
+  // outputBuffer: [KV, buffer, O]
+  torch::bmm_out(filtersGrad, inputBuffer.permute({0, 2, 1}), outputBuffer);
+  torch::bmm_out(inputBuffer, outputBuffer, filters.permute({0, 2, 1}));
+  if (device == torch::kCPU) {
+    TV_THROW_INVALID_ARG("unknown device type");
+  }
+#ifdef TV_CUDA
+  else if (device == torch::kCUDA) {
+    batch_sparse_scatter_add_cuda(inputBuffer, inputGrad, indicePairs[inverse],
+                                  size);
+  }
+#endif
+  else {
+    TV_THROW_INVALID_ARG("unknown device type");
+  }
+
+  if (subM) {
+    auto remain_size = indicePairMaxSize - indicePairTop2Size;
+    if (remain_size <= 0) {
+      return {inputGrad, filtersGrad.view(filterShape)};
+    }
+    inputBuffer = torch::zeros({remain_size, numInPlanes}, options);
+    outputBuffer = torch::zeros({remain_size, numOutPlanes}, options);
+    if (device == torch::kCPU) {
+      TV_THROW_INVALID_ARG("unknown device type");
+    }
+#ifdef TV_CUDA
+    else if (device == torch::kCUDA) {
+      tv::dispatch_torch<int32_t, int64_t>(indice_dtype, [&](auto I) {
+        using Index = decltype(I);
+        auto indicePairsRemain = torch::from_blob(
+            indicePairs[inverse][indicePairMaxOffset].data_ptr<Index>() +
+                indicePairTop2Size,
+            {remain_size}, indicePairs.options());
+        auto indicePairsRemain2 = torch::from_blob(
+            indicePairs[!inverse][indicePairMaxOffset].data_ptr<Index>() +
+                indicePairTop2Size,
+            {remain_size}, indicePairs.options());
+
+        batch_sparse_gather_cuda(inputBuffer, features, indicePairsRemain,
+                                 remain_size);
+        batch_sparse_gather_cuda(outputBuffer, outGrad, indicePairsRemain2,
+                                 remain_size);
+      });
+    }
+#endif
+    else {
+      TV_THROW_INVALID_ARG("unknown device type");
+    }
+    torch::mm_out(filtersGrad, inputBuffer.t(), outputBuffer);
+    torch::mm_out(inputBuffer, outputBuffer, filters[indicePairMaxOffset].t());
+    if (device == torch::kCPU) {
+      TV_THROW_INVALID_ARG("unknown device type");
+    }
+#ifdef TV_CUDA
+    else if (device == torch::kCUDA) {
+      tv::dispatch_torch<int32_t, int64_t>(indice_dtype, [&](auto I) {
+        using Index = decltype(I);
+        auto indicePairsRemain2 = torch::from_blob(
+            indicePairs[!inverse][indicePairMaxOffset].data_ptr<Index>() +
+                indicePairTop2Size,
+            {remain_size}, indicePairs.options());
+        batch_sparse_scatter_add_cuda(inputBuffer, inputGrad,
+                                      indicePairsRemain2, remain_size);
+      });
+    }
+#endif
+    else {
+      TV_THROW_INVALID_ARG("unknown device type");
+    }
+  }
+
   return {inputGrad, filtersGrad.view(filterShape)};
 }
 

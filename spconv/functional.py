@@ -22,55 +22,59 @@ import spconv.ops as ops
 class SparseConvFunction(Function):
     @staticmethod
     def forward(ctx, features, filters, indice_pairs, indice_pair_num,
-                num_activate_out):
+                num_activate_out, algo):
         ctx.save_for_backward(indice_pairs, indice_pair_num, features, filters)
+        ctx.algo = algo
         return ops.indice_conv(features, filters, indice_pairs,
-                               indice_pair_num, num_activate_out, False)
+                               indice_pair_num, num_activate_out, False, algo=algo)
 
     @staticmethod
     def backward(ctx, grad_output):
         indice_pairs, indice_pair_num, features, filters = ctx.saved_tensors
+
         input_bp, filters_bp = ops.indice_conv_backward(
             features, filters, grad_output, indice_pairs, indice_pair_num,
-            False)
+            False, algo=ctx.algo)
 
-        return input_bp, filters_bp, None, None, None
+        return input_bp, filters_bp, None, None, None, None
 
 
 class SparseInverseConvFunction(Function):
     @staticmethod
     def forward(ctx, features, filters, indice_pairs, indice_pair_num,
-                num_activate_out):
+                num_activate_out, algo):
         ctx.save_for_backward(indice_pairs, indice_pair_num, features, filters)
+        ctx.algo = algo
         return ops.indice_conv(features, filters, indice_pairs,
-                               indice_pair_num, num_activate_out, True, False)
+                               indice_pair_num, num_activate_out, True, False, algo=algo)
 
     @staticmethod
     def backward(ctx, grad_output):
         indice_pairs, indice_pair_num, features, filters = ctx.saved_tensors
         input_bp, filters_bp = ops.indice_conv_backward(
             features, filters, grad_output, indice_pairs, indice_pair_num,
-            True, False)
+            True, False, algo=ctx.algo)
 
-        return input_bp, filters_bp, None, None, None
+        return input_bp, filters_bp, None, None, None, None
 
 
 class SubMConvFunction(Function):
     @staticmethod
     def forward(ctx, features, filters, indice_pairs, indice_pair_num,
-                num_activate_out):
+                num_activate_out, algo):
         ctx.save_for_backward(indice_pairs, indice_pair_num, features, filters)
+        ctx.algo = algo
         return ops.indice_conv(features, filters, indice_pairs,
-                               indice_pair_num, num_activate_out, False, True)
+                               indice_pair_num, num_activate_out, False, True, algo=algo)
 
     @staticmethod
     def backward(ctx, grad_output):
         indice_pairs, indice_pair_num, features, filters = ctx.saved_tensors
         input_bp, filters_bp = ops.indice_conv_backward(
             features, filters, grad_output, indice_pairs, indice_pair_num,
-            False, True)
+            False, True, algo=ctx.algo)
 
-        return input_bp, filters_bp, None, None, None
+        return input_bp, filters_bp, None, None, None, None
 
 
 class SparseMaxPoolFunction(Function):

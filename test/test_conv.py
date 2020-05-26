@@ -30,6 +30,8 @@ class SparseConv3dTestTorch(nn.Module):
     def __init__(self, num_layers, ndim, shape, in_channels, out_channels,
                  kernel_size, stride, padding, dilation):
         super().__init__()
+        algo = spconv.ConvAlgo.BatchGemm
+
         layers = [
             spconv.SparseConv3d(in_channels,
                                 out_channels,
@@ -38,7 +40,8 @@ class SparseConv3dTestTorch(nn.Module):
                                 padding=padding,
                                 dilation=dilation,
                                 bias=False,
-                                use_hash=False)
+                                use_hash=False,
+                                algo=algo)
         ]
         for i in range(1, num_layers):
             layers.append(
@@ -49,7 +52,8 @@ class SparseConv3dTestTorch(nn.Module):
                                     padding=padding,
                                     dilation=dilation,
                                     bias=False,
-                                    use_hash=False))
+                                    use_hash=False,
+                                    algo=algo))
         self.net = spconv.SparseSequential(*layers, )
         # self.grid = torch.full([3, *shape], -1, dtype=torch.int32).cuda()
         self.grid = None
@@ -64,7 +68,7 @@ class SparseConv3dTestTorch(nn.Module):
 
 class SubMConv3dTestTorch(nn.Module):
     def __init__(self, num_layers, ndim, shape, in_channels, out_channels,
-                 kernel_size, stride, padding, dilation):
+                 kernel_size, stride, padding, dilation, algo=spconv.ConvAlgo.Native):
         super().__init__()
         layers = [
             spconv.SubMConv3d(in_channels,
@@ -73,7 +77,8 @@ class SubMConv3dTestTorch(nn.Module):
                               stride,
                               padding=padding,
                               dilation=dilation,
-                              bias=False)
+                              bias=False,
+                              algo=algo)
         ]
         for i in range(1, num_layers):
             layers.append(
@@ -83,14 +88,15 @@ class SubMConv3dTestTorch(nn.Module):
                                   stride,
                                   padding=padding,
                                   dilation=dilation,
-                                  bias=False))
+                                  bias=False,
+                                algo=algo))
         self.net = spconv.SparseSequential(*layers, )
         # self.grid = torch.full([3, *shape], -1, dtype=torch.int32).cuda()
         self.grid = None
         self.shape = shape
 
     def forward(self, features, coors, batch_size):
-        coors = coors.int()
+        coors = coors.int()# .cpu()
         x = spconv.SparseConvTensor(features, coors, self.shape, batch_size,
                                     self.grid)
         return self.net(x)  # .dense()
@@ -327,7 +333,7 @@ def scatter_nd(indices, updates, shape):
 class TestSpConv(TestCase):
     def testSpConv3d(self):
         np.random.seed(484)
-        devices = ["cuda:0", "cpu:0"]
+        devices = ["cuda:0"]
         shapes = [[19, 18, 17]]
         batchsizes = [1, 2]
 
@@ -651,14 +657,18 @@ def main():
         out = net(features_t, indices_t, bs)
         # print(out.indices)
         out = out.dense()
+        out_numpy = out.detach().cpu().numpy()
+
         print(
             np.linalg.norm(out.detach().cpu().numpy() -
                            out_ref.detach().cpu().numpy()))
+        print(out_numpy.min(), out_numpy.max(), out_numpy.mean(), out_numpy.sum())
 
 
-def main_subm():
+def main_subm(algo):
     # function for develop.
     np.random.seed(484)
+    torch.manual_seed(50051)
     # devices = ["cuda:0"]
     devices = ["cuda:0"]
     shapes = [[50, 30, 30]]
@@ -670,14 +680,13 @@ def main_subm():
     strides = [1]
     paddings = [1]
     dilations = [1]
-
     for dev, shape, bs, IC, OC, k, s, p, d in params_grid(
             devices, shapes, batchsizes, in_channels, out_channels, ksizes,
             strides, paddings, dilations):
         if all([s > 1, d > 1]):
             continue
         device = torch.device(dev)
-        num_points = [500] * bs
+        num_points = [1000] * bs
 
         sparse_dict = generate_sparse_data(shape, num_points, IC)
 
@@ -694,7 +703,7 @@ def main_subm():
 
         features_dense_t = torch.from_numpy(features_dense).to(device).float()
         net = SubMConv3dTestTorch(1, 3, shape, IC, OC, k, s, p,
-                                  d).to(device).float()
+                                  d, algo=algo).to(device).float()
         net_ref = Conv3dTestTorch(1, 3, shape, IC, OC, k, s, p,
                                   d).to(device).float()
         filters_t = torch.from_numpy(filters).to(device).float()
@@ -714,12 +723,16 @@ def main_subm():
         out = net(features_t, indices_t, bs)
         # print(out.indices)
         out = out.dense()
+        out_numpy = out.detach().cpu().numpy()
         print(
             np.linalg.norm(out.detach().cpu().numpy() -
                            out_ref.detach().cpu().numpy()))
-
+        print(out_numpy.min(), out_numpy.max(), out_numpy.mean(), out_numpy.sum())
+    return out_numpy
 
 if __name__ == '__main__':
-    main()
+    # out_my = main_subm(algo=spconv.ConvAlgo.BatchGemm)
+    # out_ref = main_subm(algo=spconv.ConvAlgo.Native)
+    # TestCase().assertAllClose(out_my, out_ref)
     # unittest.main()
-    # TestSpConv().testSpConv3d()
+    TestSpConv().testSpConv3d()

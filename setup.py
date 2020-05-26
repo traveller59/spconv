@@ -88,12 +88,12 @@ class CMakeBuild(build_ext):
 packages = find_packages(exclude=('tools', 'tools.*'))
 setup(
     name='spconv',
-    version='1.1',
+    version='1.2',
     author='Yan Yan',
     author_email='scrin@foxmail.com',
     description='spatial sparse convolution for pytorch',
     long_description='',
-    setup_requires = ['torch>=1.0.0'],
+    setup_requires = ['torch>=1.3.0'],
     packages=packages,
     package_dir = {'spconv': 'spconv'},
     ext_modules=[CMakeExtension('spconv', library_dirs=[])],

@@ -22,6 +22,12 @@
 #include <utility/timer.h>
 
 namespace spconv {
+
+enum ConvAlgo {
+  kNative = 0,
+  kBatchGemm = 1
+};
+
 // torch.jit's doc says only support int64, so we need to convert to int32.
 template <unsigned NDim>
 std::vector<torch::Tensor>
@@ -344,12 +350,18 @@ torch::Tensor indiceConvBatch(torch::Tensor features, torch::Tensor filters,
 
 torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
                          torch::Tensor indicePairs, torch::Tensor indiceNum,
-                         int64_t numActOut, int64_t _inverse, int64_t _subM);
+                         int64_t numActOut, int64_t _inverse, int64_t _subM,
+                         int64_t algo);
 std::vector<torch::Tensor>
 indiceConvBackward(torch::Tensor features, torch::Tensor filters,
                    torch::Tensor outGrad, torch::Tensor indicePairs,
-                   torch::Tensor indiceNum, int64_t _inverse, int64_t _subM);
+                   torch::Tensor indiceNum, int64_t _inverse, int64_t _subM, int64_t algo);
 
+std::vector<torch::Tensor>
+indiceConvBackwardBatch(torch::Tensor features, torch::Tensor filters,
+                        torch::Tensor outGrad, torch::Tensor indicePairs,
+                        torch::Tensor indiceNum, int64_t _inverse,
+                        int64_t _subM);
 } // namespace spconv
 
 #endif

@@ -290,8 +290,6 @@ __global__ void batchScatterAddGenericKernel(T *outFeatures, const T *buffer,
         if (ix + ILPStrideX[ilp] < size && inds[ilp] != -1) {
           gpuAtomicAdd(outFeatures + inds[ilp] * numPlanes + iy,
                        buffer[(ix + ILPStrideX[ilp]) * numPlanes + iy]);
-          // outFeatures[inds[ilp] * numPlanes + iy] +=
-          //     buffer[(ix + ILPStrideX[ilp]) * numPlanes + iy];
         }
       }
     }
