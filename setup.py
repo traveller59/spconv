@@ -18,6 +18,8 @@ LIBTORCH_ROOT = str(Path(torch.__file__).parent)
 SPCONV_FORCE_BUILD_CUDA = os.getenv("SPCONV_FORCE_BUILD_CUDA")
 
 PYTHON_VERSION = "{}.{}".format(sys.version_info.major, sys.version_info.minor)
+PYTORCH_VERSION = list(map(int, torch.__version__.split(".")))
+PYTORCH_VERSION_NUMBER = PYTORCH_VERSION[0] * 10000 + PYTORCH_VERSION[1] * 100 + PYTORCH_VERSION[2]
 
 class CMakeExtension(Extension):
     def __init__(self, name, sourcedir='', library_dirs=[]):
@@ -47,6 +49,7 @@ class CMakeBuild(build_ext):
                       '-DCMAKE_PREFIX_PATH={}'.format(LIBTORCH_ROOT),
                       '-DPYBIND11_PYTHON_VERSION={}'.format(PYTHON_VERSION),
                       '-DSPCONV_BuildTests=OFF',
+                      '-DPYTORCH_VERSION={}'.format(PYTORCH_VERSION_NUMBER)
                       ] #  -arch=sm_61
         if not torch.cuda.is_available() and SPCONV_FORCE_BUILD_CUDA is None:
             cmake_args += ['-DSPCONV_BuildCUDA=OFF']

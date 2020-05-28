@@ -80,6 +80,8 @@ public:
         }
       } else {
 #ifdef TV_CUDA
+        // we should select device in external
+        /*
         int deviceCount;
         cudaGetDeviceCount(&deviceCount);
         if (device >= deviceCount) {
@@ -87,6 +89,7 @@ public:
                                " but you only have ", deviceCount, " device.");
         }
         cudaSetDevice(device);
+        */
         if (managed) {
           checkCudaErrors(cudaMallocManaged(&this->mPtr, size * sizeof(T)));
         } else {

@@ -125,6 +125,21 @@ TensorView<T, Rank, PtrTraits, Tindex> torch2tv(const torch::Tensor &tensor) {
   return tv::TensorView<T, Rank, PtrTraits, Tindex>(
       tensor.data_ptr<std::remove_const_t<T>>(), shape);
 }
+
+template <typename T>
+torch::Tensor torch_slice_first_axis(torch::Tensor tensor, T start, T end) {
+  // only torch >= 1.5 have tensor slice.
+  torch::Tensor res;
+  auto tensor_shape = tensor.sizes();
+  std::vector<int64_t> shape(tensor_shape.begin(), tensor_shape.end());
+  shape[0] = end - start;
+  auto dtype = tensor.scalar_type();
+  uint8_t *ptr = reinterpret_cast<uint8_t *>(tensor.data_ptr());
+  res = torch::from_blob(ptr + start * tensor.stride(0) * tensor.itemsize(),
+                         torch::IntArrayRef(shape), tensor.options());
+  return res;
+}
+
 namespace detail {
 template <> struct TypeToString<at::Half> {
   static constexpr const char *value = "half";

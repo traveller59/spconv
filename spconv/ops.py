@@ -12,15 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from enum import Enum
+
 import torch
 
 import spconv
 
-from enum import Enum 
 
 class ConvAlgo(Enum):
-    Native = 0
-    BatchGemm = 1
+    Native = 0 # small memory cost, faster when number of points is large.
+    Batch = 1 # high memory cost, faster when number of points is small (< 50000)
+    BatchGemmGather = 2 # high memory cost, faster when number of points medium
+
 
 def get_conv_output_size(input_size, kernel_size, stride, padding, dilation):
     ndim = len(input_size)
@@ -59,7 +62,7 @@ def get_indice_pairs(indices,
                      subm=False,
                      transpose=False,
                      grid=None,
-                     use_hash=True):
+                     use_hash=False):
     ndim = indices.shape[1] - 1
     if not isinstance(ksize, (list, tuple)):
         ksize = [ksize] * ndim
@@ -133,7 +136,7 @@ def indice_conv_backward(features,
                          indice_pair_num,
                          inverse=False,
                          subm=False,
-                algo=ConvAlgo.Native.value):
+                         algo=ConvAlgo.Native.value):
     return torch.ops.spconv.indice_conv_backward(features, filters, out_bp,
                                                  indice_pairs, indice_pair_num,
                                                  int(inverse), int(subm), algo)

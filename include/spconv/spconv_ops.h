@@ -23,10 +23,7 @@
 
 namespace spconv {
 
-enum ConvAlgo {
-  kNative = 0,
-  kBatchGemm = 1
-};
+enum ConvAlgo { kNative = 0, kBatch = 1, kBatchGemmGather = 2 };
 
 // torch.jit's doc says only support int64, so we need to convert to int32.
 template <unsigned NDim>
@@ -345,8 +342,10 @@ std::vector<torch::Tensor> getIndicePairPreGrid(
   }
 }
 torch::Tensor indiceConvBatch(torch::Tensor features, torch::Tensor filters,
-                         torch::Tensor indicePairs, torch::Tensor indiceNum,
-                         int64_t numActOut, int64_t _inverse, int64_t _subM);
+                              torch::Tensor indicePairs,
+                              torch::Tensor indiceNum, int64_t numActOut,
+                              int64_t _inverse, int64_t _subM,
+                              bool batchScatter);
 
 torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
                          torch::Tensor indicePairs, torch::Tensor indiceNum,
@@ -355,13 +354,14 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
 std::vector<torch::Tensor>
 indiceConvBackward(torch::Tensor features, torch::Tensor filters,
                    torch::Tensor outGrad, torch::Tensor indicePairs,
-                   torch::Tensor indiceNum, int64_t _inverse, int64_t _subM, int64_t algo);
+                   torch::Tensor indiceNum, int64_t _inverse, int64_t _subM,
+                   int64_t algo);
 
 std::vector<torch::Tensor>
 indiceConvBackwardBatch(torch::Tensor features, torch::Tensor filters,
                         torch::Tensor outGrad, torch::Tensor indicePairs,
                         torch::Tensor indiceNum, int64_t _inverse,
-                        int64_t _subM);
+                        int64_t _subM, bool batchScatter);
 } // namespace spconv
 
 #endif

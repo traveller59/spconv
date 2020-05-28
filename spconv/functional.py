@@ -25,16 +25,25 @@ class SparseConvFunction(Function):
                 num_activate_out, algo):
         ctx.save_for_backward(indice_pairs, indice_pair_num, features, filters)
         ctx.algo = algo
-        return ops.indice_conv(features, filters, indice_pairs,
-                               indice_pair_num, num_activate_out, False, algo=algo)
+        return ops.indice_conv(features,
+                               filters,
+                               indice_pairs,
+                               indice_pair_num,
+                               num_activate_out,
+                               False,
+                               algo=algo)
 
     @staticmethod
     def backward(ctx, grad_output):
         indice_pairs, indice_pair_num, features, filters = ctx.saved_tensors
 
-        input_bp, filters_bp = ops.indice_conv_backward(
-            features, filters, grad_output, indice_pairs, indice_pair_num,
-            False, algo=ctx.algo)
+        input_bp, filters_bp = ops.indice_conv_backward(features,
+                                                        filters,
+                                                        grad_output,
+                                                        indice_pairs,
+                                                        indice_pair_num,
+                                                        False,
+                                                        algo=ctx.algo)
 
         return input_bp, filters_bp, None, None, None, None
 
@@ -45,15 +54,26 @@ class SparseInverseConvFunction(Function):
                 num_activate_out, algo):
         ctx.save_for_backward(indice_pairs, indice_pair_num, features, filters)
         ctx.algo = algo
-        return ops.indice_conv(features, filters, indice_pairs,
-                               indice_pair_num, num_activate_out, True, False, algo=algo)
+        return ops.indice_conv(features,
+                               filters,
+                               indice_pairs,
+                               indice_pair_num,
+                               num_activate_out,
+                               True,
+                               False,
+                               algo=algo)
 
     @staticmethod
     def backward(ctx, grad_output):
         indice_pairs, indice_pair_num, features, filters = ctx.saved_tensors
-        input_bp, filters_bp = ops.indice_conv_backward(
-            features, filters, grad_output, indice_pairs, indice_pair_num,
-            True, False, algo=ctx.algo)
+        input_bp, filters_bp = ops.indice_conv_backward(features,
+                                                        filters,
+                                                        grad_output,
+                                                        indice_pairs,
+                                                        indice_pair_num,
+                                                        True,
+                                                        False,
+                                                        algo=ctx.algo)
 
         return input_bp, filters_bp, None, None, None, None
 
@@ -64,15 +84,26 @@ class SubMConvFunction(Function):
                 num_activate_out, algo):
         ctx.save_for_backward(indice_pairs, indice_pair_num, features, filters)
         ctx.algo = algo
-        return ops.indice_conv(features, filters, indice_pairs,
-                               indice_pair_num, num_activate_out, False, True, algo=algo)
+        return ops.indice_conv(features,
+                               filters,
+                               indice_pairs,
+                               indice_pair_num,
+                               num_activate_out,
+                               False,
+                               True,
+                               algo=algo)
 
     @staticmethod
     def backward(ctx, grad_output):
         indice_pairs, indice_pair_num, features, filters = ctx.saved_tensors
-        input_bp, filters_bp = ops.indice_conv_backward(
-            features, filters, grad_output, indice_pairs, indice_pair_num,
-            False, True, algo=ctx.algo)
+        input_bp, filters_bp = ops.indice_conv_backward(features,
+                                                        filters,
+                                                        grad_output,
+                                                        indice_pairs,
+                                                        indice_pair_num,
+                                                        False,
+                                                        True,
+                                                        algo=ctx.algo)
 
         return input_bp, filters_bp, None, None, None, None
 

@@ -11,6 +11,7 @@ endif()
 if(WIN32) # true if windows (32 and 64 bit)
     add_compile_definitions(TV_WINDOWS)
 endif()
+add_compile_definitions(PYTORCH_VERSION=${PYTORCH_VERSION})
 
 set(CMAKE_CXX_EXTENSIONS OFF) # avoid gnu++11 be added to CXX flags
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")

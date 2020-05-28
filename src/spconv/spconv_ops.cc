@@ -139,10 +139,12 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
                          int64_t algo) {
   auto kernelVolume = indiceNum.size(0);
   switch (algo) {
-  case kBatchGemm: {
+  case kBatchGemmGather:
+  case kBatch: {
     if (kernelVolume != 1) {
       return indiceConvBatch(features, filters, indicePairs, indiceNum,
-                             numActOut, _inverse, _subM);
+                             numActOut, _inverse, _subM,
+                             algo != kBatchGemmGather);
     } else {
       break;
     }
@@ -152,6 +154,8 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
   default:
     TV_THROW_RT_ERR("unknown algo");
   }
+  // auto timer = spconv::CudaContextTimer<>();
+
   bool subM = _subM != 0;
   bool inverse = _inverse != 0;
   auto device = features.device().type();
@@ -170,10 +174,11 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
       torch::TensorOptions().dtype(features.dtype()).device(features.device());
   torch::Tensor output = torch::zeros({numActOut, numOutPlanes}, options);
   torch::Tensor inputBuffer =
-      torch::zeros({indicePairMaxSize, numInPlanes}, options);
+      torch::empty({indicePairMaxSize, numInPlanes}, options);
   torch::Tensor outputBuffer =
       torch::empty({indicePairMaxSize, numOutPlanes}, options);
   filters = filters.view({-1, numInPlanes, numOutPlanes});
+
   if (subM) { // the center index of subm conv don't need gather and scatter
     // add.
     torch::mm_out(output, features, filters[indicePairMaxOffset]);
@@ -181,12 +186,13 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
   double totalGatherTime = 0;
   double totalGEMMTime = 0;
   double totalSAddTime = 0;
+  // tv::ssprint("first subm gemm time", timer.report() / 1000.0);
+
   for (int i = 0; i < kernelVolume; ++i) {
     auto nHot = indicePairNumCpu.data_ptr<int>()[i];
     if (nHot <= 0 || (subM && i == indicePairMaxOffset)) {
       continue;
     }
-    // auto timer = spconv::CudaContextTimer<>();
     auto outputBufferBlob = torch::from_blob(outputBuffer.data_ptr(),
                                              {nHot, numOutPlanes}, options);
     auto inputBufferBlob =
@@ -208,7 +214,10 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
     else {
       TV_THROW_INVALID_ARG("unknown device type");
     }
+    // totalGatherTime += timer.report() / 1000.0;
     torch::mm_out(outputBufferBlob, inputBufferBlob, filters[i]);
+    // totalGEMMTime += timer.report() / 1000.0;
+
     if (device == torch::kCPU) {
       sparse_scatter_add_cpu(outputBuffer, output, indicePairs[!inverse][i],
                              nHot);
@@ -222,14 +231,17 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
     else {
       TV_THROW_INVALID_ARG("unknown device type");
     }
+    // totalSAddTime += timer.report() / 1000.0;
   }
+  // tv::ssprint(totalGatherTime, totalGEMMTime, totalSAddTime);
   return output;
 }
 
 torch::Tensor indiceConvBatch(torch::Tensor features, torch::Tensor filters,
                               torch::Tensor indicePairs,
                               torch::Tensor indiceNum, int64_t numActOut,
-                              int64_t _inverse, int64_t _subM) {
+                              int64_t _inverse, int64_t _subM,
+                              bool batchScatter) {
   bool subM = _subM != 0;
   bool inverse = _inverse != 0;
   auto device = features.device().type();
@@ -238,6 +250,7 @@ torch::Tensor indiceConvBatch(torch::Tensor features, torch::Tensor filters,
   TV_ASSERT_INVALID_ARG(kernelVolume > 1, "error");
   auto numInPlanes = features.size(1);
   auto numOutPlanes = filters.size(ndim + 1);
+  // auto timer = spconv::CudaContextTimer<>();
   auto indicePairNumCpu = indiceNum.to({torch::kCPU});
   auto indicePairNumVec =
       std::vector<int>(indicePairNumCpu.data_ptr<int>(),
@@ -257,85 +270,98 @@ torch::Tensor indiceConvBatch(torch::Tensor features, torch::Tensor filters,
   // number of indice in the center of filter is much more than other
   // filter location.
   // so we first use top2 indice num to do batch conv, then
-  // do native conv in center.
+  // do native conv (gemm) in center.
   int bufferSize = subM ? indicePairTop2Size : indicePairMaxSize;
-  torch::Tensor inputBuffer =
-      torch::zeros({kernelVolume, bufferSize, numInPlanes}, options);
-  torch::Tensor outputBuffer =
-      torch::empty({kernelVolume, bufferSize, numOutPlanes}, options);
+  int maxKernelVolumePart = kernelVolume;
+  std::vector<std::pair<int, int>> part_ranges = {{0, kernelVolume}};
   filters = filters.view({kernelVolume, numInPlanes, numOutPlanes});
-  int64_t size = kernelVolume * bufferSize;
-  if (device == torch::kCPU) {
-    TV_THROW_INVALID_ARG("unknown device type");
-  }
-#ifdef TV_CUDA
-  else if (device == torch::kCUDA) {
-    batch_sparse_gather_cuda(inputBuffer, features, indicePairs[inverse], size);
-  }
-#endif
-  else {
-    TV_THROW_INVALID_ARG("unknown device type");
-  }
-  torch::bmm_out(outputBuffer, inputBuffer, filters);
-  if (device == torch::kCPU) {
-    TV_THROW_INVALID_ARG("unknown device type");
-  }
-#ifdef TV_CUDA
-  else if (device == torch::kCUDA) {
-    batch_sparse_scatter_add_cuda(outputBuffer, output, indicePairs[!inverse],
-                                  size);
-  }
-#endif
-  else {
-    TV_THROW_INVALID_ARG("unknown device type");
-  }
+
   if (subM) {
-    auto remain_size = indicePairMaxSize - indicePairTop2Size;
-    if (remain_size <= 0) {
+    maxKernelVolumePart = std::max(indicePairMaxOffset,
+                                   int(kernelVolume - indicePairMaxOffset - 1));
+    part_ranges = {{0, indicePairMaxOffset},
+                   {indicePairMaxOffset + 1, kernelVolume}};
+    torch::mm_out(output, features, filters[indicePairMaxOffset]);
+    if (indicePairTop2Size == 0) {
       return output;
     }
-    inputBuffer = torch::empty({remain_size, numInPlanes}, options);
-    outputBuffer = torch::empty({remain_size, numOutPlanes}, options);
-    if (device == torch::kCPU) {
-      TV_THROW_INVALID_ARG("unknown device type");
-    }
-#ifdef TV_CUDA
-    else if (device == torch::kCUDA) {
-      tv::dispatch_torch<int32_t, int64_t>(indice_dtype, [&](auto I) {
-        using Index = decltype(I);
-        auto indicePairsRemain = torch::from_blob(
-            indicePairs[inverse][indicePairMaxOffset].data_ptr<Index>() +
-                indicePairTop2Size,
-            {remain_size}, indicePairs.options());
-        sparse_gather_cuda(inputBuffer, features, indicePairsRemain,
-                           remain_size);
-      });
-    }
-#endif
-    else {
-      TV_THROW_INVALID_ARG("unknown device type");
-    }
-    torch::mm_out(outputBuffer, inputBuffer, filters[indicePairMaxOffset]);
-    if (device == torch::kCPU) {
-      TV_THROW_INVALID_ARG("unknown device type");
-    }
-#ifdef TV_CUDA
-    else if (device == torch::kCUDA) {
-      tv::dispatch_torch<int32_t, int64_t>(indice_dtype, [&](auto I) {
-        using Index = decltype(I);
-        auto indicePairsRemain = torch::from_blob(
-            indicePairs[!inverse][indicePairMaxOffset].data_ptr<Index>() +
-                indicePairTop2Size,
-            {remain_size}, indicePairs.options());
-        sparse_scatter_add_cuda(outputBuffer, output, indicePairsRemain,
-                                remain_size);
-      });
-    }
-#endif
-    else {
-      TV_THROW_INVALID_ARG("unknown device type");
-    }
   }
+  // tv::ssprint("first subm gemm time", timer.report() / 1000.0);
+  double totalGatherTime = 0;
+  double totalGEMMTime = 0;
+  double totalSAddTime = 0;
+
+  torch::Tensor inputBuffer =
+      torch::empty({maxKernelVolumePart, bufferSize, numInPlanes}, options);
+  torch::Tensor outputBuffer =
+      torch::empty({maxKernelVolumePart, bufferSize, numOutPlanes}, options);
+  for (auto &range : part_ranges) {
+    int start = range.first;
+    int end = range.second;
+    int length = end - start;
+    int64_t size = length * bufferSize;
+    auto inputBufferPart = tv::torch_slice_first_axis(inputBuffer, 0, length);
+    auto outputBufferPart = tv::torch_slice_first_axis(outputBuffer, 0, length);
+    auto indicePairs1Part =
+        tv::torch_slice_first_axis(indicePairs[inverse], start, end);
+    auto indicePairs2Part =
+        tv::torch_slice_first_axis(indicePairs[!inverse], start, end);
+    auto filtersPart = tv::torch_slice_first_axis(filters, start, end);
+    if (device == torch::kCPU) {
+      TV_THROW_INVALID_ARG("unknown device type");
+    }
+#ifdef TV_CUDA
+    else if (device == torch::kCUDA) {
+      batch_sparse_gather_cuda(inputBufferPart, features, indicePairs1Part,
+                               size);
+    }
+#endif
+    else {
+      TV_THROW_INVALID_ARG("unknown device type");
+    }
+    // totalGatherTime += timer.report() / 1000.0;
+
+    torch::bmm_out(outputBufferPart, inputBufferPart, filtersPart);
+    // totalGEMMTime += timer.report() / 1000.0;
+
+    if (batchScatter) {
+      if (device == torch::kCPU) {
+        TV_THROW_INVALID_ARG("unknown device type");
+      }
+#ifdef TV_CUDA
+      else if (device == torch::kCUDA) {
+        batch_sparse_scatter_add_cuda(outputBufferPart, output,
+                                      indicePairs2Part, size);
+      }
+#endif
+      else {
+        TV_THROW_INVALID_ARG("unknown device type");
+      }
+    } else {
+      for (int i = 0; i < length; ++i) {
+        auto nHot = indicePairNumCpu.data_ptr<int>()[i + start];
+        if (nHot <= 0) {
+          continue;
+        }
+        if (device == torch::kCPU) {
+          sparse_scatter_add_cpu(outputBufferPart[i], output,
+                                 indicePairs2Part[i], nHot);
+        }
+#ifdef TV_CUDA
+        else if (device == torch::kCUDA) {
+          sparse_scatter_add_cuda(outputBufferPart[i], output,
+                                  indicePairs2Part[i], nHot);
+        }
+#endif
+        else {
+          TV_THROW_INVALID_ARG("unknown device type");
+        }
+      }
+    }
+    // totalSAddTime += timer.report() / 1000.0;
+  }
+  // tv::ssprint(totalGatherTime, totalGEMMTime, totalSAddTime);
+
   return output;
 }
 
@@ -346,10 +372,12 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
                    int64_t algo) {
   auto kernelVolume = indiceNum.size(0);
   switch (algo) {
-  case kBatchGemm: {
+  case kBatchGemmGather:
+  case kBatch: {
     if (kernelVolume != 1) {
       return indiceConvBackwardBatch(features, filters, outGrad, indicePairs,
-                                     indiceNum, _inverse, _subM);
+                                     indiceNum, _inverse, _subM,
+                                     algo != kBatchGemmGather);
     } else {
       break;
     }
@@ -439,7 +467,7 @@ std::vector<torch::Tensor>
 indiceConvBackwardBatch(torch::Tensor features, torch::Tensor filters,
                         torch::Tensor outGrad, torch::Tensor indicePairs,
                         torch::Tensor indiceNum, int64_t _inverse,
-                        int64_t _subM) {
+                        int64_t _subM, bool batchScatter) {
   bool subM = _subM != 0;
   bool inverse = _inverse != 0;
 
@@ -467,101 +495,99 @@ indiceConvBackwardBatch(torch::Tensor features, torch::Tensor filters,
   torch::Tensor inputGrad = torch::zeros(features.sizes(), options);
   torch::Tensor filtersGrad = torch::zeros(filterShape, options);
   int bufferSize = subM ? indicePairTop2Size : indicePairMaxSize;
-  torch::Tensor inputBuffer =
-      torch::zeros({kernelVolume, bufferSize, numInPlanes}, options);
-  torch::Tensor outputBuffer =
-      torch::zeros({kernelVolume, bufferSize, numOutPlanes}, options);
 
   filters = filters.view({-1, numInPlanes, numOutPlanes});
   filtersGrad = filtersGrad.view({-1, numInPlanes, numOutPlanes});
-  int64_t size = kernelVolume * bufferSize;
 
-  if (device == torch::kCPU) {
-    TV_THROW_INVALID_ARG("unknown device type");
-  }
-#ifdef TV_CUDA
-  else if (device == torch::kCUDA) {
-    batch_sparse_gather_cuda(inputBuffer, features, indicePairs[inverse], size);
-    batch_sparse_gather_cuda(outputBuffer, outGrad, indicePairs[!inverse],
-                             size);
-  }
-#endif
-  else {
-    TV_THROW_INVALID_ARG("unknown device type");
-  }
-  // filters: KV, I, O, inputBuffer: [KV, buffer, I]
-  // outputBuffer: [KV, buffer, O]
-  torch::bmm_out(filtersGrad, inputBuffer.permute({0, 2, 1}), outputBuffer);
-  torch::bmm_out(inputBuffer, outputBuffer, filters.permute({0, 2, 1}));
-  if (device == torch::kCPU) {
-    TV_THROW_INVALID_ARG("unknown device type");
-  }
-#ifdef TV_CUDA
-  else if (device == torch::kCUDA) {
-    batch_sparse_scatter_add_cuda(inputBuffer, inputGrad, indicePairs[inverse],
-                                  size);
-  }
-#endif
-  else {
-    TV_THROW_INVALID_ARG("unknown device type");
-  }
-
+  std::vector<std::pair<int, int>> part_ranges = {{0, kernelVolume}};
+  int maxKernelVolumePart = kernelVolume;
   if (subM) {
-    auto remain_size = indicePairMaxSize - indicePairTop2Size;
-    if (remain_size <= 0) {
+    maxKernelVolumePart = std::max(indicePairMaxOffset,
+                                   int(kernelVolume - indicePairMaxOffset - 1));
+    part_ranges = {{0, indicePairMaxOffset},
+                   {indicePairMaxOffset + 1, kernelVolume}};
+    auto filtersGradSub = filtersGrad[indicePairMaxOffset];
+    auto filtersSub = filters[indicePairMaxOffset];
+    torch::mm_out(filtersGradSub, features.t(), outGrad);
+    torch::mm_out(inputGrad, outGrad, filtersSub.t());
+    if (indicePairTop2Size == 0) {
       return {inputGrad, filtersGrad.view(filterShape)};
     }
-    inputBuffer = torch::zeros({remain_size, numInPlanes}, options);
-    outputBuffer = torch::zeros({remain_size, numOutPlanes}, options);
-    if (device == torch::kCPU) {
-      TV_THROW_INVALID_ARG("unknown device type");
-    }
-#ifdef TV_CUDA
-    else if (device == torch::kCUDA) {
-      tv::dispatch_torch<int32_t, int64_t>(indice_dtype, [&](auto I) {
-        using Index = decltype(I);
-        auto indicePairsRemain = torch::from_blob(
-            indicePairs[inverse][indicePairMaxOffset].data_ptr<Index>() +
-                indicePairTop2Size,
-            {remain_size}, indicePairs.options());
-        auto indicePairsRemain2 = torch::from_blob(
-            indicePairs[!inverse][indicePairMaxOffset].data_ptr<Index>() +
-                indicePairTop2Size,
-            {remain_size}, indicePairs.options());
+  }
+  torch::Tensor inputBuffer =
+      torch::zeros({maxKernelVolumePart, bufferSize, numInPlanes}, options);
+  torch::Tensor outputBuffer =
+      torch::zeros({maxKernelVolumePart, bufferSize, numOutPlanes}, options);
 
-        batch_sparse_gather_cuda(inputBuffer, features, indicePairsRemain,
-                                 remain_size);
-        batch_sparse_gather_cuda(outputBuffer, outGrad, indicePairsRemain2,
-                                 remain_size);
-      });
-    }
-#endif
-    else {
-      TV_THROW_INVALID_ARG("unknown device type");
-    }
-    torch::mm_out(filtersGrad, inputBuffer.t(), outputBuffer);
-    torch::mm_out(inputBuffer, outputBuffer, filters[indicePairMaxOffset].t());
+  for (auto &range : part_ranges) {
+    int start = range.first;
+    int end = range.second;
+    int length = end - start;
+    int64_t size = length * bufferSize;
+    auto inputBufferPart = tv::torch_slice_first_axis(inputBuffer, 0, length);
+    auto outputBufferPart = tv::torch_slice_first_axis(outputBuffer, 0, length);
+    auto indicePairs1Part =
+        tv::torch_slice_first_axis(indicePairs[inverse], start, end);
+    auto indicePairs2Part =
+        tv::torch_slice_first_axis(indicePairs[!inverse], start, end);
+    auto filtersPart = tv::torch_slice_first_axis(filters, start, end);
+    auto filtersGradPart = tv::torch_slice_first_axis(filtersGrad, start, end);
+
     if (device == torch::kCPU) {
       TV_THROW_INVALID_ARG("unknown device type");
     }
 #ifdef TV_CUDA
     else if (device == torch::kCUDA) {
-      tv::dispatch_torch<int32_t, int64_t>(indice_dtype, [&](auto I) {
-        using Index = decltype(I);
-        auto indicePairsRemain2 = torch::from_blob(
-            indicePairs[!inverse][indicePairMaxOffset].data_ptr<Index>() +
-                indicePairTop2Size,
-            {remain_size}, indicePairs.options());
-        batch_sparse_scatter_add_cuda(inputBuffer, inputGrad,
-                                      indicePairsRemain2, remain_size);
-      });
+      batch_sparse_gather_cuda(inputBufferPart, features, indicePairs1Part,
+                               size);
+      batch_sparse_gather_cuda(outputBufferPart, outGrad, indicePairs2Part,
+                               size);
     }
 #endif
     else {
       TV_THROW_INVALID_ARG("unknown device type");
+    }
+    // filters: KV, I, O, inputBuffer: [KV, buffer, I]
+    // outputBuffer: [KV, buffer, O]
+    torch::bmm_out(filtersGradPart, inputBufferPart.permute({0, 2, 1}),
+                   outputBufferPart);
+    torch::bmm_out(inputBuffer, outputBufferPart,
+                   filtersPart.permute({0, 2, 1}));
+    if (batchScatter) {
+      if (device == torch::kCPU) {
+        TV_THROW_INVALID_ARG("unknown device type");
+      }
+#ifdef TV_CUDA
+      else if (device == torch::kCUDA) {
+        batch_sparse_scatter_add_cuda(inputBufferPart, inputGrad,
+                                      indicePairs1Part, size);
+      }
+#endif
+      else {
+        TV_THROW_INVALID_ARG("unknown device type");
+      }
+    } else {
+      for (int i = 0; i < length; ++i) {
+        auto nHot = indicePairNumCpu.data_ptr<int>()[i + start];
+        if (nHot <= 0) {
+          continue;
+        }
+        if (device == torch::kCPU) {
+          sparse_scatter_add_cpu(inputBufferPart[i], inputGrad,
+                                 indicePairs1Part[i], nHot);
+        }
+#ifdef TV_CUDA
+        else if (device == torch::kCUDA) {
+          sparse_scatter_add_cuda(inputBufferPart[i], inputGrad,
+                                  indicePairs1Part[i], nHot);
+        }
+#endif
+        else {
+          TV_THROW_INVALID_ARG("unknown device type");
+        }
+      }
     }
   }
-
   return {inputGrad, filtersGrad.view(filterShape)};
 }
 
