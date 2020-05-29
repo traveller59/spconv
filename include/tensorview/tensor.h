@@ -833,13 +833,13 @@ struct Tensor {
     auto tensor = Tensor();
     Dispatch<detail::all_tensor_types_t>()(dtype, [&](auto Idst) {
       using Tdst = decltype(Idst);
-      Dispatch<detail::all_tensor_types_t>()(dtype_, [&](auto Icur) {
+      Dispatch<detail::all_tensor_types_t>()(this->dtype_, [&](auto Icur) {
         using Tcur = decltype(Icur);
         if (std::is_convertible<Tcur, Tdst>::value) {
-          auto ptr = data<Tcur>();
-          tensor = Tensor(shape_, stride_, dtype, device(), pinned(),
-                          storage_->managed());
-          std::copy(ptr, ptr + size(), tensor.data<Tdst>());
+          auto ptr = this->data<Tcur>();
+          tensor = Tensor(this->shape_, this->stride_, dtype, this->device(), this->pinned(),
+                          this->storage_->managed());
+          std::copy(ptr, ptr + this->size(), tensor.data<Tdst>());
         } else {
           TV_THROW_INVALID_ARG("not convertable from", type_s<Tcur>, "to",
                                type_s<Tdst>);
