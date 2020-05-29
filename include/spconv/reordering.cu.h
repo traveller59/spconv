@@ -17,6 +17,7 @@
 #include <THC/THCAtomics.cuh>
 #include <THC/THCNumerics.cuh>
 #include <tensorview/kernel_utils.h>
+#include <cuda_fp16.h>
 
 #if PYTORCH_VERSION < 10500
 #define TH_ATOMIC_ADD atomicAdd
