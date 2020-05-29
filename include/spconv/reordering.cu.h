@@ -292,12 +292,19 @@ __global__ void scatterAddVecBlockKernel(T *outFeatures, const T *buffer,
       reinterpret_cast<VecType *>(buf2)[0] = reinterpret_cast<const VecType *>(
           buffer)[(ix + ILPStrideX[ilp]) * numPlanes + threadIdx.y];
       if (std::is_same<T, at::Half>::value) {
+#if __CUDA_ARCH__ >= 530
 #pragma unroll
         for (int i = 0; i < vecloadHalf2Factor; i++) {
           reinterpret_cast<__half2 *>(buf)[i] =
               __hadd2(reinterpret_cast<__half2 *>(buf)[i],
                       reinterpret_cast<__half2 *>(buf2)[i]);
         }
+#else 
+#pragma unroll
+        for (int i = 0; i < vecloadFactor; i++) {
+          buf[i] += buf2[i];
+        }
+#endif
       } else {
 #pragma unroll
         for (int i = 0; i < vecloadFactor; i++) {
@@ -328,6 +335,7 @@ __global__ void scatterAddBlockKernel(T *outFeatures, const T *buffer,
   }
 }
 
+#if __CUDA_ARCH__ >= 530
 template <typename T, typename Index, int NumTLP, int NumILP>
 __global__ void scatterAddHalfBlockKernel(T *outFeatures, const T *buffer,
                                          const Index *indices, int size,
@@ -349,6 +357,7 @@ __global__ void scatterAddHalfBlockKernel(T *outFeatures, const T *buffer,
     }
   }
 }
+#endif
 
 template <typename T, typename Index, int NumTLP, int NumILP>
 __global__ void batchScatterAddGenericKernel(T *outFeatures, const T *buffer,
