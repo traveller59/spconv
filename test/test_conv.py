@@ -37,7 +37,7 @@ class SparseConv3dTestTorch(nn.Module):
                  stride,
                  padding,
                  dilation,
-                 algo=spconv.ConvAlgo.BatchGemmGather):
+                 algo=spconv.ConvAlgo.Native):
         super().__init__()
         layers = [
             spconv.SparseConv3d(in_channels,
@@ -349,7 +349,7 @@ def scatter_nd(indices, updates, shape):
 class TestSpConv(TestCase):
     def testSpConv3d(self):
         np.random.seed(484)
-        devices = ["cuda:0"]
+        devices = ["cpu:0"]
         shapes = [[19, 18, 17]]
         batchsizes = [1, 2]
 
@@ -615,13 +615,13 @@ class TestSpConv(TestCase):
             self.assertAllClose(din_np, din_sparse_np, atol=1e-4)
 
 
-def main(algo=spconv.ConvAlgo.Native):
+def main(algo=spconv.ConvAlgo.Native, dtype=torch.float32):
     # function for develop.
     np.random.seed(484)
     # devices = ["cuda:0"]
     devices = ["cuda:0"]
     shapes = [[400, 400, 15]]
-    batchsizes = [1]
+    batchsizes = [2]
 
     in_channels = [32]
     out_channels = [64]
@@ -648,15 +648,15 @@ def main(algo=spconv.ConvAlgo.Native):
         indices_t = torch.from_numpy(indices)
         filters = np.random.uniform(0, 1, size=[k[0], 1, 1, IC,
                                                 OC]).astype(np.float32)
-        indices_t = torch.from_numpy(indices).int().to(device).float()
-        features_t = torch.from_numpy(features).to(device).float()
+        indices_t = torch.from_numpy(indices).int().to(device).to(dtype)
+        features_t = torch.from_numpy(features).to(device).to(dtype)
 
-        features_dense_t = torch.from_numpy(features_dense).to(device).float()
+        features_dense_t = torch.from_numpy(features_dense).to(device).to(dtype)
         net = SparseConv3dTestTorch(1, 3, shape, IC, OC, k, s, p, d,
-                                    algo=algo).to(device).float()
+                                    algo=algo).to(device).to(dtype)
         net_ref = Conv3dTestTorch(1, 3, shape, IC, OC, k, s, p,
-                                  d).to(device).float()
-        filters_t = torch.from_numpy(filters).to(device).float()
+                                  d).to(device).to(dtype)
+        filters_t = torch.from_numpy(filters).to(device).to(dtype)
         net_ref.net[0].weight[:] = filters_t.permute(4, 3, 0, 1,
                                                      2).contiguous()
         net.net[0].weight[:] = filters_t
@@ -682,7 +682,7 @@ def main(algo=spconv.ConvAlgo.Native):
               out_numpy.sum())
 
 
-def main_subm(algo):
+def main_subm(algo, dtype=torch.float32):
     # function for develop.
     np.random.seed(484)
     torch.manual_seed(50051)
@@ -703,7 +703,7 @@ def main_subm(algo):
         if all([s > 1, d > 1]):
             continue
         device = torch.device(dev)
-        num_points = [240000] * bs
+        num_points = [120000] * bs
 
         sparse_dict = generate_sparse_data(shape, num_points, IC)
 
@@ -715,15 +715,15 @@ def main_subm(algo):
         indices_t = torch.from_numpy(indices)
         filters = np.random.uniform(0, 1, size=[k[0], 1, 1, IC,
                                                 OC]).astype(np.float32)
-        indices_t = torch.from_numpy(indices).int().to(device).float()
-        features_t = torch.from_numpy(features).to(device).float()
+        indices_t = torch.from_numpy(indices).int().to(device).to(dtype)
+        features_t = torch.from_numpy(features).to(device).to(dtype)
 
-        features_dense_t = torch.from_numpy(features_dense).to(device).float()
+        features_dense_t = torch.from_numpy(features_dense).to(device).to(dtype)
         net = SubMConv3dTestTorch(1, 3, shape, IC, OC, k, s, p, d,
-                                  algo=algo).to(device).float()
+                                  algo=algo).to(device).to(dtype)
         net_ref = Conv3dTestTorch(1, 3, shape, IC, OC, k, s, p,
-                                  d).to(device).float()
-        filters_t = torch.from_numpy(filters).to(device).float()
+                                  d).to(device).to(dtype)
+        filters_t = torch.from_numpy(filters).to(device).to(dtype)
         net_ref.net[0].weight[:] = filters_t.permute(4, 3, 0, 1,
                                                      2).contiguous()
         net.net[0].weight[:] = filters_t
@@ -741,17 +741,17 @@ def main_subm(algo):
         # print(out.indices)
         out = out.dense()
         out_numpy = out.detach().cpu().numpy()
-        print(
-            np.linalg.norm(out.detach().cpu().numpy() -
-                           out_ref.detach().cpu().numpy()))
+        # print(
+        #     np.linalg.norm(out.detach().cpu().numpy() -
+        #                    out_ref.detach().cpu().numpy()))
         print(out_numpy.min(), out_numpy.max(), out_numpy.mean(),
               out_numpy.sum())
     return out_numpy
 
 
 if __name__ == '__main__':
-    # main_subm(algo=spconv.ConvAlgo.BatchGemmGather)
-    # out_ref = main_subm(algo=spconv.ConvAlgo.Native)
+    main(algo=spconv.ConvAlgo.Native, dtype=torch.float32)
+    main(algo=spconv.ConvAlgo.Native, dtype=torch.half)
     # TestCase().assertAllClose(out_my, out_ref)
     # unittest.main()
-    TestSpConv().testSpConv3d()
+    # TestSpConv().testSpConv3d()

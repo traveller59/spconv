@@ -17,6 +17,7 @@ set(CMAKE_CXX_EXTENSIONS OFF) # avoid gnu++11 be added to CXX flags
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_definitions(TV_DEBUG)
 endif()
+# add_compile_definitions(TV_LOG_KERNEL_INFO)
 
 find_package(Torch REQUIRED)
 # set(CMAKE_VERBOSE_MAKEFILE ON)

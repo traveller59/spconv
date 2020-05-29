@@ -20,7 +20,6 @@
 namespace spconv {
 using float_types_t = tv::mp_list<float, double, at::Half>;
 using int_types_t = tv::mp_list<int32_t, int64_t>;
-
 void sparse_gather_cpu(torch::Tensor buffer, torch::Tensor features,
                        torch::Tensor indices, int size) {
   int numPlanes = features.size(1);
@@ -57,15 +56,17 @@ void sparse_scatter_add_cpu(torch::Tensor buffer, torch::Tensor outFeatures,
       Index *indices_data = indices.data_ptr<Index>();
       const T *buffer_data = buffer.data_ptr<T>();
       T *features_data = outFeatures.data_ptr<T>();
-      const T *buf = buffer.data_ptr<T>();
-      T *out = outFeatures.data_ptr<T>();
-      for (int i = 0; i < size; ++i) {
-        buf = buffer_data + i * numPlanes;
-        out = features_data + indices_data[i] * numPlanes;
-        for (int j = 0; j < numPlanes; ++j) {
-          out[j] += buf[j];
+      at::parallel_for(0, size, 0, [&](int64_t begin, int64_t end) {
+        const T *buf = buffer.data_ptr<T>();
+        T *out = outFeatures.data_ptr<T>();
+        for (int i = begin; i < end; ++i) {
+          buf = buffer_data + i * numPlanes;
+          out = features_data + indices_data[i] * numPlanes;
+          for (int j = 0; j < numPlanes; ++j) {
+            out[j] += buf[j];
+          }
         }
-      }
+      });
     });
   });
 }

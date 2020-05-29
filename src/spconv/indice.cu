@@ -29,7 +29,7 @@
 
 namespace spconv {
 
-using max_kernel_vol_t = tv::mp_list_c<int, 16, 32, 256, 4096>;
+using max_kernel_vol_t = tv::mp_list_c<int, 9, 16, 27, 32, 128, 256, 4096>;
 
 int create_conv_indice_pair_p1_cuda(
     torch::Tensor indicesIn, torch::Tensor indicePairs, torch::Tensor indiceNum,
@@ -76,6 +76,12 @@ int create_conv_indice_pair_p1_cuda(
                                   pa, di, ou);
               TV_CHECK_CUDA_ERR_V2("prepareIndicePairsKernel failed");
             }
+#ifdef TV_LOG_KERNEL_INFO
+            cudaFuncAttributes attr;
+            checkCudaErrors(cudaFuncGetAttributes(&attr, prepareDeConvIndicePairsKernel<Index, NDim, MaxKernelVolume>));
+            tv::ssprint("prepareIndicePairsKernel<", tv::type_s<Index>, NDim, MaxKernelVolume, ">", attr.numRegs);
+#endif
+
           });
     });
   });
@@ -158,6 +164,15 @@ int create_conv_indice_pair_p2_cuda(
                          tv::torch2tv<Index>(indicePairs),
                          tv::torch2tv<Index>(indicePairUnique), ou);
         TV_CHECK_CUDA_ERR_V2("assignIndicePairsKernel failed");
+#ifdef TV_LOG_KERNEL_INFO
+        cudaFuncAttributes attr;
+        checkCudaErrors(cudaFuncGetAttributes(&attr, assignGridAndIndiceOutKernel<Index, IndexGrid, NDim>));
+        tv::ssprint("assignGridAndIndiceOutKernel<", tv::type_s<Index>, NDim, ">", attr.numRegs);
+        cudaFuncAttributes attr2;
+        checkCudaErrors(cudaFuncGetAttributes(&attr2, assignIndicePairsKernel<Index, IndexGrid, NDim>));
+        tv::ssprint("assignIndicePairsKernel<", tv::type_s<Index>, NDim, ">", attr2.numRegs);
+#endif
+
       }
 
       if (resetGrid && (!useHash)) {

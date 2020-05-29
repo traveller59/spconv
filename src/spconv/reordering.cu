@@ -29,6 +29,11 @@ namespace spconv {
 
 using float_types_t = tv::mp_list<float, double, at::Half>;
 using int_types_t = tv::mp_list<int32_t, int64_t>;
+template <typename T>
+using half_vec_t = std::conditional_t<std::is_same<T, at::Half>::value, int4, int4>;
+template <typename T>
+using half_vec_sadd_t = std::conditional_t<std::is_same<T, at::Half>::value, int4, int4>;
+  using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
 
 void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
                         torch::Tensor indices, int size) {
@@ -40,9 +45,7 @@ void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
   auto inds_dtype = indices.scalar_type();
   tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
     using T = decltype(TValue);
-    using vecload_type_t =
-        std::conditional_t<std::is_same<T, at::Half>::value, int2, int4>;
-    using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
+    using vecload_type_t = half_vec_t<T>;
     tv::DispatchTorch<int_types_t>()(inds_dtype, [&](auto IndexValue) {
       using Index = decltype(IndexValue);
       bool notFound = true;
@@ -63,7 +66,12 @@ void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
                          stream>>>(buffer.data_ptr<T>(), features.data_ptr<T>(),
                                    indices.data_ptr<Index>(), nHotBlock,
                                    numPlanes / vecloadFactor);
-
+#ifdef TV_LOG_KERNEL_INFO
+                  cudaFuncAttributes attr;
+                  checkCudaErrors(cudaFuncGetAttributes(&attr, gatherVecBlockKernel<T, Index, int(NumTLP), NumILP,
+                                       vecload_type_t>));
+                  tv::ssprint("gatherVecBlockKernel<", tv::type_s<T>, tv::type_s<Index>, int(NumTLP), NumILP, ">", attr.numRegs);
+#endif
                   TV_CHECK_CUDA_ERR();
                 }
                 if (size - nHotBlock > 0) {
@@ -74,6 +82,12 @@ void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
                                    features.data_ptr<T>(),
                                    indices.data_ptr<Index>() + nHotBlock,
                                    size - nHotBlock, numPlanes / vecloadFactor);
+#ifdef TV_LOG_KERNEL_INFO
+                  cudaFuncAttributes attr;
+                  checkCudaErrors(cudaFuncGetAttributes(&attr, gatherVecKernel<T, Index, int(NumTLP), NumILP, vecload_type_t>));
+                  tv::ssprint("gatherVecKernel<", tv::type_s<T>, tv::type_s<Index>, int(NumTLP), NumILP, ">", attr.numRegs);
+#endif
+
                   TV_CHECK_CUDA_ERR();
                 }
                 notFound = false;
@@ -89,6 +103,12 @@ void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
                dim3(NumTLP / NumILP, NumTLP), 0, stream>>>(
                 buffer.data_ptr<T>(), features.data_ptr<T>(),
                 indices.data_ptr<Index>(), size, numPlanes);
+#ifdef TV_LOG_KERNEL_INFO
+        cudaFuncAttributes attr;
+        checkCudaErrors(cudaFuncGetAttributes(&attr, gatherGenericKernel<T, Index, NumTLP, NumILP>));
+        tv::ssprint("gatherGenericKernel<", tv::type_s<T>, tv::type_s<Index>, int(NumTLP), NumILP, ">", attr.numRegs);
+#endif
+
         TV_CHECK_CUDA_ERR();
       }
     });
@@ -106,9 +126,7 @@ void sparse_scatter_add_cuda(torch::Tensor buffer, torch::Tensor outFeatures,
 
   tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
     using T = decltype(TValue);
-    using vecload_type_t =
-        std::conditional_t<std::is_same<T, at::Half>::value, int2, int4>;
-    using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
+    using vecload_type_t = half_vec_sadd_t<T>;
     tv::DispatchTorch<int_types_t>()(inds_dtype, [&](auto IndexValue) {
       using Index = decltype(IndexValue);
       bool notFound = true;
@@ -131,6 +149,13 @@ void sparse_scatter_add_cuda(torch::Tensor buffer, torch::Tensor outFeatures,
                      stream>>>(outFeatures.data_ptr<T>(), buffer.data_ptr<T>(),
                                indices.data_ptr<Index>(), nHotBlock,
                                numPlanes / vecloadFactor);
+#ifdef TV_LOG_KERNEL_INFO
+              cudaFuncAttributes attr;
+              checkCudaErrors(cudaFuncGetAttributes(&attr, scatterAddVecBlockKernel<T, Index, int(NumTLP), NumILP,
+                                       vecload_type_t>));
+              tv::ssprint("scatterAddVecBlockKernel<", tv::type_s<T>, tv::type_s<Index>, int(NumTLP), NumILP, ">", attr.numRegs);
+#endif
+
               TV_CHECK_CUDA_ERR();
             }
             if (size - nHotBlock > 0) {
@@ -140,6 +165,11 @@ void sparse_scatter_add_cuda(torch::Tensor buffer, torch::Tensor outFeatures,
                                   buffer.data_ptr<T>() + nHotBlock * numPlanes,
                                   indices.data_ptr<Index>() + nHotBlock,
                                   size - nHotBlock, numPlanes);
+#ifdef TV_LOG_KERNEL_INFO
+              cudaFuncAttributes attr;
+              checkCudaErrors(cudaFuncGetAttributes(&attr, scatterAddGenericKernel<T, Index, int(NumTLP), NumILP>));
+              tv::ssprint("scatterAddGenericKernel<", tv::type_s<T>, tv::type_s<Index>, int(NumTLP), NumILP, ">", attr.numRegs);
+#endif
               TV_CHECK_CUDA_ERR();
             }
             notFound = false;
@@ -155,6 +185,12 @@ void sparse_scatter_add_cuda(torch::Tensor buffer, torch::Tensor outFeatures,
                dim3(NumTLP / NumILP, NumTLP), 0, stream>>>(
                 outFeatures.data_ptr<T>(), buffer.data_ptr<T>(),
                 indices.data_ptr<Index>(), size, numPlanes);
+#ifdef TV_LOG_KERNEL_INFO
+        cudaFuncAttributes attr;
+        checkCudaErrors(cudaFuncGetAttributes(&attr, scatterAddGenericKernel<T, Index, int(NumTLP), NumILP>));
+        tv::ssprint("notfound scatterAddGenericKernel<", tv::type_s<T>, tv::type_s<Index>, int(NumTLP), NumILP, ">", attr.numRegs);
+#endif
+
         TV_CHECK_CUDA_ERR();
       }
     });
@@ -176,9 +212,7 @@ void batch_sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
   int feature_stride = buffer.size(1);
   tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
     using T = decltype(TValue);
-    using vecload_type_t =
-        std::conditional_t<std::is_same<T, at::Half>::value, int2, int4>;
-    using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
+    using vecload_type_t = half_vec_t<T>;
     tv::DispatchTorch<int_types_t>()(inds_dtype, [&](auto IndexValue) {
       using Index = decltype(IndexValue);
       bool notFound = true;
@@ -251,9 +285,7 @@ void batch_sparse_scatter_add_cuda(torch::Tensor buffer,
 
   tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
     using T = decltype(TValue);
-    using vecload_type_t =
-        std::conditional_t<std::is_same<T, at::Half>::value, int2, int4>;
-    using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
+    using vecload_type_t = half_vec_sadd_t<T>;
     tv::DispatchTorch<int_types_t>()(inds_dtype, [&](auto IndexValue) {
       using Index = decltype(IndexValue);
       bool notFound = true;

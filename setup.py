@@ -63,7 +63,7 @@ class CMakeBuild(build_ext):
             # must add following flags to use at::Half
             # but will remove raw half operators.
             cuda_flags += ["-D__CUDA_NO_HALF_OPERATORS__", "-D__CUDA_NO_HALF_CONVERSIONS__"]
-            cuda_flags += ["-D__CUDA_NO_HALF2_OPERATORS__"] 
+            # cuda_flags += ["-D__CUDA_NO_HALF2_OPERATORS__"] 
             cmake_args += ['-DCMAKE_CUDA_FLAGS=' + " ".join(cuda_flags)]
         cfg = 'Debug' if self.debug else 'Release'
         assert cfg == "Release", "pytorch ops don't support debug build."

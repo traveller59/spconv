@@ -61,8 +61,6 @@ class SparseConvTensor(object):
         """
         self.features = features
         self.indices = indices
-        if self.indices.dtype != torch.int32:
-            self.indices = self.indices.int()
         self.spatial_shape = spatial_shape
         self.batch_size = batch_size
         self.indice_dict = {}
