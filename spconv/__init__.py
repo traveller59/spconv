@@ -56,6 +56,10 @@ class SparseConvTensor(object):
                  grid=None):
         """
         Args:
+            features: [num_points, num_features] feature tensor
+            indices: [num_points, ndim + 1] indice tensor. batch index saved in indices[:, 0]
+            spatial_shape: spatial shape of your sparse data
+            batch_size: batch size of your sparse data
             grid: pre-allocated grid tensor. should be used when the volume of spatial shape
                 is very large.
         """
@@ -65,6 +69,18 @@ class SparseConvTensor(object):
         self.batch_size = batch_size
         self.indice_dict = {}
         self.grid = grid
+
+    @classmethod
+    def from_dense(cls, x: torch.Tensor):
+        """create sparse tensor fron channel last dense tensor by to_sparse
+        x must be NHWC tensor, channel last
+        """
+        x = x.to_sparse(x.ndim - 1)
+        spatial_shape = x.shape[1:-1]
+        batch_size = x.shape[0]
+        indices_th = x.indices().permute(1, 0).contiguous().int()
+        features_th = x.values()
+        return cls(features_th, indices_th, spatial_shape, batch_size)
 
     @property
     def spatial_size(self):
