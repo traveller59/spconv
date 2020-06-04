@@ -96,8 +96,9 @@ class SparseConvTensor(object):
     def dense(self, channels_first=True):
         output_shape = [self.batch_size] + list(
             self.spatial_shape) + [self.features.shape[1]]
-        res = scatter_nd(self.indices.long().to(self.features.device),
-                         self.features, output_shape)
+        res = scatter_nd(
+            self.indices.to(self.features.device).long(), self.features,
+            output_shape)
         if not channels_first:
             return res
         ndim = len(self.spatial_shape)

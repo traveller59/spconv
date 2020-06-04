@@ -18,65 +18,6 @@
 #include <torch/script.h>
 
 namespace spconv {
-namespace functor {
-template <typename Device, typename Index, typename IndexGrid, unsigned NDim>
-struct CreateConvIndicePairFunctorP1 {
-  Index operator()(const Device &d, tv::TensorView<const Index> indicesIn,
-                   tv::TensorView<Index> indicesOut,
-                   tv::TensorView<IndexGrid> gridsOut,
-                   tv::TensorView<Index> indicePairs,
-                   tv::TensorView<Index> indiceNum,
-                   tv::TensorView<Index> indicePairUnique,
-                   const tv::SimpleVector<Index, NDim> kernelSize,
-                   const tv::SimpleVector<Index, NDim> stride,
-                   const tv::SimpleVector<Index, NDim> padding,
-                   const tv::SimpleVector<Index, NDim> dilation,
-                   const tv::SimpleVector<Index, NDim> outSpatialShape,
-                   bool transpose);
-};
-
-template <typename Device, typename Index, typename IndexGrid, unsigned NDim>
-struct CreateConvIndicePairFunctorP2 {
-  Index operator()(const Device &d, tv::TensorView<const Index> indicesIn,
-                   tv::TensorView<Index> indicesOut,
-                   tv::TensorView<IndexGrid> gridsOut,
-                   tv::TensorView<Index> indicePairs,
-                   tv::TensorView<Index> indiceNum,
-                   tv::TensorView<Index> indicePairUnique,
-                   const tv::SimpleVector<Index, NDim> outSpatialShape,
-                   bool transpose, bool resetGrid = false, bool useHash = true);
-};
-
-template <typename Device, typename Index, typename IndexGrid, unsigned NDim>
-struct CreateConvIndicePairFunctor {
-  Index operator()(const Device &d, tv::TensorView<const Index> indicesIn,
-                   tv::TensorView<Index> indicesOut,
-                   tv::TensorView<IndexGrid> gridsOut,
-                   tv::TensorView<Index> indicePairs,
-                   tv::TensorView<Index> indiceNum,
-                   const tv::SimpleVector<Index, NDim> kernelSize,
-                   const tv::SimpleVector<Index, NDim> stride,
-                   const tv::SimpleVector<Index, NDim> padding,
-                   const tv::SimpleVector<Index, NDim> dilation,
-                   const tv::SimpleVector<Index, NDim> outSpatialShape,
-                   bool transpose, bool resetGrid = false, bool useHash = true);
-};
-
-template <typename Device, typename Index, typename IndexGrid, unsigned NDim>
-struct CreateSubMIndicePairFunctor {
-  Index operator()(const Device &d, tv::TensorView<const Index> indicesIn,
-                   tv::TensorView<IndexGrid> gridsOut,
-                   tv::TensorView<Index> indicePairs,
-                   tv::TensorView<Index> indiceNum,
-                   const tv::SimpleVector<Index, NDim> kernelSize,
-                   const tv::SimpleVector<Index, NDim> stride,
-                   const tv::SimpleVector<Index, NDim> padding,
-                   const tv::SimpleVector<Index, NDim> dilation,
-                   const tv::SimpleVector<Index, NDim> outSpatialShape,
-                   bool transpose, bool resetGrid = false, bool useHash = true);
-};
-} // namespace functor
-
 int create_conv_indice_pair_p1_cuda(
     torch::Tensor indicesIn, torch::Tensor indicePairs, torch::Tensor indiceNum,
     torch::Tensor indicePairUnique, std::vector<int64_t> kernelSize,

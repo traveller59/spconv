@@ -16,8 +16,8 @@
 #define REORDERING_CU_H_
 #include <THC/THCAtomics.cuh>
 #include <THC/THCNumerics.cuh>
-#include <tensorview/kernel_utils.h>
 #include <cuda_fp16.h>
+#include <tensorview/kernel_utils.h>
 
 #if PYTORCH_VERSION < 10500
 #define TH_ATOMIC_ADD atomicAdd
@@ -299,7 +299,7 @@ __global__ void scatterAddVecBlockKernel(T *outFeatures, const T *buffer,
               __hadd2(reinterpret_cast<__half2 *>(buf)[i],
                       reinterpret_cast<__half2 *>(buf2)[i]);
         }
-#else 
+#else
 #pragma unroll
         for (int i = 0; i < vecloadFactor; i++) {
           buf[i] += buf2[i];
@@ -319,8 +319,8 @@ __global__ void scatterAddVecBlockKernel(T *outFeatures, const T *buffer,
 
 template <typename T, typename Index, int NumTLP, int NumILP>
 __global__ void scatterAddBlockKernel(T *outFeatures, const T *buffer,
-                                         const Index *indices, int size,
-                                         int numPlanes) {
+                                      const Index *indices, int size,
+                                      int numPlanes) {
   int ILPStrideX[NumILP];
 #pragma unroll
   for (int ilp = 0; ilp < NumILP; ilp++)
@@ -330,7 +330,8 @@ __global__ void scatterAddBlockKernel(T *outFeatures, const T *buffer,
   for (int ix : tv::KernelLoopX<int, NumILP>(size)) {
 #pragma unroll
     for (int ilp = 0; ilp < NumILP; ++ilp) {
-      outFeatures[indices[ix + ILPStrideX[ilp]] * numPlanes + threadIdx.y] += buffer[(ix + ILPStrideX[ilp]) * numPlanes + threadIdx.y];
+      outFeatures[indices[ix + ILPStrideX[ilp]] * numPlanes + threadIdx.y] +=
+          buffer[(ix + ILPStrideX[ilp]) * numPlanes + threadIdx.y];
     }
   }
 }
@@ -338,8 +339,8 @@ __global__ void scatterAddBlockKernel(T *outFeatures, const T *buffer,
 #if __CUDA_ARCH__ >= 530
 template <typename T, typename Index, int NumTLP, int NumILP>
 __global__ void scatterAddHalfBlockKernel(T *outFeatures, const T *buffer,
-                                         const Index *indices, int size,
-                                         int numPlanes) {
+                                          const Index *indices, int size,
+                                          int numPlanes) {
   int ILPStrideX[NumILP];
 #pragma unroll
   for (int ilp = 0; ilp < NumILP; ilp++)
@@ -351,9 +352,10 @@ __global__ void scatterAddHalfBlockKernel(T *outFeatures, const T *buffer,
 #pragma unroll
     for (int ilp = 0; ilp < NumILP; ++ilp) {
       idx = indices[ix + ILPStrideX[ilp]] * numPlanes + threadIdx.y;
-      reinterpret_cast<__half2 *>(outFeatures)[idx] =
-          __hadd2(reinterpret_cast<__half2 *>(outFeatures)[idx],
-                  reinterpret_cast<__half2 *>(buffer)[(ix + ILPStrideX[ilp]) * numPlanes + threadIdx.y]);
+      reinterpret_cast<__half2 *>(outFeatures)[idx] = __hadd2(
+          reinterpret_cast<__half2 *>(outFeatures)[idx],
+          reinterpret_cast<__half2 *>(
+              buffer)[(ix + ILPStrideX[ilp]) * numPlanes + threadIdx.y]);
     }
   }
 }

@@ -651,7 +651,8 @@ def main(algo=spconv.ConvAlgo.Native, dtype=torch.float32):
         indices_t = torch.from_numpy(indices).int().to(device).to(dtype)
         features_t = torch.from_numpy(features).to(device).to(dtype)
 
-        features_dense_t = torch.from_numpy(features_dense).to(device).to(dtype)
+        features_dense_t = torch.from_numpy(features_dense).to(device).to(
+            dtype)
         net = SparseConv3dTestTorch(1, 3, shape, IC, OC, k, s, p, d,
                                     algo=algo).to(device).to(dtype)
         net_ref = Conv3dTestTorch(1, 3, shape, IC, OC, k, s, p,
@@ -718,7 +719,8 @@ def main_subm(algo, dtype=torch.float32):
         indices_t = torch.from_numpy(indices).int().to(device).to(dtype)
         features_t = torch.from_numpy(features).to(device).to(dtype)
 
-        features_dense_t = torch.from_numpy(features_dense).to(device).to(dtype)
+        features_dense_t = torch.from_numpy(features_dense).to(device).to(
+            dtype)
         net = SubMConv3dTestTorch(1, 3, shape, IC, OC, k, s, p, d,
                                   algo=algo).to(device).to(dtype)
         net_ref = Conv3dTestTorch(1, 3, shape, IC, OC, k, s, p,
@@ -750,8 +752,8 @@ def main_subm(algo, dtype=torch.float32):
 
 
 if __name__ == '__main__':
-    main(algo=spconv.ConvAlgo.Native, dtype=torch.float32)
-    main(algo=spconv.ConvAlgo.Native, dtype=torch.half)
+    # main_subm(algo=spconv.ConvAlgo.Native, dtype=torch.float32)
+    # main_subm(algo=spconv.ConvAlgo.Native, dtype=torch.half)
     # TestCase().assertAllClose(out_my, out_ref)
     # unittest.main()
-    # TestSpConv().testSpConv3d()
+    TestSpConv().testSpConv3d()

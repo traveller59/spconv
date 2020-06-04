@@ -56,9 +56,15 @@ using dtype_collection_t =
     tv::mp_list_c<int, float32, int32, int16, int8, float64, bool_, uint8,
                   float16, int64, uint16, uint32, uint64>;
 
+#ifdef TV_CUDA
 using all_tensor_types_t =
     std::tuple<float, double, int8_t, int16_t, int32_t, int64_t, uint8_t,
                uint16_t, uint32_t, uint64_t, bool>;
+#else
+using all_tensor_types_t =
+    std::tuple<float, double, int8_t, int16_t, int32_t, int64_t, uint8_t,
+               uint16_t, uint32_t, uint64_t, bool>;
+#endif
 
 template <typename T> class TensorStorage {
 public:
@@ -395,6 +401,63 @@ void dispatch_int(int idx, BinaryPredicate p, F &&f) {
   }
 }
 
+// Ts is pack of mp_list_c
+template <class... Ts, typename Iterator, typename F>
+bool dispatch_container_noexcept(Iterator begin, Iterator end, F &&f) {
+  static_assert(sizeof...(Ts) > 0,
+                "you need to provide at least one candidate");
+  bool notFound = true;
+  mp_for_each<mp_list<Ts...>>([=, &notFound, &f](auto I) {
+    using val_lst_t = decltype(I);
+    auto val_lst_size = mp_size<val_lst_t>::value;
+    bool equal = true;
+    std::size_t count = 0;
+    auto iter = begin;
+    mp_for_each<val_lst_t>([&](auto E) {
+      if (iter == end || !equal) {
+        return;
+      }
+      if (count >= val_lst_size) {
+        TV_THROW_INVALID_ARG("iterator length invalid:", val_lst_size);
+      }
+      constexpr auto c = decltype(E)::value;
+      if (c != *iter) {
+        equal = false;
+      }
+      ++count;
+      std::advance(iter, 1);
+    });
+    if (count != val_lst_size || iter != end) {
+      equal = false;
+    }
+    if (equal && notFound) {
+      std::forward<F>(f)(I);
+      notFound = false;
+    }
+  });
+
+  return !notFound;
+}
+
+template <class... Ts, typename Iterator, typename F>
+void dispatch_container(Iterator begin, Iterator end, F &&f) {
+  if (!dispatch_container_noexcept<Ts...>(begin, end, std::forward<F>(f))) {
+    std::stringstream ss;
+    ss << "unknown value [";
+    for (auto iter = begin; iter != end; std::advance(iter, 1)) {
+      ss << *iter << ",";
+    }
+    ss << "], available: ";
+    mp_for_each<mp_list<Ts...>>([=, &ss](auto I) {
+      ss << "[";
+      mp_for_each<decltype(I)>(
+          [=, &ss](auto E) { ss << decltype(E)::value << ","; });
+      ss << "]";
+    });
+    TV_THROW_RT_ERR(ss.str());
+  }
+}
+
 /*
 template <int... Is, typename F> void dispatch_int(int idx, F &&f) {
   return dispatch_scalar<int, Is...>(idx, f);
@@ -407,6 +470,26 @@ template <template <class...> class T, class... Args>
 struct Dispatch<T<Args...>> {
   template <typename F> inline void operator()(DType t, F &&f) {
     return dispatch<Args...>(t, std::forward<F>(f));
+  }
+};
+
+template <class T> struct DispatchContainer;
+
+template <template <class...> class T, class... Args>
+struct DispatchContainer<T<Args...>> {
+  template <typename Iterator, typename F>
+  inline void operator()(Iterator begin, Iterator end, F &&f) {
+    return dispatch_container<Args...>(begin, end, std::forward<F>(f));
+  }
+};
+
+template <class T> struct DispatchContainerNoexcept;
+
+template <template <class...> class T, class... Args>
+struct DispatchContainerNoexcept<T<Args...>> {
+  template <typename Iterator, typename F>
+  inline bool operator()(Iterator begin, Iterator end, F &&f) {
+    return dispatch_container_noexcept<Args...>(begin, end, std::forward<F>(f));
   }
 };
 
@@ -531,13 +614,11 @@ struct Tensor {
             typename Tindex = int,
             typename std::enable_if<Rank == -1, int>::type = 0>
   TensorView<T, Rank, PtrTraits, Tindex> tview() {
-    using tv_shape_t =
-        typename TensorView<T, Rank, PtrTraits, Tindex>::tv_shape_t;
     writable_check();
     static_assert(Rank == -1 || Rank > 0, "error");
     TV_ASSERT_RT_ERR(dtype_ == type_v<T>, "error");
     ShapeBase<TV_MAX_DIM, Tindex> shape(ndim()), stride(ndim());
-    for (int i = 0; i < ndim(); ++i) {
+    for (size_t i = 0; i < ndim(); ++i) {
       shape[i] = shape_[i];
       stride[i] = stride_[i];
     }
@@ -579,7 +660,7 @@ struct Tensor {
     TV_ASSERT_RT_ERR(dtype_ == type_v<T>, "error");
 
     ShapeBase<TV_MAX_DIM, Tindex> shape(ndim()), stride(ndim());
-    for (int i = 0; i < ndim(); ++i) {
+    for (int i = 0; i < int(ndim()); ++i) {
       shape[i] = shape_[i];
       stride[i] = stride_[i];
     }
@@ -618,6 +699,21 @@ struct Tensor {
     Tensor res(*this);
     res.shape_ = shape;
     res.stride_ = shape.stride_rowmajor();
+    return res;
+  }
+
+  Tensor operator[](int64_t index) {
+    TV_ASSERT_INVALID_ARG(ndim() > 1, "error");
+    if (index < 0) {
+      index += dim(0);
+    }
+    TV_ASSERT_INVALID_ARG(index < dim(0), "error");
+    Tensor res = Tensor();
+    res.storage_ = storage_;
+    res.shape_ = shape_.subshape(1);
+    res.offset_ = offset_ + index * stride_[0];
+    res.stride_ = stride_.subshape(1);
+    res.writeable_ = writeable_;
     return res;
   }
 
@@ -665,6 +761,7 @@ struct Tensor {
   size_t ndim() const { return shape_.ndim(); }
 
   const TensorShape &shape() const { return shape_; }
+  const TensorShape &sizes() const { return shape_; }
   const TensorShape &stride() const { return stride_; }
 
   int dim(int idx) const {
@@ -679,6 +776,7 @@ struct Tensor {
   const uint8_t *raw_data() const { return storage_->data() + offset_; }
   size_t raw_size() const { return size() * itemsize(); }
   size_t size() const { return shape_.size(); }
+  size_t size(int64_t idx) const { return dim(idx); }
   size_t itemsize() const { return detail::sizeof_dtype(dtype_); }
   Tensor &zero_() {
     writable_check();
@@ -714,6 +812,16 @@ struct Tensor {
   template <typename T> const T *data() const {
     TV_ASSERT_RT_ERR(dtype_ == type_v<T>, "error");
     return reinterpret_cast<const T *>(raw_data());
+  }
+
+  template <typename T> T *data_ptr() { return data<T>(); }
+
+  template <typename T> const T *data_ptr() const { return data<T>(); }
+
+  void *data_ptr() { return reinterpret_cast<void *>(raw_data()); }
+
+  const void *data_ptr() const {
+    return reinterpret_cast<const void *>(raw_data());
   }
 
   void copy_(const Tensor &tensor) {
@@ -837,8 +945,8 @@ struct Tensor {
         using Tcur = decltype(Icur);
         if (std::is_convertible<Tcur, Tdst>::value) {
           auto ptr = this->data<Tcur>();
-          tensor = Tensor(this->shape_, this->stride_, dtype, this->device(), this->pinned(),
-                          this->storage_->managed());
+          tensor = Tensor(this->shape_, this->stride_, dtype, this->device(),
+                          this->pinned(), this->storage_->managed());
           std::copy(ptr, ptr + this->size(), tensor.data<Tdst>());
         } else {
           TV_THROW_INVALID_ARG("not convertable from", type_s<Tcur>, "to",

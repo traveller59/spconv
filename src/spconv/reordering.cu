@@ -30,10 +30,12 @@ namespace spconv {
 using float_types_t = tv::mp_list<float, double, at::Half>;
 using int_types_t = tv::mp_list<int32_t, int64_t>;
 template <typename T>
-using half_vec_t = std::conditional_t<std::is_same<T, at::Half>::value, int4, int4>;
+using half_vec_t =
+    std::conditional_t<std::is_same<T, at::Half>::value, int4, int4>;
 template <typename T>
-using half_vec_sadd_t = std::conditional_t<std::is_same<T, at::Half>::value, int4, int4>;
-  using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
+using half_vec_sadd_t =
+    std::conditional_t<std::is_same<T, at::Half>::value, int4, int4>;
+using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
 
 void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
                         torch::Tensor indices, int size) {
@@ -51,49 +53,55 @@ void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
       bool notFound = true;
       constexpr int vecloadFactor = sizeof(vecload_type_t) / sizeof(T);
 
-      tv::mp_for_each<kernel_block_t>(
-          [=, &buffer, &features, &indices, &notFound](auto NumTLP) {
-            constexpr int NumILP = NumTLP / 4;
-            // constexpr int NumILP = NumTLP / (64 / (NumTLP / vecloadFactor));
-            int nHotBlock = (size / NumTLP) * NumTLP;
-            if (notFound) {
-              if (numPlanes % NumTLP == 0) {
-                if (nHotBlock >= NumTLP) {
-                  gatherVecBlockKernel<T, Index, int(NumTLP), NumILP,
-                                       vecload_type_t>
-                      <<<dim3(size / NumTLP, numPlanes / NumTLP),
-                         dim3(NumTLP / NumILP, NumTLP / vecloadFactor), 0,
-                         stream>>>(buffer.data_ptr<T>(), features.data_ptr<T>(),
-                                   indices.data_ptr<Index>(), nHotBlock,
-                                   numPlanes / vecloadFactor);
+      tv::mp_for_each<kernel_block_t>([=, &buffer, &features, &indices,
+                                       &notFound](auto NumTLP) {
+        constexpr int NumILP = NumTLP / 4;
+        // constexpr int NumILP = NumTLP / (64 / (NumTLP / vecloadFactor));
+        int nHotBlock = (size / NumTLP) * NumTLP;
+        if (notFound) {
+          if (numPlanes % NumTLP == 0) {
+            if (nHotBlock >= NumTLP) {
+              gatherVecBlockKernel<T, Index, int(NumTLP), NumILP,
+                                   vecload_type_t>
+                  <<<dim3(size / NumTLP, numPlanes / NumTLP),
+                     dim3(NumTLP / NumILP, NumTLP / vecloadFactor), 0,
+                     stream>>>(buffer.data_ptr<T>(), features.data_ptr<T>(),
+                               indices.data_ptr<Index>(), nHotBlock,
+                               numPlanes / vecloadFactor);
 #ifdef TV_LOG_KERNEL_INFO
-                  cudaFuncAttributes attr;
-                  checkCudaErrors(cudaFuncGetAttributes(&attr, gatherVecBlockKernel<T, Index, int(NumTLP), NumILP,
-                                       vecload_type_t>));
-                  tv::ssprint("gatherVecBlockKernel<", tv::type_s<T>, tv::type_s<Index>, int(NumTLP), NumILP, ">", attr.numRegs);
+              cudaFuncAttributes attr;
+              checkCudaErrors(cudaFuncGetAttributes(
+                  &attr, gatherVecBlockKernel<T, Index, int(NumTLP), NumILP,
+                                              vecload_type_t>));
+              tv::ssprint("gatherVecBlockKernel<", tv::type_s<T>,
+                          tv::type_s<Index>, int(NumTLP), NumILP, ">",
+                          attr.numRegs);
 #endif
-                  TV_CHECK_CUDA_ERR();
-                }
-                if (size - nHotBlock > 0) {
-                  gatherVecKernel<T, Index, int(NumTLP), NumILP, vecload_type_t>
-                      <<<dim3(1, numPlanes / NumTLP),
-                         dim3(NumTLP / NumILP, NumTLP / vecloadFactor), 0,
-                         stream>>>(buffer.data_ptr<T>() + nHotBlock * numPlanes,
-                                   features.data_ptr<T>(),
-                                   indices.data_ptr<Index>() + nHotBlock,
-                                   size - nHotBlock, numPlanes / vecloadFactor);
+              TV_CHECK_CUDA_ERR();
+            }
+            if (size - nHotBlock > 0) {
+              gatherVecKernel<T, Index, int(NumTLP), NumILP, vecload_type_t>
+                  <<<dim3(1, numPlanes / NumTLP),
+                     dim3(NumTLP / NumILP, NumTLP / vecloadFactor), 0,
+                     stream>>>(buffer.data_ptr<T>() + nHotBlock * numPlanes,
+                               features.data_ptr<T>(),
+                               indices.data_ptr<Index>() + nHotBlock,
+                               size - nHotBlock, numPlanes / vecloadFactor);
 #ifdef TV_LOG_KERNEL_INFO
-                  cudaFuncAttributes attr;
-                  checkCudaErrors(cudaFuncGetAttributes(&attr, gatherVecKernel<T, Index, int(NumTLP), NumILP, vecload_type_t>));
-                  tv::ssprint("gatherVecKernel<", tv::type_s<T>, tv::type_s<Index>, int(NumTLP), NumILP, ">", attr.numRegs);
+              cudaFuncAttributes attr;
+              checkCudaErrors(cudaFuncGetAttributes(
+                  &attr, gatherVecKernel<T, Index, int(NumTLP), NumILP,
+                                         vecload_type_t>));
+              tv::ssprint("gatherVecKernel<", tv::type_s<T>, tv::type_s<Index>,
+                          int(NumTLP), NumILP, ">", attr.numRegs);
 #endif
 
-                  TV_CHECK_CUDA_ERR();
-                }
-                notFound = false;
-              }
+              TV_CHECK_CUDA_ERR();
             }
-          });
+            notFound = false;
+          }
+        }
+      });
       if (notFound) {
         constexpr int NumTLP = 64;
         constexpr int NumILP = NumTLP / 4;
@@ -105,8 +113,10 @@ void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
                 indices.data_ptr<Index>(), size, numPlanes);
 #ifdef TV_LOG_KERNEL_INFO
         cudaFuncAttributes attr;
-        checkCudaErrors(cudaFuncGetAttributes(&attr, gatherGenericKernel<T, Index, NumTLP, NumILP>));
-        tv::ssprint("gatherGenericKernel<", tv::type_s<T>, tv::type_s<Index>, int(NumTLP), NumILP, ">", attr.numRegs);
+        checkCudaErrors(cudaFuncGetAttributes(
+            &attr, gatherGenericKernel<T, Index, NumTLP, NumILP>));
+        tv::ssprint("gatherGenericKernel<", tv::type_s<T>, tv::type_s<Index>,
+                    int(NumTLP), NumILP, ">", attr.numRegs);
 #endif
 
         TV_CHECK_CUDA_ERR();
@@ -151,9 +161,12 @@ void sparse_scatter_add_cuda(torch::Tensor buffer, torch::Tensor outFeatures,
                                numPlanes / vecloadFactor);
 #ifdef TV_LOG_KERNEL_INFO
               cudaFuncAttributes attr;
-              checkCudaErrors(cudaFuncGetAttributes(&attr, scatterAddVecBlockKernel<T, Index, int(NumTLP), NumILP,
-                                       vecload_type_t>));
-              tv::ssprint("scatterAddVecBlockKernel<", tv::type_s<T>, tv::type_s<Index>, int(NumTLP), NumILP, ">", attr.numRegs);
+              checkCudaErrors(cudaFuncGetAttributes(
+                  &attr, scatterAddVecBlockKernel<T, Index, int(NumTLP), NumILP,
+                                                  vecload_type_t>));
+              tv::ssprint("scatterAddVecBlockKernel<", tv::type_s<T>,
+                          tv::type_s<Index>, int(NumTLP), NumILP, ">",
+                          attr.numRegs);
 #endif
 
               TV_CHECK_CUDA_ERR();
@@ -167,8 +180,12 @@ void sparse_scatter_add_cuda(torch::Tensor buffer, torch::Tensor outFeatures,
                                   size - nHotBlock, numPlanes);
 #ifdef TV_LOG_KERNEL_INFO
               cudaFuncAttributes attr;
-              checkCudaErrors(cudaFuncGetAttributes(&attr, scatterAddGenericKernel<T, Index, int(NumTLP), NumILP>));
-              tv::ssprint("scatterAddGenericKernel<", tv::type_s<T>, tv::type_s<Index>, int(NumTLP), NumILP, ">", attr.numRegs);
+              checkCudaErrors(cudaFuncGetAttributes(
+                  &attr,
+                  scatterAddGenericKernel<T, Index, int(NumTLP), NumILP>));
+              tv::ssprint("scatterAddGenericKernel<", tv::type_s<T>,
+                          tv::type_s<Index>, int(NumTLP), NumILP, ">",
+                          attr.numRegs);
 #endif
               TV_CHECK_CUDA_ERR();
             }
@@ -187,8 +204,10 @@ void sparse_scatter_add_cuda(torch::Tensor buffer, torch::Tensor outFeatures,
                 indices.data_ptr<Index>(), size, numPlanes);
 #ifdef TV_LOG_KERNEL_INFO
         cudaFuncAttributes attr;
-        checkCudaErrors(cudaFuncGetAttributes(&attr, scatterAddGenericKernel<T, Index, int(NumTLP), NumILP>));
-        tv::ssprint("notfound scatterAddGenericKernel<", tv::type_s<T>, tv::type_s<Index>, int(NumTLP), NumILP, ">", attr.numRegs);
+        checkCudaErrors(cudaFuncGetAttributes(
+            &attr, scatterAddGenericKernel<T, Index, int(NumTLP), NumILP>));
+        tv::ssprint("notfound scatterAddGenericKernel<", tv::type_s<T>,
+                    tv::type_s<Index>, int(NumTLP), NumILP, ">", attr.numRegs);
 #endif
 
         TV_CHECK_CUDA_ERR();

@@ -2,13 +2,13 @@
 namespace spconv {
 
 std::vector<torch::Tensor>
-getIndicePairV2(torch::Tensor indices, int64_t batchSize,
-                std::vector<int64_t> outSpatialShape,
-                std::vector<int64_t> spatialShape,
-                std::vector<int64_t> kernelSize, std::vector<int64_t> stride,
-                std::vector<int64_t> padding, std::vector<int64_t> dilation,
-                std::vector<int64_t> outPadding, int64_t _subM,
-                int64_t _transpose, int64_t _useHash) {
+getIndicePairs(torch::Tensor indices, int64_t batchSize,
+               std::vector<int64_t> outSpatialShape,
+               std::vector<int64_t> spatialShape,
+               std::vector<int64_t> kernelSize, std::vector<int64_t> stride,
+               std::vector<int64_t> padding, std::vector<int64_t> dilation,
+               std::vector<int64_t> outPadding, int64_t _subM,
+               int64_t _transpose, int64_t _useHash) {
   // auto timer = spconv::CudaContextTimer<>();
   bool subM = _subM != 0;
   bool transpose = _transpose != 0;
@@ -57,6 +57,7 @@ getIndicePairV2(torch::Tensor indices, int64_t batchSize,
       stride[i] = 1;
     }
   }
+  // tv::ssprint("prepare", timer.report() / 1000.0);
   if (subM) {
     if (indices.device().type() == torch::kCPU) {
       numActOut = create_submconv_indice_pair_cpu(
@@ -85,6 +86,7 @@ getIndicePairV2(torch::Tensor indices, int64_t batchSize,
     else {
       TV_THROW_INVALID_ARG("unknown device type");
     }
+    // tv::ssprint("subm", timer.report() / 1000.0);
     return {indices, indicePairs, indiceNum};
   } else {
     auto indicePairUnique = torch::full(
@@ -193,6 +195,7 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
     if (nHot <= 0 || (subM && i == indicePairMaxOffset)) {
       continue;
     }
+    // TODO torch::from_blob is a little slow
     auto outputBufferBlob = torch::from_blob(outputBuffer.data_ptr(),
                                              {nHot, numOutPlanes}, options);
     auto inputBufferBlob =
@@ -406,11 +409,11 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
       torch::TensorOptions().dtype(features.dtype()).device(features.device());
   auto filterShape = filters.sizes();
   torch::Tensor inputGrad = torch::zeros(features.sizes(), options);
-  torch::Tensor filtersGrad = torch::zeros(filterShape, options);
+  torch::Tensor filtersGrad = torch::empty(filterShape, options);
   torch::Tensor inputBuffer =
-      torch::zeros({indicePairMaxSize, numInPlanes}, options);
+      torch::empty({indicePairMaxSize, numInPlanes}, options);
   torch::Tensor outputBuffer =
-      torch::zeros({indicePairMaxSize, numOutPlanes}, options);
+      torch::empty({indicePairMaxSize, numOutPlanes}, options);
 
   filters = filters.view({-1, numInPlanes, numOutPlanes});
   filtersGrad = filtersGrad.view({-1, numInPlanes, numOutPlanes});

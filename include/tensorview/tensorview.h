@@ -13,13 +13,13 @@
 // limitations under the License.
 
 #pragma once
+#include "common.h"
+#include "prettyprint.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
-
-#include "common.h"
-#include "prettyprint.h"
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <sstream>
 #include <type_traits>
@@ -121,6 +121,15 @@ constexpr size_t calc_align(size_t ndim)
     return 64;
 }
 */
+
+namespace detail {
+template <typename _InIter>
+using _RequireInputIter = typename std::enable_if<std::is_convertible<
+    typename std::iterator_traits<_InIter>::iterator_category,
+    std::input_iterator_tag>::value>::type;
+
+}
+
 template <typename T, size_t MaxDim = TV_MAX_DIM>
 struct /*alignas(calc_align<T>(MaxDim))*/ SimpleVector {
 public:
@@ -131,7 +140,8 @@ public:
       array_[i] = init;
     }
   };
-  template <typename Iterator> SimpleVector(Iterator first, Iterator last) {
+  template <typename Iterator, typename = detail::_RequireInputIter<Iterator>>
+  SimpleVector(Iterator first, Iterator last) {
     size_ = 0;
     for (; first != last; ++first) {
       if (size_ >= MaxDim) {
@@ -588,6 +598,12 @@ template <int N, int Ndim> struct ArrayIndexRowMajor {
     return ArrayIndexRowMajor<N - 1, Ndim>::runShape(
         shape, (index + start) * shape[Ndim - N + 1], inds...);
   }
+  template <typename TShape, typename Tinit>
+  TV_HOST_DEVICE_INLINE static unsigned
+  runPtrs(const TShape *indexes, const TShape *shape, Tinit start) {
+    return ArrayIndexRowMajor<N - 1, Ndim>::runPtrs(
+        indexes, shape, (indexes[Ndim - N] + start) * shape[Ndim - N + 1]);
+  }
 };
 
 template <int Ndim> struct ArrayIndexRowMajor<1, Ndim> {
@@ -601,6 +617,11 @@ template <int Ndim> struct ArrayIndexRowMajor<1, Ndim> {
                                                  Tinit start, T idx) {
     return start + idx;
   }
+  template <typename TShape, typename Tinit>
+  TV_HOST_DEVICE_INLINE static unsigned
+  runPtrs(const TShape *indexes, const TShape *shape, Tinit start) {
+    return start + indexes[Ndim - 1];
+  }
 };
 
 template <> struct ArrayIndexRowMajor<0, 0> {
@@ -611,6 +632,11 @@ template <> struct ArrayIndexRowMajor<0, 0> {
   template <typename Tinit>
   TV_HOST_DEVICE_INLINE static unsigned runShape(const Shape &shape,
                                                  Tinit start) {
+    return 0;
+  }
+  template <typename TShape, typename Tinit>
+  TV_HOST_DEVICE_INLINE static unsigned
+  runPtrs(const TShape *indexes, const TShape *shape, Tinit start) {
     return 0;
   }
 };
@@ -744,8 +770,8 @@ struct TensorAccesserBase {
   }
 
 protected:
-  const Tindex *stride_ptr_;
   ptr_t ptr_;
+  const Tindex *stride_ptr_;
 };
 } // namespace detail
 
@@ -1091,8 +1117,7 @@ struct TensorView {
     return TensorView<T, Rank, PtrTraits, Tindex>(
         ptr_ + rowArrayIdx(shape_, start), shape_.subshape(ids.size()));
   }
-  template <typename Os>
-  std::string repr(Os &ss, int limit = 1000, int limit_axis = 6) const {
+  template <typename Os> std::string repr(Os &ss) const {
     if (empty())
       return "";
     if (shape_.ndim() == 0) {
@@ -1100,7 +1125,6 @@ struct TensorView {
       ss << *ptr_;
       return ss.str();
     }
-    bool enable_limit = size() > limit;
 
     SimpleVector<int64_t, TV_MAX_DIM> prev(ndim(), -1);
     SimpleVector<int64_t, TV_MAX_DIM> nd_index(ndim());
@@ -1111,7 +1135,7 @@ struct TensorView {
     ss << "Tensor[" << type_s<T> << "]: shape=" << shape()
        << ", stride=" << stride() << std::endl;
     auto ndimValue = ndim();
-    for (int64_t i = 0; i < size(); ++i) {
+    for (int64_t i = 0; i < int64_t(size()); ++i) {
       rowArrayIdxInv(i, nd_index.data(), _shape.data(), ndimValue);
       bool newline = false;
       int end_count = 0;

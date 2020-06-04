@@ -54,9 +54,10 @@ __global__ void prepareIndicePairsKernel(
     for (Index i = 0; i < numValidPoints; ++i) {
       pointPtr = validPoints + i * (NDim + 1);
       auto offset = pointPtr[NDim];
-      auto oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
+      Index oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
       indicePairs(0, offset, oldNum) = ix;
-      index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape.data()) +
+      index = tv::ArrayIndexRowMajor<NDim, NDim>::runPtrs(
+                  pointPtr, outSpatialShape.data(), 0) +
               spatialVolume * indicesIn(ix, 0);
       indicePairs(1, offset, oldNum) = index;
       indicePairUnique[offset * indicePairsDim2 + oldNum] = index;
@@ -97,9 +98,10 @@ __global__ void prepareDeConvIndicePairsKernel(
     for (Index i = 0; i < numValidPoints; ++i) {
       pointPtr = validPoints + i * (NDim + 1);
       auto offset = pointPtr[NDim];
-      auto oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
+      Index oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
       indicePairs(0, offset, oldNum) = ix;
-      index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape.data()) +
+      index = tv::ArrayIndexRowMajor<NDim, NDim>::runPtrs(
+                  pointPtr, outSpatialShape.data(), 0) +
               spatialVolume * indicesIn(ix, 0);
       indicePairs(1, offset, oldNum) = index;
       indicePairUnique[offset * indicePairsDim2 + oldNum] = index;
@@ -190,21 +192,16 @@ assignIndicePairsKernel(tv::TensorView<Index> indicesOut,
 }
 
 template <typename Index, typename IndexGrid, unsigned NDim>
-__global__ void
-prepareSubMGridKernel(tv::TensorView<const Index> indicesIn,
-                      tv::TensorView<IndexGrid> gridsOut,
-                      const tv::SimpleVector<Index, NDim> outSpatialShape) {
+__global__ void prepareSubMGridKernel(
+    tv::TensorView<const Index> indicesIn, tv::TensorView<IndexGrid> gridsOut,
+    const tv::SimpleVector<Index, NDim> outSpatialShape, Index spatialVolume) {
   auto numActIn = indicesIn.dim(0);
-  Index spatialVolume = 1;
-#pragma unroll
-  for (int i = 0; i < NDim; ++i) {
-    spatialVolume *= outSpatialShape[i];
-  }
   Index index = 0;
   for (int ix : tv::KernelLoopX<int>(numActIn)) {
-    index = tv::rowArrayIdx<Index, NDim>(indicesIn.data() + ix * (NDim + 1) + 1,
-                                         outSpatialShape.data()) +
-            spatialVolume * indicesIn(ix, 0);
+    index =
+        tv::ArrayIndexRowMajor<NDim, NDim>::runPtrs(
+            indicesIn.data() + ix * (NDim + 1) + 1, outSpatialShape.data(), 0) +
+        spatialVolume * indicesIn(ix, 0);
     gridsOut[index] = ix;
   }
 }
@@ -258,12 +255,89 @@ __global__ void getSubMIndicePairsKernel(
     for (int i = 0; i < numValidPoints; ++i) {
       pointPtr = validPoints + i * (NDim + 1);
       auto offset = pointPtr[NDim];
-      index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape.data()) +
+      index = tv::ArrayIndexRowMajor<NDim, NDim>::runPtrs(
+                  pointPtr, outSpatialShape.data(), 0) +
               spatialVolume * indicesIn(ix, 0);
       if (gridsOut[index] > -1) {
-        auto oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
+        Index oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
         indicePairs(1, offset, oldNum) = gridsOut[index];
         indicePairs(0, offset, oldNum) = ix;
+      }
+    }
+  }
+}
+
+template <typename Index, typename IndexGrid, unsigned K0, unsigned K1,
+          unsigned K2>
+__global__ void getSubMIndicePairsKernel3(
+    tv::TensorView<const Index> indicesIn, tv::TensorView<IndexGrid> gridsOut,
+    tv::TensorView<Index> indicePairs, tv::TensorView<Index> indiceNum,
+    const tv::SimpleVector<Index, 3> outSpatialShape, Index spatialVolume) {
+  auto numActIn = indicesIn.dim(0);
+  Index point[3];
+  Index index = 0;
+  Index offset;
+
+  for (int ix : tv::KernelLoopX<int>(numActIn)) {
+    const Index *indice_data = indicesIn.data() + ix * (3 + 1);
+#pragma unroll
+    for (int i = 0; i < K0; ++i) {
+#pragma unroll
+      for (int j = 0; j < K1; ++j) {
+#pragma unroll
+        for (int k = 0; k < K2; ++k) {
+          offset = i * K1 * K2 + j * K2 + k;
+          point[2] = indice_data[3] - k + K2 / 2;
+          point[1] = indice_data[2] - j + K1 / 2;
+          point[0] = indice_data[1] - i + K0 / 2;
+          if (point[1] >= 0 && point[1] < outSpatialShape[1] && point[2] >= 0 &&
+              point[2] < outSpatialShape[2] && point[0] >= 0 &&
+              point[0] < outSpatialShape[0]) {
+            index = tv::ArrayIndexRowMajor<3, 3>::runPtrs(
+                        point, outSpatialShape.data(), 0) +
+                    spatialVolume * indice_data[0];
+            if (gridsOut[index] != -1) {
+              Index oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
+              indicePairs(1, offset, oldNum) = gridsOut[index];
+              indicePairs(0, offset, oldNum) = ix;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+template <typename Index, typename IndexGrid, unsigned K0, unsigned K1>
+__global__ void getSubMIndicePairsKernel2(
+    tv::TensorView<const Index> indicesIn, tv::TensorView<IndexGrid> gridsOut,
+    tv::TensorView<Index> indicePairs, tv::TensorView<Index> indiceNum,
+    const tv::SimpleVector<Index, 2> outSpatialShape, Index spatialVolume) {
+  auto numActIn = indicesIn.dim(0);
+  Index point[2];
+  Index index = 0;
+  Index offset;
+
+  for (int ix : tv::KernelLoopX<int>(numActIn)) {
+    const Index *indice_data = indicesIn.data() + ix * (2 + 1);
+#pragma unroll
+    for (int i = 0; i < K0; ++i) {
+#pragma unroll
+      for (int j = 0; j < K1; ++j) {
+        offset = i * K1 + j;
+        point[1] = indice_data[2] - j + K1 / 2;
+        point[0] = indice_data[1] - i + K0 / 2;
+        if (point[1] >= 0 && point[1] < outSpatialShape[1] && point[0] >= 0 &&
+            point[0] < outSpatialShape[0]) {
+          index = tv::ArrayIndexRowMajor<2, 2>::runPtrs(
+                      point, outSpatialShape.data(), 0) +
+                  spatialVolume * indice_data[0];
+          if (gridsOut[index] > -1) {
+            Index oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
+            indicePairs(1, offset, oldNum) = gridsOut[index];
+            indicePairs(0, offset, oldNum) = ix;
+          }
+        }
       }
     }
   }
@@ -299,12 +373,13 @@ __global__ void getSubMIndicePairsHashKernel(
     for (int i = 0; i < numValidPoints; ++i) {
       pointPtr = validPoints + i * (NDim + 1);
       auto offset = pointPtr[NDim];
-      index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape.data()) +
+      index = tv::ArrayIndexRowMajor<NDim, NDim>::runPtrs(
+                  pointPtr, outSpatialShape.data(), 0) +
               spatialVolume * indicesIn(ix, 0);
       auto val = cuhash::retrieve((unsigned)(index), table_size, table,
                                   constants, stash_constants, stash_count);
       if (val != cuhash::kNotFound) {
-        auto oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
+        Index oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
         indicePairs(1, offset, oldNum) = val;
         indicePairs(0, offset, oldNum) = ix;
       }
@@ -332,7 +407,7 @@ __global__ void
 resetGridSubMKernel(const Index *indices, tv::TensorView<IndexGrid> gridsOut,
                     const tv::SimpleVector<Index, NDim> outSpatialShape,
                     int numAct) {
-  int outSpatialShapeReg[NDim];
+  Index outSpatialShapeReg[NDim];
   for (int i = 0; i < NDim; ++i) {
     outSpatialShapeReg[i] = outSpatialShape[i];
   }
@@ -345,11 +420,14 @@ resetGridSubMKernel(const Index *indices, tv::TensorView<IndexGrid> gridsOut,
   Index index;
   for (int ix : tv::KernelLoopX<int>(numAct)) {
     indsPtr = indices + ix * (NDim + 1);
-    index = tv::rowArrayIdx<Index, NDim>(indsPtr + 1, outSpatialShapeReg);
+    index = tv::ArrayIndexRowMajor<NDim, NDim>::runPtrs(indsPtr + 1,
+                                                        outSpatialShapeReg, 0);
     gridsOut[index + spatialVolume * indsPtr[0]] = -1;
   }
 }
 
 } // namespace spconv
+
+#undef atomicAdd
 
 #endif

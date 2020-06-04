@@ -20,9 +20,9 @@ import spconv
 
 
 class ConvAlgo(Enum):
-    Native = 0 # small memory cost, faster when number of points is large.
-    Batch = 1 # high memory cost, faster when number of points is small (< 50000)
-    BatchGemmGather = 2 # high memory cost, faster when number of points medium
+    Native = 0  # small memory cost, faster when number of points is large.
+    Batch = 1  # high memory cost, faster when number of points is small (< 50000)
+    BatchGemmGather = 2  # high memory cost, faster when number of points medium
 
 
 def get_conv_output_size(input_size, kernel_size, stride, padding, dilation):
@@ -88,12 +88,11 @@ def get_indice_pairs(indices,
     else:
         out_shape = spatial_shape
     if grid is None:
-        res = torch.ops.spconv.get_indice_pairs_v2(indices, batch_size,
-                                                   out_shape, spatial_shape,
-                                                   ksize, stride, padding,
-                                                   dilation, out_padding,
-                                                   int(subm), int(transpose),
-                                                   int(use_hash))
+        res = torch.ops.spconv.get_indice_pairs(indices, batch_size, out_shape,
+                                                spatial_shape, ksize, stride,
+                                                padding, dilation, out_padding,
+                                                int(subm), int(transpose),
+                                                int(use_hash))
         return res
     else:
         if ndim == 2:

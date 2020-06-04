@@ -21,14 +21,7 @@
 
 static auto registry =
     torch::RegisterOperators()
-        .op("spconv::get_indice_pairs_2d", &spconv::getIndicePair<2>)
-        .op("spconv::get_indice_pairs_3d", &spconv::getIndicePair<3>)
-        .op("spconv::get_indice_pairs_4d", &spconv::getIndicePair<4>)
-        .op("spconv::get_indice_pairs_v2", &spconv::getIndicePairV2)
-        .op("spconv::get_indice_pairs_grid_2d",
-            &spconv::getIndicePairPreGrid<2>)
-        .op("spconv::get_indice_pairs_grid_3d",
-            &spconv::getIndicePairPreGrid<3>)
+        .op("spconv::get_indice_pairs", &spconv::getIndicePairs)
         .op("spconv::indice_conv", &spconv::indiceConv)
         .op("spconv::indice_conv_batch", &spconv::indiceConvBatch)
         .op("spconv::indice_conv_backward", &spconv::indiceConvBackward)

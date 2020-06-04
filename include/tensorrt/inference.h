@@ -66,7 +66,7 @@ public:
 
 class InferenceContext {
 public:
-  explicit InferenceContext(const std::string& engine_bin, int device)
+  explicit InferenceContext(const std::string &engine_bin, int device)
       : logger_(nvinfer1::ILogger::Severity::kINFO), device_(device) {
     TV_ASSERT_INVALID_ARG(device >= 0, "invalid device id");
     int deviceCount;
@@ -159,9 +159,9 @@ public:
     return (*this)(inputs_vec);
   }
 
-  tv::Tensor operator[](std::string name){
+  tv::Tensor operator[](std::string name) {
     auto iter = name_to_host_mem_.find(name);
-    if (iter == name_to_host_mem_.end()){
+    if (iter == name_to_host_mem_.end()) {
       TV_THROW_INVALID_ARG(name, "not found.");
     }
     return iter->second;
@@ -204,4 +204,4 @@ private:
   int device_;
 };
 
-} // namespace trtplus
+} // namespace trt
