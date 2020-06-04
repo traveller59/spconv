@@ -752,8 +752,8 @@ def main_subm(algo, dtype=torch.float32):
 
 
 if __name__ == '__main__':
-    # main_subm(algo=spconv.ConvAlgo.Native, dtype=torch.float32)
-    # main_subm(algo=spconv.ConvAlgo.Native, dtype=torch.half)
+    main_subm(algo=spconv.ConvAlgo.Native, dtype=torch.float32)
+    main_subm(algo=spconv.ConvAlgo.Native, dtype=torch.half)
     # TestCase().assertAllClose(out_my, out_ref)
     # unittest.main()
-    TestSpConv().testSpConv3d()
+    # TestSpConv().testSpConv3d()

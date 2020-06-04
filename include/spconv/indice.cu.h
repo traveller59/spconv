@@ -274,10 +274,13 @@ __global__ void getSubMIndicePairsKernel3(
     tv::TensorView<Index> indicePairs, tv::TensorView<Index> indiceNum,
     const tv::SimpleVector<Index, 3> outSpatialShape, Index spatialVolume) {
   auto numActIn = indicesIn.dim(0);
+
   Index point[3];
   Index index = 0;
   Index offset;
-
+  constexpr unsigned KV = K0 * K1 * K2;
+  constexpr unsigned center = KV / 2;
+  *(indiceNum.data() + center) = numActIn;
   for (int ix : tv::KernelLoopX<int>(numActIn)) {
     const Index *indice_data = indicesIn.data() + ix * (3 + 1);
 #pragma unroll
@@ -287,19 +290,32 @@ __global__ void getSubMIndicePairsKernel3(
 #pragma unroll
         for (int k = 0; k < K2; ++k) {
           offset = i * K1 * K2 + j * K2 + k;
-          point[2] = indice_data[3] - k + K2 / 2;
-          point[1] = indice_data[2] - j + K1 / 2;
-          point[0] = indice_data[1] - i + K0 / 2;
-          if (point[1] >= 0 && point[1] < outSpatialShape[1] && point[2] >= 0 &&
-              point[2] < outSpatialShape[2] && point[0] >= 0 &&
-              point[0] < outSpatialShape[0]) {
-            index = tv::ArrayIndexRowMajor<3, 3>::runPtrs(
-                        point, outSpatialShape.data(), 0) +
-                    spatialVolume * indice_data[0];
-            if (gridsOut[index] != -1) {
-              Index oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
-              indicePairs(1, offset, oldNum) = gridsOut[index];
-              indicePairs(0, offset, oldNum) = ix;
+          if (offset > center){
+            continue;
+          }
+          if (center == offset){
+              // center of subm indice pairs dont need atomicadd
+              indicePairs(1, offset, ix) = ix;
+              indicePairs(0, offset, ix) = ix;
+          }else{
+            point[2] = indice_data[3] - k + K2 / 2;
+            point[1] = indice_data[2] - j + K1 / 2;
+            point[0] = indice_data[1] - i + K0 / 2;
+            if (point[1] >= 0 && point[1] < outSpatialShape[1] && point[2] >= 0 &&
+                point[2] < outSpatialShape[2] && point[0] >= 0 &&
+                point[0] < outSpatialShape[0]) {
+              index = tv::ArrayIndexRowMajor<3, 3>::runPtrs(
+                          point, outSpatialShape.data(), 0) +
+                      spatialVolume * indice_data[0];
+              if (gridsOut[index] != -1) {
+                // for subm: indicePairs[0, i] = indicePairs[1, kernelVolume - i - 1]
+                Index oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
+                atomicAdd(indiceNum.data() + KV - offset - 1, Index(1));
+                indicePairs(1, offset, oldNum) = gridsOut[index];
+                indicePairs(0, offset, oldNum) = ix;
+                indicePairs(1, KV - offset - 1, oldNum) = ix;
+                indicePairs(0, KV - offset - 1, oldNum) = gridsOut[index];
+              }
             }
           }
         }
@@ -317,6 +333,9 @@ __global__ void getSubMIndicePairsKernel2(
   Index point[2];
   Index index = 0;
   Index offset;
+  constexpr unsigned KV = K0 * K1;
+  constexpr unsigned center = KV / 2;
+  *(indiceNum.data() + center) = numActIn;
 
   for (int ix : tv::KernelLoopX<int>(numActIn)) {
     const Index *indice_data = indicesIn.data() + ix * (2 + 1);
@@ -325,17 +344,29 @@ __global__ void getSubMIndicePairsKernel2(
 #pragma unroll
       for (int j = 0; j < K1; ++j) {
         offset = i * K1 + j;
-        point[1] = indice_data[2] - j + K1 / 2;
-        point[0] = indice_data[1] - i + K0 / 2;
-        if (point[1] >= 0 && point[1] < outSpatialShape[1] && point[0] >= 0 &&
-            point[0] < outSpatialShape[0]) {
-          index = tv::ArrayIndexRowMajor<2, 2>::runPtrs(
-                      point, outSpatialShape.data(), 0) +
-                  spatialVolume * indice_data[0];
-          if (gridsOut[index] > -1) {
-            Index oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
-            indicePairs(1, offset, oldNum) = gridsOut[index];
-            indicePairs(0, offset, oldNum) = ix;
+        if (offset > center){
+          continue;
+        }
+        if (center == offset){
+            // center of subm indice pairs dont need atomicadd
+            indicePairs(1, offset, ix) = ix;
+            indicePairs(0, offset, ix) = ix;
+        }else{
+          point[1] = indice_data[2] - j + K1 / 2;
+          point[0] = indice_data[1] - i + K0 / 2;
+          if (point[1] >= 0 && point[1] < outSpatialShape[1] && point[0] >= 0 &&
+              point[0] < outSpatialShape[0]) {
+            index = tv::ArrayIndexRowMajor<2, 2>::runPtrs(
+                        point, outSpatialShape.data(), 0) +
+                    spatialVolume * indice_data[0];
+            if (gridsOut[index] > -1) {
+              Index oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
+              atomicAdd(indiceNum.data() + KV - offset - 1, Index(1));
+              indicePairs(1, offset, oldNum) = gridsOut[index];
+              indicePairs(0, offset, oldNum) = ix;
+              indicePairs(1, KV - offset - 1, oldNum) = ix;
+              indicePairs(0, KV - offset - 1, oldNum) = gridsOut[index];
+            }
           }
         }
       }
