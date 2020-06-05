@@ -23,7 +23,6 @@ static auto registry =
     torch::RegisterOperators()
         .op("spconv::get_indice_pairs", &spconv::getIndicePairs)
         .op("spconv::indice_conv", &spconv::indiceConv)
-        .op("spconv::indice_conv_batch", &spconv::indiceConvBatch)
         .op("spconv::indice_conv_backward", &spconv::indiceConvBackward)
         .op("spconv::fused_indice_conv_bn", &spconv::fusedIndiceConvBatchNorm)
         .op("spconv::indice_maxpool", &spconv::indiceMaxPool)

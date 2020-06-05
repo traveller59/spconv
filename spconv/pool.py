@@ -46,7 +46,6 @@ class SparseMaxPool(SparseModule):
             padding = [padding] * ndim
         if not isinstance(dilation, (list, tuple)):
             dilation = [dilation] * ndim
-
         self.ndim = ndim
         self.kernel_size = kernel_size
         self.stride = stride
@@ -61,6 +60,8 @@ class SparseMaxPool(SparseModule):
         indices = input.indices
         spatial_shape = input.spatial_shape
         batch_size = input.batch_size
+        torch.cuda.synchronize()
+        t = time.time()
         if not self.subm:
             out_spatial_shape = ops.get_conv_output_size(
                 spatial_shape, self.kernel_size, self.stride, self.padding,
@@ -69,11 +70,14 @@ class SparseMaxPool(SparseModule):
             out_spatial_shape = spatial_shape
         outids, indice_pairs, indice_pairs_num = ops.get_indice_pairs(
             indices, batch_size, spatial_shape, self.kernel_size, self.stride,
-            self.padding, self.dilation, 0, self.subm)
+            self.padding, self.dilation, 0, self.subm, grid=input.grid)
 
         out_features = Fsp.indice_maxpool(features, indice_pairs.to(device),
                                           indice_pairs_num.to(device),
                                           outids.shape[0])
+        torch.cuda.synchronize()
+
+        print("maxpool", spatial_shape, time.time() - t)
         out_tensor = spconv.SparseConvTensor(out_features, outids,
                                              out_spatial_shape, batch_size)
         out_tensor.indice_dict = input.indice_dict

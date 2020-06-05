@@ -269,7 +269,7 @@ __global__ void getSubMIndicePairsKernel(
 
 template <typename Index, typename IndexGrid, unsigned K0, unsigned K1,
           unsigned K2>
-__global__ void getSubMIndicePairsKernel3(
+__global__ void getSubMIndicePairsUnrollKernel3(
     tv::TensorView<const Index> indicesIn, tv::TensorView<IndexGrid> gridsOut,
     tv::TensorView<Index> indicePairs, tv::TensorView<Index> indiceNum,
     const tv::SimpleVector<Index, 3> outSpatialShape, Index spatialVolume) {
@@ -290,25 +290,26 @@ __global__ void getSubMIndicePairsKernel3(
 #pragma unroll
         for (int k = 0; k < K2; ++k) {
           offset = i * K1 * K2 + j * K2 + k;
-          if (offset > center){
+          if (offset > center) {
             continue;
           }
-          if (center == offset){
-              // center of subm indice pairs dont need atomicadd
-              indicePairs(1, offset, ix) = ix;
-              indicePairs(0, offset, ix) = ix;
-          }else{
+          if (center == offset) {
+            // center of subm indice pairs dont need atomicadd
+            indicePairs(1, offset, ix) = ix;
+            indicePairs(0, offset, ix) = ix;
+          } else {
             point[2] = indice_data[3] - k + K2 / 2;
             point[1] = indice_data[2] - j + K1 / 2;
             point[0] = indice_data[1] - i + K0 / 2;
-            if (point[1] >= 0 && point[1] < outSpatialShape[1] && point[2] >= 0 &&
-                point[2] < outSpatialShape[2] && point[0] >= 0 &&
-                point[0] < outSpatialShape[0]) {
+            if (point[1] >= 0 && point[1] < outSpatialShape[1] &&
+                point[2] >= 0 && point[2] < outSpatialShape[2] &&
+                point[0] >= 0 && point[0] < outSpatialShape[0]) {
               index = tv::ArrayIndexRowMajor<3, 3>::runPtrs(
                           point, outSpatialShape.data(), 0) +
                       spatialVolume * indice_data[0];
               if (gridsOut[index] != -1) {
-                // for subm: indicePairs[0, i] = indicePairs[1, kernelVolume - i - 1]
+                // for subm: indicePairs[0, i] = indicePairs[1, kernelVolume - i
+                // - 1]
                 Index oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
                 atomicAdd(indiceNum.data() + KV - offset - 1, Index(1));
                 indicePairs(1, offset, oldNum) = gridsOut[index];
@@ -325,7 +326,7 @@ __global__ void getSubMIndicePairsKernel3(
 }
 
 template <typename Index, typename IndexGrid, unsigned K0, unsigned K1>
-__global__ void getSubMIndicePairsKernel2(
+__global__ void getSubMIndicePairsUnrollKernel2(
     tv::TensorView<const Index> indicesIn, tv::TensorView<IndexGrid> gridsOut,
     tv::TensorView<Index> indicePairs, tv::TensorView<Index> indiceNum,
     const tv::SimpleVector<Index, 2> outSpatialShape, Index spatialVolume) {
@@ -344,14 +345,14 @@ __global__ void getSubMIndicePairsKernel2(
 #pragma unroll
       for (int j = 0; j < K1; ++j) {
         offset = i * K1 + j;
-        if (offset > center){
+        if (offset > center) {
           continue;
         }
-        if (center == offset){
-            // center of subm indice pairs dont need atomicadd
-            indicePairs(1, offset, ix) = ix;
-            indicePairs(0, offset, ix) = ix;
-        }else{
+        if (center == offset) {
+          // center of subm indice pairs dont need atomicadd
+          indicePairs(1, offset, ix) = ix;
+          indicePairs(0, offset, ix) = ix;
+        } else {
           point[1] = indice_data[2] - j + K1 / 2;
           point[0] = indice_data[1] - i + K0 / 2;
           if (point[1] >= 0 && point[1] < outSpatialShape[1] && point[0] >= 0 &&
@@ -418,6 +419,130 @@ __global__ void getSubMIndicePairsHashKernel(
   }
 }
 
+template <typename Index, unsigned K0, unsigned K1, unsigned K2,
+          unsigned kNumHashFunctions = 4>
+__global__ void getSubMIndicePairsHashUnrollKernel3(
+    tv::TensorView<const Index> indicesIn, tv::TensorView<Index> indicePairs,
+    tv::TensorView<Index> indiceNum,
+    const tv::SimpleVector<Index, 3> outSpatialShape, Index spatialVolume,
+    unsigned table_size, const cuhash::Entry *table,
+    cuhash::Functions<kNumHashFunctions> constants, uint2 stash_constants,
+    unsigned stash_count) {
+  auto numActIn = indicesIn.dim(0);
+  Index index = 0;
+  Index offset;
+  Index point[3];
+  constexpr unsigned KV = K0 * K1 * K2;
+  constexpr unsigned center = KV / 2;
+  *(indiceNum.data() + center) = numActIn;
+  for (int ix : tv::KernelLoopX<int>(numActIn)) {
+    const Index *indice_data = indicesIn.data() + ix * (3 + 1);
+#pragma unroll
+    for (int i = 0; i < K0; ++i) {
+#pragma unroll
+      for (int j = 0; j < K1; ++j) {
+#pragma unroll
+        for (int k = 0; k < K2; ++k) {
+          offset = i * K1 * K2 + j * K2 + k;
+          if (offset > center) {
+            continue;
+          }
+          if (center == offset) {
+            // center of subm indice pairs dont need atomicadd
+            indicePairs(1, offset, ix) = ix;
+            indicePairs(0, offset, ix) = ix;
+          } else {
+            point[2] = indice_data[3] - k + K2 / 2;
+            point[1] = indice_data[2] - j + K1 / 2;
+            point[0] = indice_data[1] - i + K0 / 2;
+            if (point[1] >= 0 && point[1] < outSpatialShape[1] &&
+                point[2] >= 0 && point[2] < outSpatialShape[2] &&
+                point[0] >= 0 && point[0] < outSpatialShape[0]) {
+              index = tv::ArrayIndexRowMajor<3, 3>::runPtrs(
+                          point, outSpatialShape.data(), 0) +
+                      spatialVolume * indice_data[0];
+              auto val =
+                  cuhash::retrieve((unsigned)(index), table_size, table,
+                                   constants, stash_constants, stash_count);
+
+              if (val != cuhash::kNotFound) {
+                // for subm: indicePairs[0, i] = indicePairs[1, kernelVolume - i
+                // - 1]
+                Index oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
+                atomicAdd(indiceNum.data() + KV - offset - 1, Index(1));
+                indicePairs(1, offset, oldNum) = val;
+                indicePairs(0, offset, oldNum) = ix;
+                indicePairs(1, KV - offset - 1, oldNum) = ix;
+                indicePairs(0, KV - offset - 1, oldNum) = val;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+template <typename Index, unsigned K0, unsigned K1,
+          unsigned kNumHashFunctions = 4>
+__global__ void getSubMIndicePairsHashUnrollKernel2(
+    tv::TensorView<const Index> indicesIn, tv::TensorView<Index> indicePairs,
+    tv::TensorView<Index> indiceNum,
+    const tv::SimpleVector<Index, 2> outSpatialShape, Index spatialVolume,
+    unsigned table_size, const cuhash::Entry *table,
+    cuhash::Functions<kNumHashFunctions> constants, uint2 stash_constants,
+    unsigned stash_count) {
+  auto numActIn = indicesIn.dim(0);
+  Index index = 0;
+  Index offset;
+  Index point[2];
+  constexpr unsigned KV = K0 * K1;
+  constexpr unsigned center = KV / 2;
+  *(indiceNum.data() + center) = numActIn;
+  for (int ix : tv::KernelLoopX<int>(numActIn)) {
+    const Index *indice_data = indicesIn.data() + ix * (2 + 1);
+#pragma unroll
+    for (int i = 0; i < K0; ++i) {
+#pragma unroll
+      for (int j = 0; j < K1; ++j) {
+        offset = i * K1 + j;
+        if (offset > center) {
+          continue;
+        }
+        if (center == offset) {
+          // center of subm indice pairs dont need atomicadd
+          indicePairs(1, offset, ix) = ix;
+          indicePairs(0, offset, ix) = ix;
+        } else {
+          point[1] = indice_data[2] - j + K1 / 2;
+          point[0] = indice_data[1] - i + K0 / 2;
+          if (point[1] >= 0 && point[1] < outSpatialShape[1] && point[0] >= 0 &&
+              point[0] < outSpatialShape[0]) {
+            index = tv::ArrayIndexRowMajor<2, 2>::runPtrs(
+                        point, outSpatialShape.data(), 0) +
+                    spatialVolume * indice_data[0];
+            auto val =
+                cuhash::retrieve((unsigned)(index), table_size, table,
+                                 constants, stash_constants, stash_count);
+
+            if (val != cuhash::kNotFound) {
+              // for subm: indicePairs[0, i] = indicePairs[1, kernelVolume - i -
+              // 1]
+              Index oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
+              atomicAdd(indiceNum.data() + KV - offset - 1, Index(1));
+              indicePairs(1, offset, oldNum) = val;
+              indicePairs(0, offset, oldNum) = ix;
+              indicePairs(1, KV - offset - 1, oldNum) = ix;
+              indicePairs(0, KV - offset - 1, oldNum) = val;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+
 template <typename Index, typename IndexGrid, unsigned NDim>
 __global__ void resetGridKernel(const Index *indicePairUnique,
                                 tv::TensorView<IndexGrid> gridsOut,
@@ -437,22 +562,13 @@ template <typename Index, typename IndexGrid, unsigned NDim>
 __global__ void
 resetGridSubMKernel(const Index *indices, tv::TensorView<IndexGrid> gridsOut,
                     const tv::SimpleVector<Index, NDim> outSpatialShape,
-                    int numAct) {
-  Index outSpatialShapeReg[NDim];
-  for (int i = 0; i < NDim; ++i) {
-    outSpatialShapeReg[i] = outSpatialShape[i];
-  }
-  Index spatialVolume = 1;
+                    int numAct, Index spatialVolume) {
   auto indsPtr = indices;
-#pragma unroll
-  for (int i = 0; i < NDim; ++i) {
-    spatialVolume *= outSpatialShape[i];
-  }
   Index index;
   for (int ix : tv::KernelLoopX<int>(numAct)) {
     indsPtr = indices + ix * (NDim + 1);
     index = tv::ArrayIndexRowMajor<NDim, NDim>::runPtrs(indsPtr + 1,
-                                                        outSpatialShapeReg, 0);
+                                                        outSpatialShape.data(), 0);
     gridsOut[index + spatialVolume * indsPtr[0]] = -1;
   }
 }

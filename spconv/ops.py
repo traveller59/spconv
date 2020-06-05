@@ -88,23 +88,13 @@ def get_indice_pairs(indices,
     else:
         out_shape = spatial_shape
     if grid is None:
-        res = torch.ops.spconv.get_indice_pairs(indices, batch_size, out_shape,
-                                                spatial_shape, ksize, stride,
-                                                padding, dilation, out_padding,
-                                                int(subm), int(transpose),
-                                                int(use_hash))
-        return res
-    else:
-        if ndim == 2:
-            get_indice_pairs_func = torch.ops.spconv.get_indice_pairs_grid_2d
-        elif ndim == 3:
-            get_indice_pairs_func = torch.ops.spconv.get_indice_pairs_grid_3d
-        else:
-            raise NotImplementedError
-        return get_indice_pairs_func(indices, grid, batch_size, out_shape,
-                                     spatial_shape, ksize, stride, padding,
-                                     dilation, out_padding, int(subm),
-                                     int(transpose), int(use_hash))
+        grid = torch.Tensor()
+    res = torch.ops.spconv.get_indice_pairs(indices, grid, batch_size, out_shape,
+                                            spatial_shape, ksize, stride,
+                                            padding, dilation, out_padding,
+                                            int(subm), int(transpose),
+                                            int(use_hash))
+    return res
 
 
 def indice_conv(features,

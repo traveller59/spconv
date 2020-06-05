@@ -2,7 +2,7 @@
 namespace spconv {
 
 std::vector<torch::Tensor>
-getIndicePairs(torch::Tensor indices, int64_t batchSize,
+getIndicePairs(torch::Tensor indices, torch::Tensor gridOut, int64_t batchSize,
                std::vector<int64_t> outSpatialShape,
                std::vector<int64_t> spatialShape,
                std::vector<int64_t> kernelSize, std::vector<int64_t> stride,
@@ -47,8 +47,11 @@ getIndicePairs(torch::Tensor indices, int64_t batchSize,
   if (useHash) {
     gridSize = batchSize;
   }
-  torch::Tensor gridOut = torch::full(
-      {gridSize}, -1, torch::dtype(torch::kInt32).device(indices.device()));
+  bool resetGrid = gridOut.numel() != 0;
+  if (!resetGrid){
+    gridOut = torch::full(
+          {gridSize}, -1, torch::dtype(torch::kInt32).device(indices.device()));
+  }
   gridOut = gridOut.view({batchSize, -1});
   int64_t numActOut = -1;
   for (int i = 0; i < NDim; ++i) {
@@ -68,7 +71,7 @@ getIndicePairs(torch::Tensor indices, int64_t batchSize,
     else if (indices.device().type() == torch::kCUDA) {
       numActOut = create_submconv_indice_pair_cuda(
           indices, gridOut, indicePairs, indiceNum, kernelSize, stride, padding,
-          dilation, outSpatialShape, transpose, false, useHash);
+          dilation, outSpatialShape, transpose, resetGrid, useHash);
       if (numActOut == -1) {
         auto device = indices.device();
         indicePairs = indicePairs.to({torch::kCPU});
@@ -98,10 +101,10 @@ getIndicePairs(torch::Tensor indices, int64_t batchSize,
     if (indices.device().type() == torch::kCPU) {
       numActOut = create_conv_indice_pair_cpu(
           indices, outInds, gridOut, indicePairs, indiceNum, kernelSize, stride,
-          padding, dilation, outSpatialShape, transpose, false, useHash);
+          padding, dilation, outSpatialShape, transpose, resetGrid, useHash);
     }
 #ifdef TV_CUDA
-    else if (indices.device().type() == torch::kCUDA) {
+    else if (indices.device().type() == torch::kCUDA) {      
       numActOut = create_conv_indice_pair_p1_cuda(
           indices, indicePairs, indiceNum, indicePairUnique, kernelSize, stride,
           padding, dilation, outSpatialShape, transpose);
@@ -110,7 +113,7 @@ getIndicePairs(torch::Tensor indices, int64_t batchSize,
         indicePairUnique = std::get<0>(res);
         numActOut = create_conv_indice_pair_p2_cuda(
             indices, outInds, gridOut, indicePairs, indiceNum, indicePairUnique,
-            outSpatialShape, transpose, false, useHash);
+            outSpatialShape, transpose, resetGrid, useHash);
         if (numActOut == -1) {
           auto device = indices.device();
           outInds = outInds.to({torch::kCPU});
@@ -188,7 +191,8 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
   double totalGatherTime = 0;
   double totalGEMMTime = 0;
   double totalSAddTime = 0;
-  // tv::ssprint("first subm gemm time", timer.report() / 1000.0);
+  // tv::ssprint("first subm gemm time", timer.report() / 1000.0, std::vector<int>(indicePairNumCpu.data_ptr<int>(),
+  //                      indicePairNumCpu.data_ptr<int>() + kernelVolume));
 
   for (int i = 0; i < kernelVolume; ++i) {
     auto nHot = indicePairNumCpu.data_ptr<int>()[i];
@@ -237,6 +241,8 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
     // totalSAddTime += timer.report() / 1000.0;
   }
   // tv::ssprint(totalGatherTime, totalGEMMTime, totalSAddTime);
+  // tv::ssprint("final subm gemm time", timer.report() / 1000.0);
+
   return output;
 }
 

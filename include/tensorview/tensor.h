@@ -510,6 +510,20 @@ struct DispatchInt<T<Args...>> {
   }
 };
 
+template <class T> struct DispatchIntNoexcept;
+
+template <template <class...> class T, class... Args>
+struct DispatchIntNoexcept<T<Args...>> {
+  template <typename F> inline bool operator()(int t, F &&f) {
+    return dispatch_int_noexcept<Args::value...>(t, std::forward<F>(f));
+  }
+  template <typename F, typename BinaryPredicate>
+  inline bool operator()(int t, BinaryPredicate p, F &&f) {
+    return dispatch_int_noexcept<Args::value...>(t, p, std::forward<F>(f));
+  }
+};
+
+
 constexpr size_t kTensorMaxDim = 10;
 using TensorShape = ShapeBase<kTensorMaxDim, int64_t>;
 

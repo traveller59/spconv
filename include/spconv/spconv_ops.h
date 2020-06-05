@@ -27,7 +27,7 @@ enum ConvAlgo { kNative = 0, kBatch = 1, kBatchGemmGather = 2 };
 
 // torch.jit's doc says only support int64, so we need to convert to int32.
 std::vector<torch::Tensor>
-getIndicePairs(torch::Tensor indices, int64_t batchSize,
+getIndicePairs(torch::Tensor indices, torch::Tensor gridOut, int64_t batchSize,
                std::vector<int64_t> outSpatialShape,
                std::vector<int64_t> spatialShape,
                std::vector<int64_t> kernelSize, std::vector<int64_t> stride,
