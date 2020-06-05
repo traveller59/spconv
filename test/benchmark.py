@@ -56,6 +56,7 @@ class Net(nn.Module):
             spconv.SubMConv3d(256, 256, 3, bias=False, indice_key="c6"),
         )
         max_batch_size = 1
+        # grid (dense map) is used for indice generation. use pre-allocated grid can run faster.
         self.grid = torch.full([max_batch_size, *shape], -1, dtype=torch.int32).cuda()
         # self.grid = None
         self.shape = shape
