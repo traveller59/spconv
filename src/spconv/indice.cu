@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <ATen/ATen.h>
+#include <boost/mp11.hpp>
 #include <chrono>
 #include <cuhash/hash_table.h>
 #include <limits>
@@ -79,7 +80,7 @@ int create_conv_indice_pair_p1_cuda(
                                   pa, di, ou);
               TV_CHECK_CUDA_ERR_V2("prepareIndicePairsKernel failed");
             }
-            // tv::ssprint("prepareIndicePairsKernel", timer.report() / 1000.0);
+        // tv::ssprint("prepareIndicePairsKernel", timer.report() / 1000.0);
 #ifdef TV_LOG_KERNEL_INFO
             cudaFuncAttributes attr;
             checkCudaErrors(cudaFuncGetAttributes(
@@ -226,6 +227,18 @@ int create_submconv_indice_pair_cuda(
         spatialVolume *= outSpatialShape[i];
       }
       auto dispatcher = tv::DispatchIntNoexcept<tv::mp_list_c<int, 1, 3, 5>>();
+      namespace mp11 = boost::mp11;
+
+      using kernel2_candidates_t =
+          mp11::mp_product<tv::mp_list, tv::mp_list_int_c<1, 3, 5>,
+                           tv::mp_list_int_c<1, 3, 5>>;
+      using kernel3_candidates_t =
+          mp11::mp_product<tv::mp_list, tv::mp_list_int_c<1, 3, 5>,
+                           tv::mp_list_int_c<1, 3, 5>,
+                           tv::mp_list_int_c<1, 3, 5>>;
+      using kernel3_candidates_final_t = mp11::mp_push_back<kernel3_candidates_t>;
+      auto dispatcher2 = tv::DispatchContainerNoexcept<kernel2_candidates_t>();
+      auto dispatcher3 = tv::DispatchContainerNoexcept<kernel3_candidates_final_t>();
 
       if (useHash) {
         auto table = cuhash::HashTable();
@@ -263,43 +276,33 @@ int create_submconv_indice_pair_cuda(
           if (NDim == 2) {
             tv::SimpleVector<Index, 2> ou_(outSpatialShape.begin(),
                                            outSpatialShape.end());
-
-            dispatcher(kernelSize[0], [&](auto K0C) {
-              dispatcher(kernelSize[1], [&](auto K1C) {
-                constexpr int K0 = decltype(K0C)::value;
-                constexpr int K1 = decltype(K1C)::value;
-                found = true;
-                getSubMIndicePairsHashUnrollKernel2<Index, K0, K1>
-                    <<<tv::cuda::getBlocks(numActIn),
-                       tv::cuda::CUDA_NUM_THREADS, 0, stream>>>(
-                        tv::torch2tv<Index>(indicesIn),
-                        tv::torch2tv<Index>(indicePairs),
-                        tv::torch2tv<Index>(indiceNum), ou_, spatialVolume,
-                        tableSize, tableData, constants, stash_constants,
-                        stash_count);
-              });
+            dispatcher2(kernelSize.begin(), kernelSize.end(), [&](auto K) {
+              constexpr int K0 = mp11::mp_at_c<decltype(K), 0>::value;
+              constexpr int K1 = mp11::mp_at_c<decltype(K), 1>::value;
+              found = true;
+              getSubMIndicePairsHashUnrollKernel2<Index, K0, K1>
+                  <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS,
+                     0, stream>>>(tv::torch2tv<Index>(indicesIn),
+                                  tv::torch2tv<Index>(indicePairs),
+                                  tv::torch2tv<Index>(indiceNum), ou_,
+                                  spatialVolume, tableSize, tableData,
+                                  constants, stash_constants, stash_count);
             });
           } else if (NDim == 3) {
             tv::SimpleVector<Index, 3> ou_(outSpatialShape.begin(),
                                            outSpatialShape.end());
-
-            dispatcher(kernelSize[0], [&](auto K0C) {
-              dispatcher(kernelSize[1], [&](auto K1C) {
-                dispatcher(kernelSize[2], [&](auto K2C) {
-                  constexpr int K0 = decltype(K0C)::value;
-                  constexpr int K1 = decltype(K1C)::value;
-                  constexpr int K2 = decltype(K2C)::value;
-                  found = true;
-                  getSubMIndicePairsHashUnrollKernel3<Index, K0, K1, K2>
-                      <<<tv::cuda::getBlocks(numActIn),
-                         tv::cuda::CUDA_NUM_THREADS, 0, stream>>>(
-                          tv::torch2tv<Index>(indicesIn),
-                          tv::torch2tv<Index>(indicePairs),
-                          tv::torch2tv<Index>(indiceNum), ou_, spatialVolume,
-                          tableSize, tableData, constants, stash_constants,
-                          stash_count);
-                });
-              });
+            dispatcher3(kernelSize.begin(), kernelSize.end(), [&](auto K) {
+              constexpr int K0 = mp11::mp_at_c<decltype(K), 0>::value;
+              constexpr int K1 = mp11::mp_at_c<decltype(K), 1>::value;
+              constexpr int K2 = mp11::mp_at_c<decltype(K), 2>::value;
+              found = true;
+              getSubMIndicePairsHashUnrollKernel3<Index, K0, K1, K2>
+                  <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS,
+                     0, stream>>>(tv::torch2tv<Index>(indicesIn),
+                                  tv::torch2tv<Index>(indicePairs),
+                                  tv::torch2tv<Index>(indiceNum), ou_,
+                                  spatialVolume, tableSize, tableData,
+                                  constants, stash_constants, stash_count);
             });
           }
         }
@@ -338,24 +341,35 @@ int create_submconv_indice_pair_cuda(
           if (NDim == 2) {
             tv::SimpleVector<Index, 2> ou_(outSpatialShape.begin(),
                                            outSpatialShape.end());
-
-            dispatcher(kernelSize[0], [&](auto K0C) {
-              dispatcher(kernelSize[1], [&](auto K1C) {
-                constexpr int K0 = decltype(K0C)::value;
-                constexpr int K1 = decltype(K1C)::value;
-                found = true;
-                getSubMIndicePairsUnrollKernel2<Index, IndexGrid, K0, K1>
-                    <<<tv::cuda::getBlocks(numActIn),
-                       tv::cuda::CUDA_NUM_THREADS, 0, stream>>>(
-                        tv::torch2tv<Index>(indicesIn),
-                        tv::torch2tv<IndexGrid>(gridsOut),
-                        tv::torch2tv<Index>(indicePairs),
-                        tv::torch2tv<Index>(indiceNum), ou_, spatialVolume);
-              });
+            dispatcher2(kernelSize.begin(), kernelSize.end(), [&](auto K) {
+              constexpr int K0 = mp11::mp_at_c<decltype(K), 0>::value;
+              constexpr int K1 = mp11::mp_at_c<decltype(K), 1>::value;
+              found = true;
+              getSubMIndicePairsUnrollKernel2<Index, IndexGrid, K0, K1>
+                  <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS,
+                     0, stream>>>(tv::torch2tv<Index>(indicesIn),
+                                  tv::torch2tv<IndexGrid>(gridsOut),
+                                  tv::torch2tv<Index>(indicePairs),
+                                  tv::torch2tv<Index>(indiceNum), ou_,
+                                  spatialVolume);
             });
           } else if (NDim == 3) {
             tv::SimpleVector<Index, 3> ou_(outSpatialShape.begin(),
                                            outSpatialShape.end());
+            dispatcher3(kernelSize.begin(), kernelSize.end(), [&](auto K) {
+              constexpr int K0 = mp11::mp_at_c<decltype(K), 0>::value;
+              constexpr int K1 = mp11::mp_at_c<decltype(K), 1>::value;
+              constexpr int K2 = mp11::mp_at_c<decltype(K), 2>::value;
+              found = true;
+              getSubMIndicePairsUnrollKernel3<Index, IndexGrid, K0, K1, K2>
+                  <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS,
+                     0, stream>>>(tv::torch2tv<Index>(indicesIn),
+                                  tv::torch2tv<IndexGrid>(gridsOut),
+                                  tv::torch2tv<Index>(indicePairs),
+                                  tv::torch2tv<Index>(indiceNum), ou_,
+                                  spatialVolume);
+            });
+            /*
             dispatcher(kernelSize[0], [&](auto K0C) {
               dispatcher(kernelSize[1], [&](auto K1C) {
                 dispatcher(kernelSize[2], [&](auto K2C) {
@@ -372,7 +386,7 @@ int create_submconv_indice_pair_cuda(
                           tv::torch2tv<Index>(indiceNum), ou_, spatialVolume);
                 });
               });
-            });
+            });*/
           }
         }
         if (!found) {
@@ -396,7 +410,8 @@ int create_submconv_indice_pair_cuda(
         resetGridSubMKernel<Index, IndexGrid, NDim>
             <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS, 0,
                stream>>>(indicesIn.data_ptr<Index>(),
-                         tv::torch2tv<IndexGrid>(gridsOut), ou, numActIn, spatialVolume);
+                         tv::torch2tv<IndexGrid>(gridsOut), ou, numActIn,
+                         spatialVolume);
         TV_CHECK_CUDA_ERR_V2("resetGridKernel failed");
       }
     });

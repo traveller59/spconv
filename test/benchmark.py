@@ -70,7 +70,7 @@ class Net(nn.Module):
 def main():
     voxels, coors, spatial_shape = waymo_data()
     voxels_th = torch.from_numpy(voxels).cuda().float()
-    coors_th = torch.from_numpy(coors).cuda()
+    coors_th = torch.from_numpy(coors).cuda().int()
     net = Net(spatial_shape[::-1]).cuda().eval().float()
     print(coors_th.shape)
     out = net(voxels_th, coors_th, 1)

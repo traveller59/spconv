@@ -418,7 +418,8 @@ bool dispatch_container_noexcept(Iterator begin, Iterator end, F &&f) {
         return;
       }
       if (count >= val_lst_size) {
-        TV_THROW_INVALID_ARG("iterator length invalid:", val_lst_size);
+        equal = false;
+        return;
       }
       constexpr auto c = decltype(E)::value;
       if (c != *iter) {

@@ -43,6 +43,7 @@ add_subdirectory(third_party/pybind11)
 set(ALL_LIBS ${TORCH_LIBRARIES}) 
 
 set(ALL_INCLUDE ${PROJECT_SOURCE_DIR}/include)
+set(MP11_INCLUDE ${PROJECT_SOURCE_DIR}/third_party/mp11/include)
 
 if (SPCONV_BuildCUDA)
     set(ALL_LIBS ${ALL_LIBS} ${CUDA_CUDART} ${CUDA_CUBLAS})

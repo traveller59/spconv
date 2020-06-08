@@ -349,7 +349,7 @@ def scatter_nd(indices, updates, shape):
 class TestSpConv(TestCase):
     def testSpConv3d(self):
         np.random.seed(484)
-        devices = ["cpu:0"]
+        devices = ["cuda:0"]
         shapes = [[19, 18, 17]]
         batchsizes = [1, 2]
 
@@ -752,8 +752,8 @@ def main_subm(algo, dtype=torch.float32):
 
 
 if __name__ == '__main__':
-    main(algo=spconv.ConvAlgo.Native, dtype=torch.float32)
-    main(algo=spconv.ConvAlgo.Native, dtype=torch.half)
+    main_subm(algo=spconv.ConvAlgo.Native, dtype=torch.float32)
+    # main(algo=spconv.ConvAlgo.Native, dtype=torch.half)
     # TestCase().assertAllClose(out_my, out_ref)
     # unittest.main()
     # TestSpConv().testSpConv3d()

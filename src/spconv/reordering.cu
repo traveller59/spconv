@@ -35,7 +35,7 @@ using half_vec_t =
 template <typename T>
 using half_vec_sadd_t =
     std::conditional_t<std::is_same<T, at::Half>::value, int4, int4>;
-using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
+using kernel_block_t = tv::mp_list_c<int, 64, 32, 16, 8>;
 
 void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
                         torch::Tensor indices, int size) {
@@ -45,6 +45,7 @@ void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
   auto stream = at::cuda::getCurrentCUDAStream();
   auto dtype = features.scalar_type();
   auto inds_dtype = indices.scalar_type();
+  // auto timer = spconv::CudaContextTimer<>();
   tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
     using T = decltype(TValue);
     using vecload_type_t = half_vec_t<T>;
@@ -53,8 +54,7 @@ void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
       bool notFound = true;
       constexpr int vecloadFactor = sizeof(vecload_type_t) / sizeof(T);
 
-      tv::mp_for_each<kernel_block_t>([=, &buffer, &features, &indices,
-                                       &notFound](auto NumTLP) {
+      tv::mp_for_each<kernel_block_t>([&](auto NumTLP) {
         constexpr int NumILP = NumTLP / 4;
         // constexpr int NumILP = NumTLP / (64 / (NumTLP / vecloadFactor));
         int nHotBlock = (size / NumTLP) * NumTLP;
@@ -87,6 +87,7 @@ void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
                                features.data_ptr<T>(),
                                indices.data_ptr<Index>() + nHotBlock,
                                size - nHotBlock, numPlanes / vecloadFactor);
+
 #ifdef TV_LOG_KERNEL_INFO
               cudaFuncAttributes attr;
               checkCudaErrors(cudaFuncGetAttributes(
@@ -143,8 +144,7 @@ void sparse_scatter_add_cuda(torch::Tensor buffer, torch::Tensor outFeatures,
       constexpr int vecloadFactor =
           sizeof(vecload_type_t) / sizeof(T); // important for half.
 
-      tv::mp_for_each<kernel_block_t>([=, &outFeatures, &buffer, &indices,
-                                       &notFound](auto NumTLP) {
+      tv::mp_for_each<kernel_block_t>([&](auto NumTLP) {
         // constexpr int NumILP = NumTLP / (64 / (NumTLP /
         // vecloadFactor));
         constexpr int NumILP = NumTLP / 4;

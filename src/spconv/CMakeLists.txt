@@ -10,7 +10,7 @@ if(OpenMP_CXX_FOUND)
 endif()
 
 
-target_include_directories(spconv PRIVATE ${ALL_INCLUDE} )
+target_include_directories(spconv PRIVATE ${ALL_INCLUDE} ${MP11_INCLUDE} )
 set_property(TARGET spconv PROPERTY CUDA_STANDARD 14)
 set_property(TARGET spconv PROPERTY CXX_STANDARD 14)
 set_target_properties(spconv PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
