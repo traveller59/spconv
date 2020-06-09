@@ -12,7 +12,6 @@ using mp_list_c = mp_list<std::integral_constant<T, I>...>;
 template <int... I>
 using mp_list_int_c = mp_list<std::integral_constant<int, I>...>;
 
-
 namespace detail {
 
 template <class... Ts, class F>

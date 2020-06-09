@@ -1,4 +1,6 @@
 #include <spconv/spconv_ops.h>
+#include <spgemm/gemm_th.h>
+
 namespace spconv {
 
 std::vector<torch::Tensor>
@@ -48,9 +50,9 @@ getIndicePairs(torch::Tensor indices, torch::Tensor gridOut, int64_t batchSize,
     gridSize = batchSize;
   }
   bool resetGrid = gridOut.numel() != 0;
-  if (!resetGrid){
-    gridOut = torch::full(
-          {gridSize}, -1, torch::dtype(torch::kInt32).device(indices.device()));
+  if (!resetGrid) {
+    gridOut = torch::full({gridSize}, -1,
+                          torch::dtype(torch::kInt32).device(indices.device()));
   }
   gridOut = gridOut.view({batchSize, -1});
   int64_t numActOut = -1;
@@ -104,7 +106,7 @@ getIndicePairs(torch::Tensor indices, torch::Tensor gridOut, int64_t batchSize,
           padding, dilation, outSpatialShape, transpose, resetGrid, useHash);
     }
 #ifdef TV_CUDA
-    else if (indices.device().type() == torch::kCUDA) {      
+    else if (indices.device().type() == torch::kCUDA) {
       numActOut = create_conv_indice_pair_p1_cuda(
           indices, indicePairs, indiceNum, indicePairUnique, kernelSize, stride,
           padding, dilation, outSpatialShape, transpose);
@@ -191,7 +193,8 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
   double totalGatherTime = 0;
   double totalGEMMTime = 0;
   double totalSAddTime = 0;
-  // tv::ssprint("first subm gemm time", timer.report() / 1000.0, std::vector<int>(indicePairNumCpu.data_ptr<int>(),
+  // tv::ssprint("first subm gemm time", timer.report() / 1000.0,
+  // std::vector<int>(indicePairNumCpu.data_ptr<int>(),
   //                      indicePairNumCpu.data_ptr<int>() + kernelVolume));
 
   for (int i = 0; i < kernelVolume; ++i) {

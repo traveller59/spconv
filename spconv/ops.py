@@ -89,11 +89,11 @@ def get_indice_pairs(indices,
         out_shape = spatial_shape
     if grid is None:
         grid = torch.Tensor()
-    res = torch.ops.spconv.get_indice_pairs(indices, grid, batch_size, out_shape,
-                                            spatial_shape, ksize, stride,
-                                            padding, dilation, out_padding,
-                                            int(subm), int(transpose),
-                                            int(use_hash))
+    res = torch.ops.spconv.get_indice_pairs(indices, grid, batch_size,
+                                            out_shape, spatial_shape, ksize,
+                                            stride, padding, dilation,
+                                            out_padding, int(subm),
+                                            int(transpose), int(use_hash))
     return res
 
 

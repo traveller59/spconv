@@ -14,9 +14,9 @@
 
 #ifndef SPARSE_REORDERING_FUNCTOR_H_
 #define SPARSE_REORDERING_FUNCTOR_H_
+#include <cuda_runtime_api.h>
 #include <tensorview/tensorview.h>
 #include <torch/script.h>
-
 namespace spconv {
 
 void batch_sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
@@ -34,6 +34,13 @@ void sparse_gather_cpu(torch::Tensor buffer, torch::Tensor features,
                        torch::Tensor indices, int size);
 void sparse_scatter_add_cpu(torch::Tensor buffer, torch::Tensor outFeatures,
                             torch::Tensor indices, int size);
+
+void sparse_gather_cuda(cudaStream_t s, torch::Tensor buffer,
+                        torch::Tensor features, torch::Tensor indices,
+                        int size);
+void sparse_scatter_add_cuda(cudaStream_t s, torch::Tensor buffer,
+                             torch::Tensor outFeatures, torch::Tensor indices,
+                             int size);
 
 } // namespace spconv
 

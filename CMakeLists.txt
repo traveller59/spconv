@@ -44,11 +44,13 @@ set(ALL_LIBS ${TORCH_LIBRARIES})
 
 set(ALL_INCLUDE ${PROJECT_SOURCE_DIR}/include)
 set(MP11_INCLUDE ${PROJECT_SOURCE_DIR}/third_party/mp11/include)
+set(CUTLASS_INCLUDE ${PROJECT_SOURCE_DIR}/third_party/cutlass/include)
 
 if (SPCONV_BuildCUDA)
     set(ALL_LIBS ${ALL_LIBS} ${CUDA_CUDART} ${CUDA_CUBLAS})
     set(ALL_INCLUDE ${ALL_INCLUDE} ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
     add_subdirectory(src/cuhash)
+    add_subdirectory(src/spgemm)
 endif()
 add_subdirectory(src/spconv)
 add_subdirectory(src/utils)

@@ -69,7 +69,7 @@ class SparseConvTensor(object):
         self.batch_size = batch_size
         self.indice_dict = {}
         if grid is None:
-            grid = torch.Tensor() # empty tensor
+            grid = torch.Tensor()  # empty tensor
         self.grid = grid
 
     @classmethod

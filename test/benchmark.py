@@ -1,13 +1,17 @@
-import torch 
-import spconv 
-import numpy as np 
-from spconv.utils import VoxelGeneratorV2
-from pathlib import Path 
+import time
+from pathlib import Path
+
+import numpy as np
+import torch
 from torch import nn
-import time 
+
+import spconv
+from spconv.utils import VoxelGeneratorV2
+
 
 def waymo_data(batch_size=1):
-    gen = VoxelGeneratorV2([0.1, 0.1, 0.1], [-80, -80, -2, 80, 80, 6], 1, 150000)
+    gen = VoxelGeneratorV2([0.1, 0.1, 0.1], [-80, -80, -2, 80, 80, 6], 1,
+                           150000)
     data = np.load(Path(__file__).parent / "data" / "benchmark-pc.npz")
     pc = data["pc"]
     data = gen.generate(pc)
@@ -17,9 +21,9 @@ def waymo_data(batch_size=1):
     coors = np.concatenate([np.full([N, 1], 0, coors.dtype), coors], axis=1)
     return voxels, coors, gen.grid_size
 
+
 class Net(nn.Module):
-    def __init__(self,
-                 shape):
+    def __init__(self, shape):
         super().__init__()
         self.net = spconv.SparseSequential(
             spconv.SubMConv3d(3, 64, 3, bias=False, indice_key="c0"),
@@ -57,7 +61,8 @@ class Net(nn.Module):
         )
         max_batch_size = 1
         # grid (dense map) is used for indice generation. use pre-allocated grid can run faster.
-        self.grid = torch.full([max_batch_size, *shape], -1, dtype=torch.int32).cuda()
+        self.grid = torch.full([max_batch_size, *shape], -1,
+                               dtype=torch.int32).cuda()
         # self.grid = None
         self.shape = shape
 
@@ -86,6 +91,7 @@ def main():
     # print((net.grid == -1).float().sum(), net.grid.numel())
     # print("spconv time", time.time() - t)
     print("spconv time", np.mean(times[10:]))
+
 
 if __name__ == "__main__":
     main()

@@ -1,19 +1,11 @@
 #include <tensorview/tensor.h>
 
-
 namespace spconv {
 
-enum HashTypes {
-    kDenseMap = 0,
-    kCUDPPHash = 1
-};
+enum HashTypes { kDenseMap = 0, kCUDPPHash = 1 };
 
-template <int Impl>
-struct HashMap;
+template <int Impl> struct HashMap;
 
-template<>
-struct HashMap<kDenseMap>{
+template <> struct HashMap<kDenseMap> {};
 
-};
-
-}
+} // namespace spconv

@@ -20,8 +20,8 @@
 #include <tensorview/tensorview.h>
 
 namespace spconv {
-template <typename Index, unsigned NDim, int KernelMaxVolume = 256,
-          typename Index1D = int>
+template <typename Index, unsigned NDim, bool UseDeconv,
+          int KernelMaxVolume = 256, typename Index1D = int>
 __global__ void prepareIndicePairsKernel(
     tv::TensorView<const Index> indicesIn, tv::TensorView<Index> indicePairs,
     tv::TensorView<Index> indiceNum, tv::TensorView<Index1D> indicePairUnique,
@@ -47,54 +47,19 @@ __global__ void prepareIndicePairsKernel(
   auto indicePairsDim2 = indicePairs.dim(2);
   Index index;
   for (int ix : tv::KernelLoopX<int>(numActIn)) {
-    numValidPoints = getValidOutPos<Index, NDim>(
-        indicesIn.data() + ix * (NDim + 1) + 1, kernelSize.data(),
-        stride.data(), padding.data(), dilation.data(), outSpatialShape.data(),
-        validPoints);
-    for (Index i = 0; i < numValidPoints; ++i) {
-      pointPtr = validPoints + i * (NDim + 1);
-      auto offset = pointPtr[NDim];
-      Index oldNum = atomicAdd(indiceNum.data() + offset, Index(1));
-      indicePairs(0, offset, oldNum) = ix;
-      index = tv::ArrayIndexRowMajor<NDim, NDim>::runPtrs(
-                  pointPtr, outSpatialShape.data(), 0) +
-              spatialVolume * indicesIn(ix, 0);
-      indicePairs(1, offset, oldNum) = index;
-      indicePairUnique[offset * indicePairsDim2 + oldNum] = index;
+    if (UseDeconv) {
+      // nvcc will optimize this fake "if constexpr"
+      // after cuda 11 released, we will start to use real if constexpr.
+      numValidPoints = getValidOutPosTranspose<Index, NDim>(
+          indicesIn.data() + ix * (NDim + 1) + 1, kernelSize.data(),
+          stride.data(), padding.data(), dilation.data(),
+          outSpatialShape.data(), validPoints);
+    } else {
+      numValidPoints = getValidOutPos<Index, NDim>(
+          indicesIn.data() + ix * (NDim + 1) + 1, kernelSize.data(),
+          stride.data(), padding.data(), dilation.data(),
+          outSpatialShape.data(), validPoints);
     }
-  }
-}
-
-template <typename Index, unsigned NDim, int KernelMaxVolume = 256>
-__global__ void prepareDeConvIndicePairsKernel(
-    tv::TensorView<const Index> indicesIn, tv::TensorView<Index> indicePairs,
-    tv::TensorView<Index> indiceNum, tv::TensorView<Index> indicePairUnique,
-    const tv::SimpleVector<Index, NDim> kernelSize,
-    const tv::SimpleVector<Index, NDim> stride,
-    const tv::SimpleVector<Index, NDim> padding,
-    const tv::SimpleVector<Index, NDim> dilation,
-    const tv::SimpleVector<Index, NDim> outSpatialShape) {
-  auto numActIn = indicesIn.dim(0);
-  Index spatialVolume = 1;
-#pragma unroll
-  for (int i = 0; i < NDim; ++i) {
-    spatialVolume *= outSpatialShape[i];
-  }
-  Index kernelVolume = 1;
-#pragma unroll
-  for (int i = 0; i < NDim; ++i) {
-    kernelVolume *= kernelSize[i];
-  }
-  Index numValidPoints = 0;
-  Index validPoints[KernelMaxVolume * (NDim + 1)];
-  Index *pointPtr = nullptr;
-  auto indicePairsDim2 = indicePairs.dim(2);
-  Index index;
-  for (int ix : tv::KernelLoopX<int>(numActIn)) {
-    numValidPoints = getValidOutPosTranspose<Index, NDim>(
-        indicesIn.data() + ix * (NDim + 1) + 1, kernelSize.data(),
-        stride.data(), padding.data(), dilation.data(), outSpatialShape.data(),
-        validPoints);
     for (Index i = 0; i < numValidPoints; ++i) {
       pointPtr = validPoints + i * (NDim + 1);
       auto offset = pointPtr[NDim];
@@ -186,6 +151,29 @@ assignIndicePairsKernel(tv::TensorView<Index> indicesOut,
       index = indicePairsOut(i, ix);
       if (index > -1) {
         indicePairsOut(i, ix) = gridsOut[index];
+      }
+    }
+  }
+}
+
+template <typename Index, typename IndexGrid, unsigned NDim>
+__global__ void
+assignIndicePairsLimitedKernel(tv::TensorView<IndexGrid> gridsOut, int numActIn,
+                               tv::TensorView<Index> indicePairs,
+                               tv::TensorView<Index> indiceNum) {
+
+  Index index, val;
+  int kernelVolume = indicePairs.dim(0);
+  for (int ix : tv::KernelLoopX<int>(numActIn)) {
+    for (int i = 0; i < kernelVolume; ++i) {
+      index = indicePairs(i, 1, ix);
+      if (index != -1) {
+        val = gridsOut[index];
+        if (val != -1) {
+          auto oldNum = atomicAdd(indiceNum.data() + i, Index(1));
+          indicePairs(i, 0, oldNum) = indicePairs(i, 0, ix);
+          indicePairs(i, 1, oldNum) = val;
+        }
       }
     }
   }
@@ -542,7 +530,6 @@ __global__ void getSubMIndicePairsHashUnrollKernel2(
   }
 }
 
-
 template <typename Index, typename IndexGrid, unsigned NDim>
 __global__ void resetGridKernel(const Index *indicePairUnique,
                                 tv::TensorView<IndexGrid> gridsOut,
@@ -567,8 +554,8 @@ resetGridSubMKernel(const Index *indices, tv::TensorView<IndexGrid> gridsOut,
   Index index;
   for (int ix : tv::KernelLoopX<int>(numAct)) {
     indsPtr = indices + ix * (NDim + 1);
-    index = tv::ArrayIndexRowMajor<NDim, NDim>::runPtrs(indsPtr + 1,
-                                                        outSpatialShape.data(), 0);
+    index = tv::ArrayIndexRowMajor<NDim, NDim>::runPtrs(
+        indsPtr + 1, outSpatialShape.data(), 0);
     gridsOut[index + spatialVolume * indsPtr[0]] = -1;
   }
 }

@@ -524,7 +524,6 @@ struct DispatchIntNoexcept<T<Args...>> {
   }
 };
 
-
 constexpr size_t kTensorMaxDim = 10;
 using TensorShape = ShapeBase<kTensorMaxDim, int64_t>;
 

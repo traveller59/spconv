@@ -61,17 +61,9 @@ int create_conv_indice_pair_p1_cuda(
       tv::DispatchInt<max_kernel_vol_t>()(
           kernelVolume, std::less_equal<int>(), [&](auto I2) {
             constexpr int MaxKernelVolume = decltype(I2)::value;
-            if (transpose) {
-              prepareDeConvIndicePairsKernel<Index, NDim, MaxKernelVolume>
-                  <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS,
-                     0, stream>>>(tv::torch2tv<Index>(indicesIn),
-                                  tv::torch2tv<Index>(indicePairs),
-                                  tv::torch2tv<Index>(indiceNum),
-                                  tv::torch2tv<Index>(indicePairUnique), ks, st,
-                                  pa, di, ou);
-              TV_CHECK_CUDA_ERR_V2("prepareDeConvIndicePairsKernel failed");
-            } else {
-              prepareIndicePairsKernel<Index, NDim, MaxKernelVolume>
+            tv::dispatch_int<0, 1>(int(transpose), [&](auto I) {
+              constexpr bool UseDeconv = decltype(I)::value;
+              prepareIndicePairsKernel<Index, NDim, UseDeconv, MaxKernelVolume>
                   <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS,
                      0, stream>>>(tv::torch2tv<Index>(indicesIn),
                                   tv::torch2tv<Index>(indicePairs),
@@ -79,8 +71,7 @@ int create_conv_indice_pair_p1_cuda(
                                   tv::torch2tv<Index>(indicePairUnique), ks, st,
                                   pa, di, ou);
               TV_CHECK_CUDA_ERR_V2("prepareIndicePairsKernel failed");
-            }
-        // tv::ssprint("prepareIndicePairsKernel", timer.report() / 1000.0);
+            });
 #ifdef TV_LOG_KERNEL_INFO
             cudaFuncAttributes attr;
             checkCudaErrors(cudaFuncGetAttributes(
@@ -230,15 +221,17 @@ int create_submconv_indice_pair_cuda(
       namespace mp11 = boost::mp11;
 
       using kernel2_candidates_t =
-          mp11::mp_product<tv::mp_list, tv::mp_list_int_c<1, 3, 5>,
-                           tv::mp_list_int_c<1, 3, 5>>;
+          mp11::mp_product<tv::mp_list, tv::mp_list_c<int, 1, 3, 5>,
+                           tv::mp_list_c<int, 1, 3, 5>>;
       using kernel3_candidates_t =
-          mp11::mp_product<tv::mp_list, tv::mp_list_int_c<1, 3, 5>,
-                           tv::mp_list_int_c<1, 3, 5>,
-                           tv::mp_list_int_c<1, 3, 5>>;
-      using kernel3_candidates_final_t = mp11::mp_push_back<kernel3_candidates_t>;
+          mp11::mp_product<tv::mp_list, tv::mp_list_c<int, 1, 3, 5>,
+                           tv::mp_list_c<int, 1, 3, 5>,
+                           tv::mp_list_c<int, 1, 3, 5>>;
+      using kernel3_candidates_final_t =
+          mp11::mp_push_back<kernel3_candidates_t>;
       auto dispatcher2 = tv::DispatchContainerNoexcept<kernel2_candidates_t>();
-      auto dispatcher3 = tv::DispatchContainerNoexcept<kernel3_candidates_final_t>();
+      auto dispatcher3 =
+          tv::DispatchContainerNoexcept<kernel3_candidates_final_t>();
 
       if (useHash) {
         auto table = cuhash::HashTable();

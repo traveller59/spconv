@@ -67,8 +67,16 @@ class SparseMaxPool(SparseModule):
         else:
             out_spatial_shape = spatial_shape
         outids, indice_pairs, indice_pairs_num = ops.get_indice_pairs(
-            indices, batch_size, spatial_shape, self.kernel_size, self.stride,
-            self.padding, self.dilation, 0, self.subm, grid=input.grid)
+            indices,
+            batch_size,
+            spatial_shape,
+            self.kernel_size,
+            self.stride,
+            self.padding,
+            self.dilation,
+            0,
+            self.subm,
+            grid=input.grid)
 
         out_features = Fsp.indice_maxpool(features, indice_pairs.to(device),
                                           indice_pairs_num.to(device),

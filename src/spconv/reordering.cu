@@ -37,12 +37,12 @@ using half_vec_sadd_t =
     std::conditional_t<std::is_same<T, at::Half>::value, int4, int4>;
 using kernel_block_t = tv::mp_list_c<int, 64, 32, 16, 8>;
 
-void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
-                        torch::Tensor indices, int size) {
+void sparse_gather_cuda(cudaStream_t stream, torch::Tensor buffer,
+                        torch::Tensor features, torch::Tensor indices,
+                        int size) {
   if (size <= 0)
     return;
   int numPlanes = features.size(1);
-  auto stream = at::cuda::getCurrentCUDAStream();
   auto dtype = features.scalar_type();
   auto inds_dtype = indices.scalar_type();
   // auto timer = spconv::CudaContextTimer<>();
@@ -126,12 +126,18 @@ void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
   });
 }
 
-void sparse_scatter_add_cuda(torch::Tensor buffer, torch::Tensor outFeatures,
-                             torch::Tensor indices, int size) {
+void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
+                        torch::Tensor indices, int size) {
+  auto stream = at::cuda::getCurrentCUDAStream();
+  return sparse_gather_cuda(stream, buffer, features, indices, size);
+}
+
+void sparse_scatter_add_cuda(cudaStream_t stream, torch::Tensor buffer,
+                             torch::Tensor outFeatures, torch::Tensor indices,
+                             int size) {
   if (size <= 0)
     return;
   int numPlanes = outFeatures.size(1);
-  auto stream = at::cuda::getCurrentCUDAStream();
   auto dtype = outFeatures.scalar_type();
   auto inds_dtype = indices.scalar_type();
 
@@ -214,6 +220,12 @@ void sparse_scatter_add_cuda(torch::Tensor buffer, torch::Tensor outFeatures,
       }
     });
   });
+}
+
+void sparse_scatter_add_cuda(torch::Tensor buffer, torch::Tensor outFeatures,
+                             torch::Tensor indices, int size) {
+  auto stream = at::cuda::getCurrentCUDAStream();
+  return sparse_scatter_add_cuda(stream, buffer, outFeatures, indices, size);
 }
 
 void batch_sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,

@@ -65,7 +65,7 @@ observers:
         std: c++14
         options: [
             -Wno-deprecated-declarations,
-            "-gencode=arch=compute_52,code=sm_61",
+            "-gencode=arch=compute_52,code=sm_52",
             "-gencode=arch=compute_61,code=sm_61",
             "-gencode=arch=compute_60,code=sm_60",
             "-gencode=arch=compute_70,code=sm_70",
@@ -76,7 +76,7 @@ observers:
         type: CPPDevObserver
         main_pattern: torchdev_.*\.(cu|cpp|cc|cxx)
         pattern: .*\.(cc|cpp|cxx|h|hpp|hxx|cu)
-        compiler: clang++
+        compiler: nvcc
         executable: build/codeai_dev_torch
         run_cmd: [$(executable)]
         fail_cmds: # run cmd when pervious run fail with retcode
@@ -97,13 +97,20 @@ observers:
             /home/yy/anaconda3/lib,
         ]
         libraries: [-lpython3.7m, -lcublas, -lcudart, -ljpeg, -lpthread, 
-                    "-Wl,--no-as-needed,-lc10", 
-                    "-Wl,--no-as-needed,-ltorch", 
-                    "-Wl,--no-as-needed,-ltorch_cpu", 
-                    "-Wl,--no-as-needed,-lc10_cuda", 
-                    "-Wl,--no-as-needed,-ltorch_cuda"]
-        std: c++2a
-        options: [--cuda-gpu-arch=sm_61, -Wno-deprecated-declarations, -D_GLIBCXX_USE_CXX11_ABI=0]
+                    "-Xcompiler=\"-Wl,--no-as-needed,-lc10\"", 
+                    "-Xcompiler=\"-Wl,--no-as-needed,-ltorch\"", 
+                    "-Xcompiler=\"-Wl,--no-as-needed,-ltorch_cpu\"", 
+                    "-Xcompiler=\"-Wl,--no-as-needed,-lc10_cuda\"", 
+                    "-Xcompiler=\"-Wl,--no-as-needed,-ltorch_cuda\""]
+        std: c++14
+        # options: [--cuda-gpu-arch=sm_61, -Wno-deprecated-declarations, -D_GLIBCXX_USE_CXX11_ABI=0]
+
+        options: [
+            -Wno-deprecated-declarations,
+            --expt-relaxed-constexpr,
+            "-gencode=arch=compute_61,code=sm_61",
+            -D_GLIBCXX_USE_CXX11_ABI=0,
+        ]
 
 
 
