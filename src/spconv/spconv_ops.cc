@@ -170,26 +170,37 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
   auto numInPlanes = features.size(1);
   auto numOutPlanes = filters.size(ndim + 1);
   auto indicePairNumCpu = indiceNum.to({torch::kCPU});
-  auto indicePairMaxSizeIter =
-      std::max_element(indicePairNumCpu.data_ptr<int>(),
-                       indicePairNumCpu.data_ptr<int>() + kernelVolume);
-  int indicePairMaxOffset =
-      indicePairMaxSizeIter - indicePairNumCpu.data_ptr<int>();
-  int indicePairMaxSize = *indicePairMaxSizeIter;
 
   auto options =
       torch::TensorOptions().dtype(features.dtype()).device(features.device());
   torch::Tensor output = torch::zeros({numActOut, numOutPlanes}, options);
+  filters = filters.view({-1, numInPlanes, numOutPlanes});
+
+  // init for subM
+  int indicePairMaxOffset = kernelVolume / 2;
+  int indicePairMaxSize = numActOut;
+  if (subM) { // the center index of subm conv don't need gather and scatter
+    // add.
+    torch::mm_out(output, features, filters[indicePairMaxOffset]);
+
+    // get indice pair second max size based on subM symmetric property
+    indicePairMaxSize =
+      *std::max_element(indicePairNumCpu.data_ptr<int>(),
+                        indicePairNumCpu.data_ptr<int>() + indicePairMaxOffset);
+    if (indicePairMaxSize == 0) {
+      return output;
+    }
+  } else {
+    indicePairMaxSize =
+      *std::max_element(indicePairNumCpu.data_ptr<int>(),
+                        indicePairNumCpu.data_ptr<int>() + kernelVolume);
+  }
+
   torch::Tensor inputBuffer =
       torch::empty({indicePairMaxSize, numInPlanes}, options);
   torch::Tensor outputBuffer =
       torch::empty({indicePairMaxSize, numOutPlanes}, options);
-  filters = filters.view({-1, numInPlanes, numOutPlanes});
 
-  if (subM) { // the center index of subm conv don't need gather and scatter
-    // add.
-    torch::mm_out(output, features, filters[indicePairMaxOffset]);
-  }
   double totalGatherTime = 0;
   double totalGEMMTime = 0;
   double totalSAddTime = 0;
@@ -408,29 +419,41 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
   auto numInPlanes = features.size(1);
   auto numOutPlanes = filters.size(ndim + 1);
   auto indicePairNumCpu = indiceNum.to({torch::kCPU});
-  auto indicePairMaxSizeIter =
-      std::max_element(indicePairNumCpu.data_ptr<int>(),
-                       indicePairNumCpu.data_ptr<int>() + kernelVolume);
-  int indicePairMaxOffset =
-      indicePairMaxSizeIter - indicePairNumCpu.data_ptr<int>();
-  int indicePairMaxSize = *indicePairMaxSizeIter;
   auto options =
       torch::TensorOptions().dtype(features.dtype()).device(features.device());
   auto filterShape = filters.sizes();
   torch::Tensor inputGrad = torch::zeros(features.sizes(), options);
   torch::Tensor filtersGrad = torch::empty(filterShape, options);
+
+  filters = filters.view({-1, numInPlanes, numOutPlanes});
+  filtersGrad = filtersGrad.view({-1, numInPlanes, numOutPlanes});
+
+  // init for subM
+  int indicePairMaxOffset = kernelVolume / 2;
+  int indicePairMaxSize = indicePairNumCpu.data_ptr<int>()[indicePairMaxOffset];
+  if (subM) {
+    auto filterGradSub = filtersGrad[indicePairMaxOffset];
+    torch::mm_out(filterGradSub, features.t(), outGrad);
+    torch::mm_out(inputGrad, outGrad, filters[indicePairMaxOffset].t());
+
+    // get indice pair second max size based on subM symmetric property
+    indicePairMaxSize =
+      *std::max_element(indicePairNumCpu.data_ptr<int>(),
+                        indicePairNumCpu.data_ptr<int>() + indicePairMaxOffset);
+    if (indicePairMaxSize == 0) {
+      return {inputGrad, filtersGrad.view(filterShape)};
+    }
+  } else {
+    indicePairMaxSize =
+      *std::max_element(indicePairNumCpu.data_ptr<int>(),
+                        indicePairNumCpu.data_ptr<int>() + kernelVolume);
+  }
+
   torch::Tensor inputBuffer =
       torch::empty({indicePairMaxSize, numInPlanes}, options);
   torch::Tensor outputBuffer =
       torch::empty({indicePairMaxSize, numOutPlanes}, options);
 
-  filters = filters.view({-1, numInPlanes, numOutPlanes});
-  filtersGrad = filtersGrad.view({-1, numInPlanes, numOutPlanes});
-  if (subM) {
-    auto filterGradSub = filtersGrad[indicePairMaxOffset];
-    torch::mm_out(filterGradSub, features.t(), outGrad);
-    torch::mm_out(inputGrad, outGrad, filters[indicePairMaxOffset].t());
-  }
   for (int i = 0; i < kernelVolume; ++i) {
     auto nHot = indicePairNumCpu.data_ptr<int>()[i];
     if (nHot <= 0 || (subM && i == indicePairMaxOffset)) {
