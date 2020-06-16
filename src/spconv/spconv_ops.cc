@@ -1,5 +1,7 @@
+#include <spconv/fused_conv.h>
 #include <spconv/spconv_ops.h>
 #include <spgemm/gemm_th.h>
+#include <tensorview/tensor.h>
 
 namespace spconv {
 
@@ -140,27 +142,11 @@ getIndicePairs(torch::Tensor indices, torch::Tensor gridOut, int64_t batchSize,
   }
 }
 
-torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
-                         torch::Tensor indicePairs, torch::Tensor indiceNum,
-                         int64_t numActOut, int64_t _inverse, int64_t _subM,
-                         int64_t algo) {
+torch::Tensor indiceConvNative(torch::Tensor features, torch::Tensor filters,
+                               torch::Tensor indicePairs,
+                               torch::Tensor indiceNum, int64_t numActOut,
+                               int64_t _inverse, int64_t _subM) {
   auto kernelVolume = indiceNum.size(0);
-  switch (algo) {
-  case kBatchGemmGather:
-  case kBatch: {
-    if (kernelVolume != 1) {
-      return indiceConvBatch(features, filters, indicePairs, indiceNum,
-                             numActOut, _inverse, _subM,
-                             algo != kBatchGemmGather);
-    } else {
-      break;
-    }
-  }
-  case kNative:
-    break;
-  default:
-    TV_THROW_RT_ERR("unknown algo");
-  }
   // auto timer = spconv::CudaContextTimer<>();
 
   bool subM = _subM != 0;
@@ -184,16 +170,16 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
     torch::mm_out(output, features, filters[indicePairMaxOffset]);
 
     // get indice pair second max size based on subM symmetric property
-    indicePairMaxSize =
-      *std::max_element(indicePairNumCpu.data_ptr<int>(),
-                        indicePairNumCpu.data_ptr<int>() + indicePairMaxOffset);
+    indicePairMaxSize = *std::max_element(indicePairNumCpu.data_ptr<int>(),
+                                          indicePairNumCpu.data_ptr<int>() +
+                                              indicePairMaxOffset);
     if (indicePairMaxSize == 0) {
       return output;
     }
   } else {
     indicePairMaxSize =
-      *std::max_element(indicePairNumCpu.data_ptr<int>(),
-                        indicePairNumCpu.data_ptr<int>() + kernelVolume);
+        *std::max_element(indicePairNumCpu.data_ptr<int>(),
+                          indicePairNumCpu.data_ptr<int>() + kernelVolume);
   }
 
   torch::Tensor inputBuffer =
@@ -260,12 +246,59 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
   return output;
 }
 
+torch::Tensor
+indiceConvSparseConvNet(torch::Tensor features, torch::Tensor filters,
+                        torch::Tensor indicePairs, torch::Tensor indiceNum,
+                        int64_t numActOut, int64_t _inverse, int64_t _subM) {
+  auto kernelVolume = indiceNum.size(0);
+  // auto timer = spconv::CudaContextTimer<>();
+  bool subM = _subM != 0;
+  bool inverse = _inverse != 0;
+  auto device = features.device().type();
+  auto ndim = filters.dim() - 2;
+  auto numInPlanes = features.size(1);
+  auto numOutPlanes = filters.size(ndim + 1);
+  auto indicePairNumCpu = indiceNum.to({torch::kCPU});
+
+  auto options =
+      torch::TensorOptions().dtype(features.dtype()).device(features.device());
+  torch::Tensor output = torch::zeros({numActOut, numOutPlanes}, options);
+  filters = filters.view({-1, numInPlanes, numOutPlanes});
+
+  // init for subM
+  int indicePairMaxOffset = kernelVolume / 2;
+  if (subM) { // the center index of subm conv don't need gather and scatter
+    // add.
+    torch::mm_out(output, features, filters[indicePairMaxOffset]);
+  }
+  for (int i = 0; i < kernelVolume; ++i) {
+    auto nHot = indicePairNumCpu.data_ptr<int>()[i];
+    if (nHot <= 0 || (subM && i == indicePairMaxOffset)) {
+      continue;
+    }
+    if (device == torch::kCPU) {
+      TV_THROW_INVALID_ARG("SparseConvNet only support gpu");
+    }
+#ifdef TV_CUDA
+    else if (device == torch::kCUDA) {
+      fused_conv_cuda(output, features, filters[i], indicePairs[inverse][i],
+                      indicePairs[!inverse][i], nHot);
+    }
+#endif
+    else {
+      TV_THROW_INVALID_ARG("unknown device type");
+    }
+  }
+  return output;
+}
+
+template <bool BatchScatter>
 torch::Tensor indiceConvBatch(torch::Tensor features, torch::Tensor filters,
                               torch::Tensor indicePairs,
                               torch::Tensor indiceNum, int64_t numActOut,
-                              int64_t _inverse, int64_t _subM,
-                              bool batchScatter) {
+                              int64_t _inverse, int64_t _subM) {
   bool subM = _subM != 0;
+  auto batchScatter = BatchScatter;
   bool inverse = _inverse != 0;
   auto device = features.device().type();
   auto ndim = filters.dim() - 2;
@@ -388,29 +421,42 @@ torch::Tensor indiceConvBatch(torch::Tensor features, torch::Tensor filters,
   return output;
 }
 
-std::vector<torch::Tensor>
-indiceConvBackward(torch::Tensor features, torch::Tensor filters,
-                   torch::Tensor outGrad, torch::Tensor indicePairs,
-                   torch::Tensor indiceNum, int64_t _inverse, int64_t _subM,
-                   int64_t algo) {
-  auto kernelVolume = indiceNum.size(0);
-  switch (algo) {
-  case kBatchGemmGather:
-  case kBatch: {
-    if (kernelVolume != 1) {
-      return indiceConvBackwardBatch(features, filters, outGrad, indicePairs,
-                                     indiceNum, _inverse, _subM,
-                                     algo != kBatchGemmGather);
-    } else {
-      break;
-    }
-  }
-  case kNative:
-    break;
-  default:
-    TV_THROW_RT_ERR("unknown algo");
-  }
+template <int Algo> struct ConvDispatch;
 
+template <> struct ConvDispatch<kNative> {
+  constexpr static auto *func = indiceConvNative;
+};
+
+template <> struct ConvDispatch<kBatch> {
+  constexpr static auto *func = indiceConvBatch<false>;
+};
+
+template <> struct ConvDispatch<kBatchGemmGather> {
+  constexpr static auto *func = indiceConvBatch<true>;
+};
+
+template <> struct ConvDispatch<kSparseConvNet> {
+  constexpr static auto *func = indiceConvSparseConvNet;
+};
+
+torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
+                         torch::Tensor indicePairs, torch::Tensor indiceNum,
+                         int64_t numActOut, int64_t _inverse, int64_t _subM,
+                         int64_t algo) {
+  torch::Tensor res;
+  tv::DispatchInt<all_conv_algos_t>()(algo, [&](auto I) {
+    constexpr int AlgoValue = decltype(I)::value;
+    res = ConvDispatch<AlgoValue>::func(features, filters, indicePairs,
+                                        indiceNum, numActOut, _inverse, _subM);
+  });
+  return res;
+}
+
+std::vector<torch::Tensor>
+indiceConvBwNative(torch::Tensor features, torch::Tensor filters,
+                   torch::Tensor outGrad, torch::Tensor indicePairs,
+                   torch::Tensor indiceNum, int64_t _inverse, int64_t _subM) {
+  auto kernelVolume = indiceNum.size(0);
   bool subM = _subM != 0;
   bool inverse = _inverse != 0;
 
@@ -437,16 +483,16 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
     torch::mm_out(inputGrad, outGrad, filters[indicePairMaxOffset].t());
 
     // get indice pair second max size based on subM symmetric property
-    indicePairMaxSize =
-      *std::max_element(indicePairNumCpu.data_ptr<int>(),
-                        indicePairNumCpu.data_ptr<int>() + indicePairMaxOffset);
+    indicePairMaxSize = *std::max_element(indicePairNumCpu.data_ptr<int>(),
+                                          indicePairNumCpu.data_ptr<int>() +
+                                              indicePairMaxOffset);
     if (indicePairMaxSize == 0) {
       return {inputGrad, filtersGrad.view(filterShape)};
     }
   } else {
     indicePairMaxSize =
-      *std::max_element(indicePairNumCpu.data_ptr<int>(),
-                        indicePairNumCpu.data_ptr<int>() + kernelVolume);
+        *std::max_element(indicePairNumCpu.data_ptr<int>(),
+                          indicePairNumCpu.data_ptr<int>() + kernelVolume);
   }
 
   torch::Tensor inputBuffer =
@@ -499,13 +545,66 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
 }
 
 std::vector<torch::Tensor>
-indiceConvBackwardBatch(torch::Tensor features, torch::Tensor filters,
-                        torch::Tensor outGrad, torch::Tensor indicePairs,
-                        torch::Tensor indiceNum, int64_t _inverse,
-                        int64_t _subM, bool batchScatter) {
+indiceConvBwSparseConvNet(torch::Tensor features, torch::Tensor filters,
+                          torch::Tensor outGrad, torch::Tensor indicePairs,
+                          torch::Tensor indiceNum, int64_t _inverse,
+                          int64_t _subM) {
+  auto kernelVolume = indiceNum.size(0);
   bool subM = _subM != 0;
   bool inverse = _inverse != 0;
 
+  auto device = features.device().type();
+  auto ndim = filters.dim() - 2;
+  auto numInPlanes = features.size(1);
+  auto numOutPlanes = filters.size(ndim + 1);
+  auto indicePairNumCpu = indiceNum.to({torch::kCPU});
+  auto options =
+      torch::TensorOptions().dtype(features.dtype()).device(features.device());
+  auto filterShape = filters.sizes();
+  torch::Tensor inputGrad = torch::zeros(features.sizes(), options);
+  torch::Tensor filtersGrad = torch::zeros(filterShape, options);
+
+  filters = filters.view({-1, numInPlanes, numOutPlanes});
+  filtersGrad = filtersGrad.view({-1, numInPlanes, numOutPlanes});
+
+  // init for subM
+  int indicePairMaxOffset = kernelVolume / 2;
+  int indicePairMaxSize = indicePairNumCpu.data_ptr<int>()[indicePairMaxOffset];
+  if (subM) {
+    auto filterGradSub = filtersGrad[indicePairMaxOffset];
+    torch::mm_out(filterGradSub, features.t(), outGrad);
+    torch::mm_out(inputGrad, outGrad, filters[indicePairMaxOffset].t());
+  }
+  for (int i = 0; i < kernelVolume; ++i) {
+    auto nHot = indicePairNumCpu.data_ptr<int>()[i];
+    if (nHot <= 0 || (subM && i == indicePairMaxOffset)) {
+      continue;
+    }
+    if (device == torch::kCPU) {
+      TV_THROW_INVALID_ARG("unknown device type");
+    }
+#ifdef TV_CUDA
+    else if (device == torch::kCUDA) {
+      fused_conv_backward_cuda(features, inputGrad, outGrad, filters[i],
+                               filtersGrad[i], indicePairs[inverse][i],
+                               indicePairs[!inverse][i], nHot);
+    }
+#endif
+    else {
+      TV_THROW_INVALID_ARG("unknown device type");
+    }
+  }
+  return {inputGrad, filtersGrad.view(filterShape)};
+}
+
+template <bool BatchScatter>
+std::vector<torch::Tensor>
+indiceConvBwBatch(torch::Tensor features, torch::Tensor filters,
+                  torch::Tensor outGrad, torch::Tensor indicePairs,
+                  torch::Tensor indiceNum, int64_t _inverse, int64_t _subM) {
+  bool subM = _subM != 0;
+  bool inverse = _inverse != 0;
+  auto batchScatter = BatchScatter;
   auto device = features.device().type();
   auto ndim = filters.dim() - 2;
   auto kernelVolume = indiceNum.size(0);
@@ -626,4 +725,35 @@ indiceConvBackwardBatch(torch::Tensor features, torch::Tensor filters,
   return {inputGrad, filtersGrad.view(filterShape)};
 }
 
+template <int Algo> struct ConvBwDispatch;
+
+template <> struct ConvBwDispatch<kNative> {
+  constexpr static auto *func = indiceConvBwNative;
+};
+
+template <> struct ConvBwDispatch<kBatch> {
+  constexpr static auto *func = indiceConvBwBatch<false>;
+};
+
+template <> struct ConvBwDispatch<kBatchGemmGather> {
+  constexpr static auto *func = indiceConvBwBatch<true>;
+};
+
+template <> struct ConvBwDispatch<kSparseConvNet> {
+  constexpr static auto *func = indiceConvBwSparseConvNet;
+};
+
+std::vector<torch::Tensor>
+indiceConvBackward(torch::Tensor features, torch::Tensor filters,
+                   torch::Tensor outGrad, torch::Tensor indicePairs,
+                   torch::Tensor indiceNum, int64_t _inverse, int64_t _subM,
+                   int64_t algo) {
+  std::vector<torch::Tensor> res;
+  tv::DispatchInt<all_conv_algos_t>()(algo, [&](auto I) {
+    constexpr int AlgoValue = decltype(I)::value;
+    res = ConvBwDispatch<AlgoValue>::func(
+        features, filters, outGrad, indicePairs, indiceNum, _inverse, _subM);
+  });
+  return res;
+}
 } // namespace spconv

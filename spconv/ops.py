@@ -23,7 +23,7 @@ class ConvAlgo(Enum):
     Native = 0  # small memory cost, faster when number of points is large.
     Batch = 1  # high memory cost, faster when number of points is small (< 50000)
     BatchGemmGather = 2  # high memory cost, faster when number of points medium
-
+    SparseConvNet = 3
 
 def get_conv_output_size(input_size, kernel_size, stride, padding, dilation):
     ndim = len(input_size)

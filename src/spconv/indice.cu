@@ -28,7 +28,6 @@
 #include <thrust/execution_policy.h>
 #include <type_traits>
 #include <utility/timer.h>
-
 namespace spconv {
 
 using max_kernel_vol_t = tv::mp_list_c<int, 9, 16, 27, 32, 128, 256, 4096>;
@@ -330,7 +329,6 @@ int create_submconv_indice_pair_cuda(
         auto found = false;
         if (dilation_one && (NDim == 2 || NDim == 3)) {
           auto indiceNumCpu = indiceNum.cpu();
-
           if (NDim == 2) {
             tv::SimpleVector<Index, 2> ou_(outSpatialShape.begin(),
                                            outSpatialShape.end());

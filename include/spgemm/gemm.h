@@ -1,3 +1,4 @@
+#pragma once
 #include <cutlass/gemm/device/gemm.h>
 #include <type_traits>
 namespace spconv {

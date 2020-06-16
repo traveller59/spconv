@@ -28,6 +28,7 @@ If you can use libtorch, dont use tv::Tensor.
 #include <iomanip>
 #include <memory>
 #include <type_traits>
+#include "cc17.h"
 #ifdef TV_CUDA
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
@@ -623,66 +624,35 @@ struct Tensor {
     return TensorView<T, Rank, PtrTraits, Tindex>(
         reinterpret_cast<T *>(data<T>()), shape, stride);
   }
-  template <typename T, int Rank = -1,
-            template <class> class PtrTraits = DefaultPtrTraits,
-            typename Tindex = int,
-            typename std::enable_if<Rank == -1, int>::type = 0>
-  TensorView<T, Rank, PtrTraits, Tindex> tview() {
-    writable_check();
-    static_assert(Rank == -1 || Rank > 0, "error");
-    TV_ASSERT_RT_ERR(dtype_ == type_v<T>, "error");
-    ShapeBase<TV_MAX_DIM, Tindex> shape(ndim()), stride(ndim());
-    for (size_t i = 0; i < ndim(); ++i) {
-      shape[i] = shape_[i];
-      stride[i] = stride_[i];
-    }
-    return TensorView<T, Rank, PtrTraits, Tindex>(
-        reinterpret_cast<T *>(data<T>()), shape, stride);
-  }
 
   template <typename T, int Rank = -1,
             template <class> class PtrTraits = DefaultPtrTraits,
-            typename Tindex = int,
-            typename std::enable_if<(Rank > 0), int>::type = 0>
+            typename Tindex = int>
   TensorView<const std::remove_const_t<T>, Rank, PtrTraits, Tindex>
   tview() const {
     static_assert(Rank == -1 || Rank > 0, "error");
-    if (Rank > 0) {
-      TV_ASSERT_RT_ERR(Rank == ndim(), "error");
-    }
     TV_ASSERT_RT_ERR(dtype_ == type_v<T>, "error");
-
-    ShapeBase<Rank == -1 ? TV_MAX_DIM : Rank, Tindex> shape(Rank), stride(Rank);
-    for (int i = 0; i < Rank; ++i) {
-      shape[i] = shape_[i];
-      stride[i] = stride_[i];
-    }
-    return TensorView<const std::remove_const_t<T>, Rank, PtrTraits, Tindex>(
-        reinterpret_cast<const std::remove_const_t<T> *>(data<T>()), shape,
-        stride);
-  }
-  template <typename T, int Rank = -1,
-            template <class> class PtrTraits = DefaultPtrTraits,
-            typename Tindex = int,
-            typename std::enable_if<Rank == -1, int>::type = 0>
-  TensorView<const std::remove_const_t<T>, Rank, PtrTraits, Tindex>
-  tview() const {
-    static_assert(Rank == -1 || Rank > 0, "error");
-    if (Rank > 0) {
+    return if_constexpr<(Rank > 0)>([&](auto _){
       TV_ASSERT_RT_ERR(Rank == ndim(), "error");
-    }
-    TV_ASSERT_RT_ERR(dtype_ == type_v<T>, "error");
-
-    ShapeBase<TV_MAX_DIM, Tindex> shape(ndim()), stride(ndim());
-    for (int i = 0; i < int(ndim()); ++i) {
-      shape[i] = shape_[i];
-      stride[i] = stride_[i];
-    }
-    return TensorView<const std::remove_const_t<T>, Rank, PtrTraits, Tindex>(
-        reinterpret_cast<const std::remove_const_t<T> *>(data<T>()), shape,
-        stride);
+      ShapeBase<_(Rank) == -1 ? TV_MAX_DIM : Rank, Tindex> shape(Rank), stride(Rank);
+      for (int i = 0; i < Rank; ++i) {
+        shape[i] = shape_[i];
+        stride[i] = stride_[i];
+      }
+      return TensorView<const std::remove_const_t<T>, Rank, PtrTraits, Tindex>(
+          reinterpret_cast<const std::remove_const_t<T> *>(data<T>()), shape,
+          stride);
+    }, [&](auto _){
+      ShapeBase<TV_MAX_DIM, Tindex> shape(_(ndim())), stride(ndim());
+      for (int i = 0; i < int(ndim()); ++i) {
+        shape[i] = shape_[i];
+        stride[i] = stride_[i];
+      }
+      return TensorView<const std::remove_const_t<T>, Rank, PtrTraits, Tindex>(
+          reinterpret_cast<const std::remove_const_t<T> *>(data<T>()), shape,
+          stride);
+    });
   }
-
   template <class... Inds> Tensor view(Inds... newShapes) const {
     static_assert(sizeof...(newShapes) > 0, "dont support empty for now");
     TensorShape shape{int(newShapes)...};
@@ -780,10 +750,10 @@ struct Tensor {
 
   int dim(int idx) const {
     if (idx < 0) {
-      TV_ASSERT_RT_ERR(shape_.size() + idx < shape_.size(), idx, shape_);
-      return shape_[shape_.size() + idx];
+      TV_ASSERT_RT_ERR(shape_.ndim() + idx < shape_.ndim(), idx, shape_);
+      return shape_[shape_.ndim() + idx];
     } else {
-      TV_ASSERT_RT_ERR(idx < int(shape_.size()), idx, shape_);
+      TV_ASSERT_RT_ERR(idx < int(shape_.ndim()), idx, shape_);
       return shape_[idx];
     }
   }

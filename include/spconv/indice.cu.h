@@ -20,6 +20,18 @@
 #include <tensorview/tensorview.h>
 
 namespace spconv {
+
+template <bool UseDeconv, typename Index, unsigned NDim> struct ConvIndiceDispatch;
+
+template <typename Index, unsigned NDim>
+struct ConvIndiceDispatch<true, Index, NDim>{
+  constexpr static auto* func = getValidOutPosTranspose<Index, NDim>;
+};
+template <typename Index, unsigned NDim>
+struct ConvIndiceDispatch<false, Index, NDim>{
+  constexpr static auto* func = getValidOutPos<Index, NDim>;
+};
+
 template <typename Index, unsigned NDim, bool UseDeconv,
           int KernelMaxVolume = 256, typename Index1D = int>
 __global__ void prepareIndicePairsKernel(
@@ -47,19 +59,10 @@ __global__ void prepareIndicePairsKernel(
   auto indicePairsDim2 = indicePairs.dim(2);
   Index index;
   for (int ix : tv::KernelLoopX<int>(numActIn)) {
-    if (UseDeconv) {
-      // nvcc will optimize this fake "if constexpr"
-      // after cuda 11 released, we will start to use real if constexpr.
-      numValidPoints = getValidOutPosTranspose<Index, NDim>(
-          indicesIn.data() + ix * (NDim + 1) + 1, kernelSize.data(),
-          stride.data(), padding.data(), dilation.data(),
-          outSpatialShape.data(), validPoints);
-    } else {
-      numValidPoints = getValidOutPos<Index, NDim>(
-          indicesIn.data() + ix * (NDim + 1) + 1, kernelSize.data(),
-          stride.data(), padding.data(), dilation.data(),
-          outSpatialShape.data(), validPoints);
-    }
+    numValidPoints = ConvIndiceDispatch<UseDeconv, Index, NDim>::func(
+        indicesIn.data() + ix * (NDim + 1) + 1, kernelSize.data(),
+        stride.data(), padding.data(), dilation.data(),
+        outSpatialShape.data(), validPoints);
     for (Index i = 0; i < numValidPoints; ++i) {
       pointPtr = validPoints + i * (NDim + 1);
       auto offset = pointPtr[NDim];

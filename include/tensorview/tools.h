@@ -35,6 +35,24 @@ template <typename TimeT = std::chrono::microseconds> struct CudaContextTimer {
     mCurTime = std::chrono::steady_clock::now();
     return res;
   }
+  template <int Count, typename F>
+  double benchmark(F&& f, int start=int(Count) * 0.3){
+    // std::vector<TimeT::rep> times;
+    auto res = typename TimeT::rep();
+    int count = 0;
+    cudaDeviceSynchronize();
+    for (int i = 0; i < Count; ++i){
+      std::forward<F>(f)();
+      auto time = report();
+      if (i >= start){
+        // times.push_back(time)
+        res += time;
+        count += 1;
+      }
+    }
+    return res / double(count);
+
+  }
 
 private:
   std::chrono::time_point<std::chrono::steady_clock> mCurTime;

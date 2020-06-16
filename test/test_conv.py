@@ -37,7 +37,7 @@ class SparseConv3dTestTorch(nn.Module):
                  stride,
                  padding,
                  dilation,
-                 algo=spconv.ConvAlgo.Native):
+                 algo=spconv.ConvAlgo.SparseConvNet):
         super().__init__()
         layers = [
             spconv.SparseConv3d(in_channels,
@@ -353,7 +353,7 @@ class TestSpConv(TestCase):
         shapes = [[19, 18, 17]]
         batchsizes = [1, 2]
 
-        in_channels = [64]
+        in_channels = [32]
         out_channels = [32, 48, 64]
         ksizes = [2, 3]
         strides = [1, 2, 3]
@@ -623,8 +623,8 @@ def main(algo=spconv.ConvAlgo.Native, dtype=torch.float32):
     shapes = [[400, 400, 15]]
     batchsizes = [2]
 
-    in_channels = [32]
-    out_channels = [64]
+    in_channels = [19]
+    out_channels = [17]
     ksizes = [(3, 3, 3)]
     strides = [1]
     paddings = [0]
@@ -752,8 +752,8 @@ def main_subm(algo, dtype=torch.float32):
 
 
 if __name__ == '__main__':
-    main_subm(algo=spconv.ConvAlgo.Native, dtype=torch.float32)
-    # main(algo=spconv.ConvAlgo.Native, dtype=torch.half)
+    # main_subm(algo=spconv.ConvAlgo.SparseConvNet, dtype=torch.float32)
+    # main(algo=spconv.ConvAlgo.SparseConvNet, dtype=torch.float32)
     # TestCase().assertAllClose(out_my, out_ref)
     # unittest.main()
-    # TestSpConv().testSpConv3d()
+    TestSpConv().testSpConv3d()

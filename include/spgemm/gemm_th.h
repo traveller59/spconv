@@ -1,4 +1,4 @@
-
+#pragma once
 #include <cuda_runtime_api.h>
 #include <tensorview/torch_utils.h>
 #include <torch/script.h>
