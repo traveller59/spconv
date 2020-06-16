@@ -246,8 +246,9 @@ torch::Tensor indiceConvNative(torch::Tensor features, torch::Tensor filters,
   return output;
 }
 
+template <int Algo>
 torch::Tensor
-indiceConvSparseConvNet(torch::Tensor features, torch::Tensor filters,
+indiceConvFused(torch::Tensor features, torch::Tensor filters,
                         torch::Tensor indicePairs, torch::Tensor indiceNum,
                         int64_t numActOut, int64_t _inverse, int64_t _subM) {
   auto kernelVolume = indiceNum.size(0);
@@ -277,11 +278,11 @@ indiceConvSparseConvNet(torch::Tensor features, torch::Tensor filters,
       continue;
     }
     if (device == torch::kCPU) {
-      TV_THROW_INVALID_ARG("SparseConvNet only support gpu");
+      TV_THROW_INVALID_ARG("fused only support gpu");
     }
 #ifdef TV_CUDA
     else if (device == torch::kCUDA) {
-      fused_conv_cuda(output, features, filters[i], indicePairs[inverse][i],
+      FusedConvDispatch<Algo>::fwd(output, features, filters[i], indicePairs[inverse][i],
                       indicePairs[!inverse][i], nHot);
     }
 #endif
@@ -421,37 +422,6 @@ torch::Tensor indiceConvBatch(torch::Tensor features, torch::Tensor filters,
   return output;
 }
 
-template <int Algo> struct ConvDispatch;
-
-template <> struct ConvDispatch<kNative> {
-  constexpr static auto *func = indiceConvNative;
-};
-
-template <> struct ConvDispatch<kBatch> {
-  constexpr static auto *func = indiceConvBatch<false>;
-};
-
-template <> struct ConvDispatch<kBatchGemmGather> {
-  constexpr static auto *func = indiceConvBatch<true>;
-};
-
-template <> struct ConvDispatch<kSparseConvNet> {
-  constexpr static auto *func = indiceConvSparseConvNet;
-};
-
-torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
-                         torch::Tensor indicePairs, torch::Tensor indiceNum,
-                         int64_t numActOut, int64_t _inverse, int64_t _subM,
-                         int64_t algo) {
-  torch::Tensor res;
-  tv::DispatchInt<all_conv_algos_t>()(algo, [&](auto I) {
-    constexpr int AlgoValue = decltype(I)::value;
-    res = ConvDispatch<AlgoValue>::func(features, filters, indicePairs,
-                                        indiceNum, numActOut, _inverse, _subM);
-  });
-  return res;
-}
-
 std::vector<torch::Tensor>
 indiceConvBwNative(torch::Tensor features, torch::Tensor filters,
                    torch::Tensor outGrad, torch::Tensor indicePairs,
@@ -544,8 +514,9 @@ indiceConvBwNative(torch::Tensor features, torch::Tensor filters,
   return {inputGrad, filtersGrad.view(filterShape)};
 }
 
+template <int Algo>
 std::vector<torch::Tensor>
-indiceConvBwSparseConvNet(torch::Tensor features, torch::Tensor filters,
+indiceConvBwFused(torch::Tensor features, torch::Tensor filters,
                           torch::Tensor outGrad, torch::Tensor indicePairs,
                           torch::Tensor indiceNum, int64_t _inverse,
                           int64_t _subM) {
@@ -585,7 +556,7 @@ indiceConvBwSparseConvNet(torch::Tensor features, torch::Tensor filters,
     }
 #ifdef TV_CUDA
     else if (device == torch::kCUDA) {
-      fused_conv_backward_cuda(features, inputGrad, outGrad, filters[i],
+      FusedConvDispatch<Algo>::bwd(features, inputGrad, outGrad, filters[i],
                                filtersGrad[i], indicePairs[inverse][i],
                                indicePairs[!inverse][i], nHot);
     }
@@ -725,23 +696,46 @@ indiceConvBwBatch(torch::Tensor features, torch::Tensor filters,
   return {inputGrad, filtersGrad.view(filterShape)};
 }
 
-template <int Algo> struct ConvBwDispatch;
+template <int Algo> struct ConvDispatch;
 
-template <> struct ConvBwDispatch<kNative> {
-  constexpr static auto *func = indiceConvBwNative;
+template <> struct ConvDispatch<kNative> {
+  constexpr static auto *fwd = indiceConvNative;
+  constexpr static auto *bwd = indiceConvBwNative;
 };
 
-template <> struct ConvBwDispatch<kBatch> {
-  constexpr static auto *func = indiceConvBwBatch<false>;
+template <> struct ConvDispatch<kBatch> {
+  constexpr static auto *fwd = indiceConvBatch<false>;
+  constexpr static auto *bwd = indiceConvBwBatch<false>;
 };
 
-template <> struct ConvBwDispatch<kBatchGemmGather> {
-  constexpr static auto *func = indiceConvBwBatch<true>;
+template <> struct ConvDispatch<kBatchGemmGather> {
+  constexpr static auto *fwd = indiceConvBatch<true>;
+  constexpr static auto *bwd = indiceConvBwBatch<true>;
 };
 
-template <> struct ConvBwDispatch<kSparseConvNet> {
-  constexpr static auto *func = indiceConvBwSparseConvNet;
+template <> struct ConvDispatch<kSparseConvNet> {
+  constexpr static auto *fwd = indiceConvFused<kFSparseConvNet>;
+  constexpr static auto *bwd = indiceConvBwFused<kFSparseConvNet>;
 };
+
+template <> struct ConvDispatch<kMinkowskiEngine> {
+  constexpr static auto *fwd = indiceConvFused<kFMinkowskiEngine>;
+  constexpr static auto *bwd = indiceConvBwFused<kFMinkowskiEngine>;
+};
+
+
+torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
+                         torch::Tensor indicePairs, torch::Tensor indiceNum,
+                         int64_t numActOut, int64_t _inverse, int64_t _subM,
+                         int64_t algo) {
+  torch::Tensor res;
+  tv::DispatchInt<all_conv_algos_t>()(algo, [&](auto I) {
+    constexpr int AlgoValue = decltype(I)::value;
+    res = ConvDispatch<AlgoValue>::fwd(features, filters, indicePairs,
+                                       indiceNum, numActOut, _inverse, _subM);
+  });
+  return res;
+}
 
 std::vector<torch::Tensor>
 indiceConvBackward(torch::Tensor features, torch::Tensor filters,
@@ -751,8 +745,8 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
   std::vector<torch::Tensor> res;
   tv::DispatchInt<all_conv_algos_t>()(algo, [&](auto I) {
     constexpr int AlgoValue = decltype(I)::value;
-    res = ConvBwDispatch<AlgoValue>::func(
-        features, filters, outGrad, indicePairs, indiceNum, _inverse, _subM);
+    res = ConvDispatch<AlgoValue>::bwd(features, filters, outGrad, indicePairs,
+                                       indiceNum, _inverse, _subM);
   });
   return res;
 }

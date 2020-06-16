@@ -1,4 +1,4 @@
-# Copyright 2019 Yan Yan
+# Copyright 2019-2020 Yan Yan
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,7 +37,7 @@ class SparseConv3dTestTorch(nn.Module):
                  stride,
                  padding,
                  dilation,
-                 algo=spconv.ConvAlgo.SparseConvNet):
+                 algo=spconv.ConvAlgo.Minkowski):
         super().__init__()
         layers = [
             spconv.SparseConv3d(in_channels,

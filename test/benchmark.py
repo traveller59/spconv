@@ -23,41 +23,41 @@ def waymo_data(batch_size=1):
 
 
 class Net(nn.Module):
-    def __init__(self, shape):
+    def __init__(self, shape, algo):
         super().__init__()
         self.net = spconv.SparseSequential(
-            spconv.SubMConv3d(3, 64, 3, bias=False, indice_key="c0"),
-            spconv.SubMConv3d(64, 64, 3, bias=False, indice_key="c0"),
+            spconv.SubMConv3d(3, 64, 3, bias=False, indice_key="c0", algo=algo),
+            spconv.SubMConv3d(64, 64, 3, bias=False, indice_key="c0", algo=algo),
             # nn.BatchNorm1d(32),
             # nn.ReLU(),
             spconv.SparseMaxPool3d(2, 2),
-            spconv.SubMConv3d(64, 96, 3, bias=False, indice_key="c1"),
-            spconv.SubMConv3d(96, 96, 3, bias=False, indice_key="c1"),
+            spconv.SubMConv3d(64, 96, 3, bias=False, indice_key="c1", algo=algo),
+            spconv.SubMConv3d(96, 96, 3, bias=False, indice_key="c1", algo=algo),
             # nn.BatchNorm1d(64),
             # nn.ReLU(),
             spconv.SparseMaxPool3d(2, 2),
-            spconv.SubMConv3d(96, 128, 3, bias=False, indice_key="c2"),
-            spconv.SubMConv3d(128, 128, 3, bias=False, indice_key="c2"),
+            spconv.SubMConv3d(96, 128, 3, bias=False, indice_key="c2", algo=algo),
+            spconv.SubMConv3d(128, 128, 3, bias=False, indice_key="c2", algo=algo),
             # nn.BatchNorm1d(128),
             # nn.ReLU(),
             spconv.SparseMaxPool3d(2, 2),
-            spconv.SubMConv3d(128, 160, 3, bias=False, indice_key="c3"),
-            spconv.SubMConv3d(160, 160, 3, bias=False, indice_key="c3"),
+            spconv.SubMConv3d(128, 160, 3, bias=False, indice_key="c3", algo=algo),
+            spconv.SubMConv3d(160, 160, 3, bias=False, indice_key="c3", algo=algo),
             # nn.BatchNorm1d(128),
             # nn.ReLU(),
             spconv.SparseMaxPool3d(2, 2),
-            spconv.SubMConv3d(160, 192, 3, bias=False, indice_key="c4"),
-            spconv.SubMConv3d(192, 192, 3, bias=False, indice_key="c4"),
+            spconv.SubMConv3d(160, 192, 3, bias=False, indice_key="c4", algo=algo),
+            spconv.SubMConv3d(192, 192, 3, bias=False, indice_key="c4", algo=algo),
             # nn.BatchNorm1d(128),
             # nn.ReLU(),
             spconv.SparseMaxPool3d(2, 2),
-            spconv.SubMConv3d(192, 224, 3, bias=False, indice_key="c5"),
-            spconv.SubMConv3d(224, 224, 3, bias=False, indice_key="c5"),
+            spconv.SubMConv3d(192, 224, 3, bias=False, indice_key="c5", algo=algo),
+            spconv.SubMConv3d(224, 224, 3, bias=False, indice_key="c5", algo=algo),
             # nn.BatchNorm1d(128),
             # nn.ReLU(),
             spconv.SparseMaxPool3d(2, 2),
-            spconv.SubMConv3d(224, 256, 3, bias=False, indice_key="c6"),
-            spconv.SubMConv3d(256, 256, 3, bias=False, indice_key="c6"),
+            spconv.SubMConv3d(224, 256, 3, bias=False, indice_key="c6", algo=algo),
+            spconv.SubMConv3d(256, 256, 3, bias=False, indice_key="c6", algo=algo),
         )
         max_batch_size = 1
         # grid (dense map) is used for indice generation. use pre-allocated grid can run faster.
@@ -76,7 +76,8 @@ def main():
     voxels, coors, spatial_shape = waymo_data()
     voxels_th = torch.from_numpy(voxels).cuda().float()
     coors_th = torch.from_numpy(coors).cuda().int()
-    net = Net(spatial_shape[::-1]).cuda().eval().float()
+    algo = spconv.ConvAlgo.Native
+    net = Net(spatial_shape[::-1], algo).cuda().eval().float()
     print(coors_th.shape)
     out = net(voxels_th, coors_th, 1)
     print(out.spatial_shape)

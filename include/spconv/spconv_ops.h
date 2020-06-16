@@ -1,4 +1,4 @@
-// Copyright 2019 Yan Yan
+// Copyright 2019-2020 Yan Yan
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,9 +23,9 @@
 
 namespace spconv {
 
-enum ConvAlgo { kNative = 0, kBatch, kBatchGemmGather, kSparseConvNet };
+enum ConvAlgo { kNative = 0, kBatch, kBatchGemmGather, kSparseConvNet, kMinkowskiEngine };
 using all_conv_algos_t =
-    tv::mp_list_c<int, kNative, kBatch, kBatchGemmGather, kSparseConvNet>;
+    tv::mp_list_c<int, kNative, kBatch, kBatchGemmGather, kSparseConvNet, kMinkowskiEngine>;
 
 // torch.jit's doc says only support int64, so we need to convert to int32.
 std::vector<torch::Tensor>
@@ -37,12 +37,6 @@ getIndicePairs(torch::Tensor indices, torch::Tensor gridOut, int64_t batchSize,
                std::vector<int64_t> outPadding, int64_t _subM,
                int64_t _transpose, int64_t _useHash);
 
-torch::Tensor indiceConvBatch(torch::Tensor features, torch::Tensor filters,
-                              torch::Tensor indicePairs,
-                              torch::Tensor indiceNum, int64_t numActOut,
-                              int64_t _inverse, int64_t _subM,
-                              bool batchScatter);
-
 torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
                          torch::Tensor indicePairs, torch::Tensor indiceNum,
                          int64_t numActOut, int64_t _inverse, int64_t _subM,
@@ -53,11 +47,6 @@ indiceConvBackward(torch::Tensor features, torch::Tensor filters,
                    torch::Tensor indiceNum, int64_t _inverse, int64_t _subM,
                    int64_t algo);
 
-std::vector<torch::Tensor>
-indiceConvBackwardBatch(torch::Tensor features, torch::Tensor filters,
-                        torch::Tensor outGrad, torch::Tensor indicePairs,
-                        torch::Tensor indiceNum, int64_t _inverse,
-                        int64_t _subM, bool batchScatter);
 } // namespace spconv
 
 #endif

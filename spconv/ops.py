@@ -1,4 +1,4 @@
-# Copyright 2019 Yan Yan
+# Copyright 2019-2020 Yan Yan
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ class ConvAlgo(Enum):
     Batch = 1  # high memory cost, faster when number of points is small (< 50000)
     BatchGemmGather = 2  # high memory cost, faster when number of points medium
     SparseConvNet = 3
+    Minkowski = 4 # https://github.com/StanfordVL/MinkowskiEngine/blob/master/src/convolution.cu
 
 def get_conv_output_size(input_size, kernel_size, stride, padding, dilation):
     ndim = len(input_size)
