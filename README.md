@@ -26,19 +26,7 @@ This is a spatially sparse convolution library like [SparseConvNet](https://gith
 
 4. Run ```cd ./dist```, use pip to install generated whl file.
 
-## Install on Windows 10 with CUDA 10 and python 3.6 (python 3.7 may have problem, see [this](https://github.com/pytorch/pytorch/issues/17233))
-
-Since install newest driver and CUDA is very simple on windows, please use CUDA 10 on windows. 
-
-0. Install Visual Studio 2017. Use ```git clone xxx.git --recursive``` to clone this repo.
-
-1. Download compressed files from boost official website and copy headers (i.e. boost_1_69/boost) to spconv/include.
-
-2. Download and install cmake >= 3.13.2, select add cmake to User or System PATH.
-
-3. Ensure you have installed pytorch 1.0 in your environment, run ```python setup.py bdist_wheel``` (don't use ```python setup.py install```).
-
-4. Run ```cd ./dist```, use pip to install generated whl file.
+## Install on Windows 10 (Not supported for now)
 
 ## Compare with SparseConvNet
 
