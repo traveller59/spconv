@@ -15,12 +15,14 @@
 #include <spconv/fused_spconv_ops.h>
 #include <spconv/nms_ops.h>
 #include <spconv/pillar_scatter_ops.h>
+#include <spconv/point2voxel_ops.h>
 #include <spconv/pool_ops.h>
 #include <spconv/spconv_ops.h>
 #include <torch/script.h>
 
 static auto registry =
     torch::RegisterOperators()
+        .op("spconv::points_to_voxel", &spconv::pointsToVoxel)
         .op("spconv::get_indice_pairs", &spconv::getIndicePairs)
         .op("spconv::indice_conv", &spconv::indiceConv)
         .op("spconv::indice_conv_backward", &spconv::indiceConvBackward)

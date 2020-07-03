@@ -13,8 +13,10 @@
 # limitations under the License.
 
 import numpy as np
+import torch
 
 from spconv import spconv_utils
+from spconv.ops import points_to_voxel as points_to_voxel3
 from spconv.spconv_utils import (non_max_suppression_cpu,
                                  points_to_voxel_3d_np,
                                  points_to_voxel_3d_np_mean,
@@ -292,3 +294,33 @@ class VoxelGeneratorV2:
     @property
     def grid_size(self):
         return self._grid_size
+
+class VoxelGeneratorV3:
+    def __init__(self,
+                 voxel_size,
+                 point_cloud_range):
+        self._point_cloud_range = point_cloud_range
+        self._voxel_size = voxel_size
+        self._grid_size = torch.round((self._point_cloud_range[3:] - self._point_cloud_range[:3]) / self._voxel_size).to(torch.int32)
+        self._grid_size = self._grid_size.cpu().numpy().tolist()
+
+    def generate(self, points):
+        res = points_to_voxel3(points, self._voxel_size, self._point_cloud_range)
+        return res
+
+    def generate_multi_gpu(self, points, max_voxels=None):
+        res = points_to_voxel3(points, self._voxel_size, self._point_cloud_range)
+        return res
+
+    @property
+    def voxel_size(self):
+        return self._voxel_size
+
+    @property
+    def point_cloud_range(self):
+        return self._point_cloud_range
+
+    @property
+    def grid_size(self):
+        return self._grid_size
+

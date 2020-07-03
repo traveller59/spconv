@@ -157,3 +157,36 @@ def pillar_scatter(features, coors, shape):
         return torch.ops.spconv.pillar_scatter_half(features, coors, shape)
     else:
         raise NotImplementedError
+
+def points_to_voxel(points, voxel_size, coors_range):
+    """
+        points: [N, ndim] float tensor. points[:, :3] contain xyz points and
+            points[:, 3:] contain other information such as reflectivity.
+        voxel_size: [3] list/tuple or array or tensor, float. xyz, indicate voxel size
+        coors_range: [6] list/tuple or array or tensor, float. indicate voxel range.
+            format: xyzxyz, minmax
+    """
+    if not isinstance(voxel_size, torch.Tensor):
+        if not isinstance(voxel_size, np.ndarray):
+            voxel_size = np.array(voxel_size, dtype=points.dtype)
+        voxel_size = torch.from_numpy(voxel_size).to(points.device)
+    if not isinstance(voxel_size, torch.Tensor):
+        if not isinstance(coors_range, np.ndarray):
+            coors_range = np.array(coors_range, dtype=points.dtype)
+        coors_range = torch.from_numpy(coors_range).to(points.device)
+    grid_shape = torch.round((coors_range[3:] - coors_range[:3]) / voxel_size).to(torch.int32)
+    grid_volume = grid_shape.prod()
+    ndim = grid_shape.shape[0]
+#    indexes = torch.round((points[:, :3] - coors_range[:3]) / voxel_size).to(torch.int32)
+    indexes = torch.floor((points[:, :3] - coors_range[:3]) / voxel_size).to(torch.int32)
+
+    voxels, coors = torch.ops.spconv.points_to_voxel(points, indexes, grid_shape.cpu().numpy().tolist(), ndim, grid_volume.item())
+
+    # xyz --> zyx
+    #coors = coors[::-1]
+    x, y, z = coors[:, 0].reshape([-1, 1]), coors[:, 1].reshape([-1, 1]), coors[:, 2].reshape([-1, 1])
+    coors = torch.cat([z, y, x], dim=1)
+    # can be skipped
+    x, y, z, f = voxels[:, 0].reshape([-1, 1]), voxels[:, 1].reshape([-1, 1]), voxels[:, 2].reshape([-1, 1]), voxels[:, 3:]
+    voxels = torch.cat([z, y, x, f], dim=1)
+    return voxels, coors
