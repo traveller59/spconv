@@ -16,7 +16,6 @@ import numpy as np
 import torch
 
 from spconv import spconv_utils
-from spconv.ops import points_to_voxel as points_to_voxel3
 from spconv.spconv_utils import (non_max_suppression_cpu,
                                  points_to_voxel_3d_np,
                                  points_to_voxel_3d_np_mean,
@@ -298,19 +297,39 @@ class VoxelGeneratorV2:
 class VoxelGeneratorV3:
     def __init__(self,
                  voxel_size,
-                 point_cloud_range):
+                 point_cloud_range,
+                 max_points,
+                 num_features,
+                 dtype,
+                 device):
+
+        self._max_points = max_points
+
         self._point_cloud_range = point_cloud_range
         self._voxel_size = voxel_size
         self._grid_size = torch.round((self._point_cloud_range[3:] - self._point_cloud_range[:3]) / self._voxel_size).to(torch.int32)
+        grid_volume = self._grid_size.prod()
         self._grid_size = self._grid_size.cpu().numpy().tolist()
+        self._ndim = len(self._grid_size)
+
+        self._dtype = dtype
+        self._device = device
+
+        self._point_index = torch.full([max_points + 1], grid_volume, dtype=torch.int32, device=self._device)
+        self._grids = torch.zeros([grid_volume, num_features], dtype=self._dtype, device=self._device)
+        self._num_points_per_grid = torch.zeros([grid_volume], dtype=torch.int32, device=self._device)
+        self._voxels = torch.zeros([max_points, num_features], dtype=self._dtype, device=self._device)
+        self._coors = torch.zeros([max_points, self._ndim], dtype=torch.int32, device=self._device)
 
     def generate(self, points):
-        res = points_to_voxel3(points, self._voxel_size, self._point_cloud_range)
-        return res
+        assert points.shape[0] <= self._max_points, 'please enlarge max_points to not smaller than ' + str(points.shape[0])
+        points.to(self._dtype).to(self._device)
+        return self.points_to_voxel(points)
 
-    def generate_multi_gpu(self, points, max_voxels=None):
-        res = points_to_voxel3(points, self._voxel_size, self._point_cloud_range)
-        return res
+    def generate_multi_gpu(self, points):
+        assert points.shape[0] <= self._max_points, 'please enlarge max_points to not smaller than ' + str(points.shape[0])
+        points.to(self._dtype).to(self._device)
+        return self.points_to_voxel(points)
 
     @property
     def voxel_size(self):
@@ -324,3 +343,31 @@ class VoxelGeneratorV3:
     def grid_size(self):
         return self._grid_size
 
+    def points_to_voxel(self, points):
+        """
+            points: [N, ndim] float tensor. points[:, :3] contain xyz points and
+                points[:, 3:] contain other information such as reflectivity.
+            voxel_size: [3] list/tuple or array or tensor, float. xyz, indicate voxel size
+            coors_range: [6] list/tuple or array or tensor, float. indicate voxel range.
+                format: xyzxyz, minmax
+        """
+        indexes = torch.floor((points[:, :3] - self._point_cloud_range[:3]) / self._voxel_size).to(torch.int32)
+        num_voxel = torch.ops.spconv.points_to_voxel(points, indexes,
+                                                     self._point_index,
+                                                     self._grids,
+                                                     self._num_points_per_grid,
+                                                     self._voxels,
+                                                     self._coors,
+                                                     self._grid_size,
+                                                     self._ndim)
+        voxels = self._voxels[:num_voxel, :]
+        coors = self._coors[:num_voxel, :]
+
+        # xyz --> zyx
+        #coors = coors[::-1]
+        x, y, z = coors[:, 0].reshape([-1, 1]), coors[:, 1].reshape([-1, 1]), coors[:, 2].reshape([-1, 1])
+        coors = torch.cat([z, y, x], dim=1)
+        # can be skipped
+#        x, y, z, f = voxels[:, 0].reshape([-1, 1]), voxels[:, 1].reshape([-1, 1]), voxels[:, 2].reshape([-1, 1]), voxels[:, 3:]
+#        voxels = torch.cat([z, y, x, f], dim=1)
+        return voxels, coors

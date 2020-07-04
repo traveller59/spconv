@@ -11,7 +11,7 @@ __global__ void scatterPointToGridKernel(
     tv::TensorView<const Index> indexes,
     tv::TensorView<float> grids,
     tv::TensorView<Index> numPointsPerGrid,
-    tv::TensorView<Index> pointIndexUnique,
+    tv::TensorView<Index> pointIndex,
     const tv::SimpleVector<Index, NDim> gridShape) {
   Index index;
   int numPoints = points.dim(0);
@@ -22,7 +22,7 @@ __global__ void scatterPointToGridKernel(
     // Use ILP to speed up it
     index = tv::ArrayIndexRowMajor<NDim, NDim>::runPtrs(
             indexes.data() + ix * NDim, gridShape.data(), 0);
-    pointIndexUnique(ix) = index;
+    pointIndex(ix) = index;
     atomicAdd(numPointsPerGrid.data() + index, Index(1));
 #pragma unroll
     for (int k = 0; k != numFeatures; ++k) {
@@ -53,6 +53,37 @@ __global__ void gatherPointFromGridKernel(
     }
     index = tv::rowArrayIdxInv<Index, NDim>(
         index, coors.data() + ix * NDim, gridShape.data());
+  }
+}
+
+template <typename Index>
+__global__ void resetGridKernel(
+    tv::TensorView<float> grids,
+    tv::TensorView<Index> numPointsPerGrid,
+    tv::TensorView<Index> pointIndexUnique) {
+  Index index;
+  int numVoxels = pointIndexUnique.dim(0) - 1;
+  int numFeatures = grids.dim(1);
+
+  for (int ix : tv::KernelLoopX<int>(numVoxels)) {
+    // slow here, random access
+    // Use ILP to speed up it
+    index = pointIndexUnique(ix);
+#pragma unroll
+    for (int k = 0; k != numFeatures; ++k) {
+      grids(index, k) = 0;
+      numPointsPerGrid(index) = 0;
+    }
+  }
+}
+
+template <typename Index>
+__global__ void resetPointIndexKernel(
+    tv::TensorView<Index> pointIndex, const Index gridVolume) {
+  int num_max_points = pointIndex.dim(0) - 1;
+
+  for (int ix : tv::KernelLoopX<int>(num_max_points)) {
+    pointIndex(ix) = gridVolume;
   }
 }
 } // namespace spconv
