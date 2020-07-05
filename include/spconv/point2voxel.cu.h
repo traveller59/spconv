@@ -18,8 +18,6 @@ __global__ void scatterPointToGridKernel(
   int numFeatures = points.dim(1);
 
   for (int ix : tv::KernelLoopX<int>(numPoints)) {
-    // slow here, atomic Add + random access
-    // Use ILP to speed up it
     index = tv::ArrayIndexRowMajor<NDim, NDim>::runPtrs(
             indexes.data() + ix * NDim, gridShape.data(), 0);
     pointIndex(ix) = index;
@@ -44,8 +42,6 @@ __global__ void gatherPointFromGridKernel(
   int numFeatures = grids.dim(1);
 
   for (int ix : tv::KernelLoopX<int>(numVoxels)) {
-    // slow here, random access
-    // Use ILP to speed up it
     index = pointIndexUnique(ix);
 #pragma unroll
     for (int k = 0; k != numFeatures; ++k) {
@@ -66,8 +62,6 @@ __global__ void resetGridKernel(
   int numFeatures = grids.dim(1);
 
   for (int ix : tv::KernelLoopX<int>(numVoxels)) {
-    // slow here, random access
-    // Use ILP to speed up it
     index = pointIndexUnique(ix);
 #pragma unroll
     for (int k = 0; k != numFeatures; ++k) {
