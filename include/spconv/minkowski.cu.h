@@ -89,7 +89,6 @@ __global__ void matmul(const Dtype *A, const int wA, const int hA,
   // C[wB * out_row + x] += Csub;
 }
 
-
 template <typename Dtype, typename Itype, int BLOCK_SIZE>
 __global__ void matmul2(const Dtype *A, const int wA, const int hA,
                         const Dtype *B, const int wB, const int hB,

@@ -49,7 +49,9 @@ def _mean_update(vals, m_vals, t):
 class SparseModule(nn.Module):
     """ place holder, all module subclass from this will take sptensor in SparseSequential.
     """
-    pass
+    def __init__(self, name=None):
+        super().__init__()
+        self.name = name
 
 
 class SparseSequential(SparseModule):

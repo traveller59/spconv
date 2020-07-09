@@ -23,9 +23,15 @@
 
 namespace spconv {
 
-enum ConvAlgo { kNative = 0, kBatch, kBatchGemmGather, kSparseConvNet, kMinkowskiEngine };
-using all_conv_algos_t =
-    tv::mp_list_c<int, kNative, kBatch, kBatchGemmGather, kSparseConvNet, kMinkowskiEngine>;
+enum ConvAlgo {
+  kNative = 0,
+  kBatch,
+  kBatchGemmGather,
+  kSparseConvNet,
+  kMinkowskiEngine
+};
+using all_conv_algos_t = tv::mp_list_c<int, kNative, kBatch, kBatchGemmGather,
+                                       kSparseConvNet, kMinkowskiEngine>;
 
 // torch.jit's doc says only support int64, so we need to convert to int32.
 std::vector<torch::Tensor>

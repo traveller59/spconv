@@ -14,9 +14,9 @@
 
 #pragma once
 #include "mp_helper.h"
-#include <tensorview/tensorview.h>
-#include <tensorview/tensor.h>
 #include <ATen/ATen.h>
+#include <tensorview/tensor.h>
+#include <tensorview/tensorview.h>
 #include <torch/script.h>
 #ifdef TV_CUDA
 #include <ATen/cuda/CUDAContext.h>

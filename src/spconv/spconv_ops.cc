@@ -247,10 +247,10 @@ torch::Tensor indiceConvNative(torch::Tensor features, torch::Tensor filters,
 }
 
 template <int Algo>
-torch::Tensor
-indiceConvFused(torch::Tensor features, torch::Tensor filters,
-                        torch::Tensor indicePairs, torch::Tensor indiceNum,
-                        int64_t numActOut, int64_t _inverse, int64_t _subM) {
+torch::Tensor indiceConvFused(torch::Tensor features, torch::Tensor filters,
+                              torch::Tensor indicePairs,
+                              torch::Tensor indiceNum, int64_t numActOut,
+                              int64_t _inverse, int64_t _subM) {
   auto kernelVolume = indiceNum.size(0);
   // auto timer = spconv::CudaContextTimer<>();
   bool subM = _subM != 0;
@@ -282,8 +282,9 @@ indiceConvFused(torch::Tensor features, torch::Tensor filters,
     }
 #ifdef TV_CUDA
     else if (device == torch::kCUDA) {
-      FusedConvDispatch<Algo>::fwd(output, features, filters[i], indicePairs[inverse][i],
-                      indicePairs[!inverse][i], nHot);
+      FusedConvDispatch<Algo>::fwd(output, features, filters[i],
+                                   indicePairs[inverse][i],
+                                   indicePairs[!inverse][i], nHot);
     }
 #endif
     else {
@@ -517,9 +518,8 @@ indiceConvBwNative(torch::Tensor features, torch::Tensor filters,
 template <int Algo>
 std::vector<torch::Tensor>
 indiceConvBwFused(torch::Tensor features, torch::Tensor filters,
-                          torch::Tensor outGrad, torch::Tensor indicePairs,
-                          torch::Tensor indiceNum, int64_t _inverse,
-                          int64_t _subM) {
+                  torch::Tensor outGrad, torch::Tensor indicePairs,
+                  torch::Tensor indiceNum, int64_t _inverse, int64_t _subM) {
   auto kernelVolume = indiceNum.size(0);
   bool subM = _subM != 0;
   bool inverse = _inverse != 0;
@@ -557,8 +557,8 @@ indiceConvBwFused(torch::Tensor features, torch::Tensor filters,
 #ifdef TV_CUDA
     else if (device == torch::kCUDA) {
       FusedConvDispatch<Algo>::bwd(features, inputGrad, outGrad, filters[i],
-                               filtersGrad[i], indicePairs[inverse][i],
-                               indicePairs[!inverse][i], nHot);
+                                   filtersGrad[i], indicePairs[inverse][i],
+                                   indicePairs[!inverse][i], nHot);
     }
 #endif
     else {
@@ -722,7 +722,6 @@ template <> struct ConvDispatch<kMinkowskiEngine> {
   constexpr static auto *fwd = indiceConvFused<kFMinkowskiEngine>;
   constexpr static auto *bwd = indiceConvBwFused<kFMinkowskiEngine>;
 };
-
 
 torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
                          torch::Tensor indicePairs, torch::Tensor indiceNum,

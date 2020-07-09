@@ -198,7 +198,7 @@ dConvolution_KMxKN_forwardB(T *inFeatures, T *outFeatures, T *w,
       if (nHot > o)                                                            \
         dConvolution_KMxKN_forwardB<T, K, V>                                   \
             <<<dim3(1, output_nPlanes / K, nGroups), dim3(K, K / V), 0, s>>>(  \
-                inFeatures, outFeatures, w, rulesIn + o, rulesOut + o, \
+                inFeatures, outFeatures, w, rulesIn + o, rulesOut + o,         \
                 nHot - o, input_nPlanes, input_stride, output_nPlanes,         \
                 output_stride);                                                \
       return;                                                                  \
@@ -400,8 +400,8 @@ __global__ void dConvolution_KMxKN_backward_dW_B(
       if (nHot > o)                                                            \
         dConvolution_KMxKN_backward_dW_B<T, K, V>                              \
             <<<dim3(1, input_nPlanes / K, nGroups), dim3(K, K / V), 0, s>>>(   \
-                inFeatures, dInFeatures, dOutFeatures, w, dw, rulesIn + o, \
-                rulesOut + o, nHot - o, input_nPlanes, input_stride,       \
+                inFeatures, dInFeatures, dOutFeatures, w, dw, rulesIn + o,     \
+                rulesOut + o, nHot - o, input_nPlanes, input_stride,           \
                 output_nPlanes, output_stride);                                \
       return;                                                                  \
     }                                                                          \

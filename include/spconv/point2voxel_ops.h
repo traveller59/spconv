@@ -21,15 +21,10 @@
 
 namespace spconv {
 
-int64_t
-pointsToVoxel(torch::Tensor points,
-              torch::Tensor indexes,
-              torch::Tensor pointIndex,
-              torch::Tensor grids,
-              torch::Tensor numPointsPerGrid,
-              torch::Tensor voxels,
-              torch::Tensor coors,
-              std::vector<int64_t> gridShape,
-              const int64_t ndim);
+int64_t pointsToVoxel(torch::Tensor points, torch::Tensor indexes,
+                      torch::Tensor pointIndex, torch::Tensor grids,
+                      torch::Tensor numPointsPerGrid, torch::Tensor voxels,
+                      torch::Tensor coors, std::vector<int64_t> gridShape,
+                      const int64_t ndim);
 
 } // namespace spconv

@@ -22,13 +22,13 @@ If you can use libtorch, dont use tv::Tensor.
 */
 
 #pragma once
+#include "cc17.h"
 #include "mp_helper.h"
 #include "tensorview.h"
 #include <cstring>
 #include <iomanip>
 #include <memory>
 #include <type_traits>
-#include "cc17.h"
 #ifdef TV_CUDA
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
@@ -632,26 +632,31 @@ struct Tensor {
   tview() const {
     static_assert(Rank == -1 || Rank > 0, "error");
     TV_ASSERT_RT_ERR(dtype_ == type_v<T>, "error");
-    return if_constexpr<(Rank > 0)>([&](auto _){
-      TV_ASSERT_RT_ERR(Rank == ndim(), "error");
-      ShapeBase<_(Rank) == -1 ? TV_MAX_DIM : Rank, Tindex> shape(Rank), stride(Rank);
-      for (int i = 0; i < Rank; ++i) {
-        shape[i] = shape_[i];
-        stride[i] = stride_[i];
-      }
-      return TensorView<const std::remove_const_t<T>, Rank, PtrTraits, Tindex>(
-          reinterpret_cast<const std::remove_const_t<T> *>(data<T>()), shape,
-          stride);
-    }, [&](auto _){
-      ShapeBase<TV_MAX_DIM, Tindex> shape(_(ndim())), stride(ndim());
-      for (int i = 0; i < int(ndim()); ++i) {
-        shape[i] = shape_[i];
-        stride[i] = stride_[i];
-      }
-      return TensorView<const std::remove_const_t<T>, Rank, PtrTraits, Tindex>(
-          reinterpret_cast<const std::remove_const_t<T> *>(data<T>()), shape,
-          stride);
-    });
+    return if_constexpr<(Rank > 0)>(
+        [&](auto _) {
+          TV_ASSERT_RT_ERR(Rank == ndim(), "error");
+          ShapeBase<_(Rank) == -1 ? TV_MAX_DIM : Rank, Tindex> shape(Rank),
+              stride(Rank);
+          for (int i = 0; i < Rank; ++i) {
+            shape[i] = shape_[i];
+            stride[i] = stride_[i];
+          }
+          return TensorView<const std::remove_const_t<T>, Rank, PtrTraits,
+                            Tindex>(
+              reinterpret_cast<const std::remove_const_t<T> *>(data<T>()),
+              shape, stride);
+        },
+        [&](auto _) {
+          ShapeBase<TV_MAX_DIM, Tindex> shape(_(ndim())), stride(ndim());
+          for (int i = 0; i < int(ndim()); ++i) {
+            shape[i] = shape_[i];
+            stride[i] = stride_[i];
+          }
+          return TensorView<const std::remove_const_t<T>, Rank, PtrTraits,
+                            Tindex>(
+              reinterpret_cast<const std::remove_const_t<T> *>(data<T>()),
+              shape, stride);
+        });
   }
   template <class... Inds> Tensor view(Inds... newShapes) const {
     static_assert(sizeof...(newShapes) > 0, "dont support empty for now");

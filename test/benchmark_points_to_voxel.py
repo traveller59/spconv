@@ -13,13 +13,17 @@ def waymo_data_gpu(batch_size=1):
     print('gpu with total points available per voxel')
     data = np.load(Path(__file__).parent / "data" / "benchmark-pc.npz")
     points = torch.from_numpy(data['pc']).cuda().float()
-    voxel_size = torch.Tensor([0.1, 0.1, 0.1]).to(points.dtype).to(points.device)
-    coors_range = torch.Tensor([-80, -80, -2, 80, 80, 6]).to(points.dtype).to(points.device)
+    voxel_size = torch.Tensor([0.1, 0.1,
+                               0.1]).to(points.dtype).to(points.device)
+    coors_range = torch.Tensor([-80, -80, -2, 80, 80,
+                                6]).to(points.dtype).to(points.device)
 
-    gen = VoxelGeneratorV3(voxel_size, coors_range, max_points=200000,
-                                                    num_features=points.shape[1],
-                                                    dtype=points.dtype,
-                                                    device=points.device)
+    gen = VoxelGeneratorV3(voxel_size,
+                           coors_range,
+                           max_points=200000,
+                           num_features=points.shape[1],
+                           dtype=points.dtype,
+                           device=points.device)
     voxels, coors = gen.generate(points)
 
     times = []
@@ -40,8 +44,8 @@ def waymo_data_gpu(batch_size=1):
 
 def waymo_data_cpu(max_points_per_voxel=1, batch_size=1):
     print('cpu with %d max points per voxel' % max_points_per_voxel)
-    gen = VoxelGeneratorV2([0.1, 0.1, 0.1], [-80, -80, -2, 80, 80, 6], max_points_per_voxel,
-                           150000)
+    gen = VoxelGeneratorV2([0.1, 0.1, 0.1], [-80, -80, -2, 80, 80, 6],
+                           max_points_per_voxel, 150000)
     data = np.load(Path(__file__).parent / "data" / "benchmark-pc.npz")
     pc = data["pc"]
     data = gen.generate(pc)
@@ -61,6 +65,7 @@ def waymo_data_cpu(max_points_per_voxel=1, batch_size=1):
     N = coors.shape[0]
     coors = np.concatenate([np.full([N, 1], 0, coors.dtype), coors], axis=1)
     return voxels, coors, gen.grid_size
+
 
 def get_index(coor, grid_size):
     index = coor[0]
@@ -99,6 +104,7 @@ def main():
                     "voxel diff should be smaller than voxel_size 0.1"
 
     print('Perfect GPU Voxelization!!!')
+
 
 if __name__ == "__main__":
     main()

@@ -15,8 +15,8 @@
 #include <ATen/ATen.h>
 #include <spconv/fused_conv.cu.h>
 #include <spconv/fused_conv.h>
-#include <tensorview/torch_utils.h>
 #include <spconv/minkowski.cu.h>
+#include <tensorview/torch_utils.h>
 
 namespace spconv {
 void fused_conv_cuda(torch::Tensor output, torch::Tensor features,
@@ -56,8 +56,8 @@ void fused_conv_backward_cuda(torch::Tensor features, torch::Tensor din,
 }
 
 void fused_conv_cuda_minkowski(torch::Tensor output, torch::Tensor features,
-                     torch::Tensor filters, torch::Tensor indicesIn,
-                     torch::Tensor indicesOut, int nHot) {
+                               torch::Tensor filters, torch::Tensor indicesIn,
+                               torch::Tensor indicesOut, int nHot) {
   auto dtype = output.scalar_type();
   auto in_nchannel = features.size(1);
   auto out_nchannel = output.size(1);
@@ -81,10 +81,9 @@ void fused_conv_cuda_minkowski(torch::Tensor output, torch::Tensor features,
   int step = (nHot + num_div - 1) / num_div;
   dim3 threads(shared_mem_size, shared_mem_size);
 
-
   tv::dispatch_torch<float>(dtype, [&](auto I) {
     using T = decltype(I);
-    tv::DispatchInt<shmem_sizes_t>()(shared_mem_size, [&](auto ShSizeValue){
+    tv::DispatchInt<shmem_sizes_t>()(shared_mem_size, [&](auto ShSizeValue) {
       constexpr int ShmemSize = decltype(ShSizeValue)::value;
       for (int s = 0; s < num_div; s++) {
         int remainder = nHot - step * s;
@@ -93,17 +92,19 @@ void fused_conv_cuda_minkowski(torch::Tensor output, torch::Tensor features,
                   (curr_num_active + threads.y - 1) / threads.y);
         matmul<T, int32_t, ShmemSize><<<grid, threads, 0, stream>>>(
             features.data_ptr<T>(), in_nchannel, curr_num_active,
-            filters.data_ptr<T>(), out_nchannel,
-            in_nchannel, output.data_ptr<T>(), indicesIn.data_ptr<int32_t>(),
-                          indicesOut.data_ptr<int32_t>());
+            filters.data_ptr<T>(), out_nchannel, in_nchannel,
+            output.data_ptr<T>(), indicesIn.data_ptr<int32_t>(),
+            indicesOut.data_ptr<int32_t>());
       }
     });
   });
 }
-void fused_conv_backward_cuda_minkowski(torch::Tensor features, torch::Tensor din,
-                              torch::Tensor dout, torch::Tensor filters,
-                              torch::Tensor dfilters, torch::Tensor indicesIn,
-                              torch::Tensor indicesOut, int nHot) {
+void fused_conv_backward_cuda_minkowski(torch::Tensor features,
+                                        torch::Tensor din, torch::Tensor dout,
+                                        torch::Tensor filters,
+                                        torch::Tensor dfilters,
+                                        torch::Tensor indicesIn,
+                                        torch::Tensor indicesOut, int nHot) {
   auto dtype = features.scalar_type();
   auto in_nchannel = features.size(1);
   auto out_nchannel = dout.size(1);
@@ -131,7 +132,7 @@ void fused_conv_backward_cuda_minkowski(torch::Tensor features, torch::Tensor di
 
   tv::dispatch_torch<float>(dtype, [&](auto I) {
     using T = decltype(I);
-    tv::DispatchInt<shmem_sizes_t>()(shared_mem_size, [&](auto ShSizeValue){
+    tv::DispatchInt<shmem_sizes_t>()(shared_mem_size, [&](auto ShSizeValue) {
       constexpr int ShmemSize = decltype(ShSizeValue)::value;
       for (int s = 0; s < num_div; s++) {
         int remainder = nHot - step * s;
@@ -141,10 +142,10 @@ void fused_conv_backward_cuda_minkowski(torch::Tensor features, torch::Tensor di
         matmul2<T, int32_t, ShmemSize><<<grid, threads, 0, stream>>>(
             dout.data_ptr<T>(), out_nchannel, curr_num_active, // A
             filters.data_ptr<T>(), out_nchannel,
-            in_nchannel,                                    // B
-            features.data_ptr<T>(), in_nchannel, curr_num_active,        // D
-            din.data_ptr<T>(),                                 // C
-            dfilters.data_ptr<T>(), // E
+            in_nchannel,                                          // B
+            features.data_ptr<T>(), in_nchannel, curr_num_active, // D
+            din.data_ptr<T>(),                                    // C
+            dfilters.data_ptr<T>(),                               // E
             indicesIn.data_ptr<int32_t>(), indicesOut.data_ptr<int32_t>());
       }
     });

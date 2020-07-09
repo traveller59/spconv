@@ -24,9 +24,10 @@ from torch.nn.parameter import Parameter
 import spconv
 from spconv.modules import SparseModule
 
+
 class RemoveDuplicate(SparseModule):
     def forward(self, x: spconv.SparseConvTensor):
-        inds = x.indices 
+        inds = x.indices
         spatial_shape = [x.batch_size, *x.spatial_shape]
         spatial_stride = [0] * len(spatial_shape)
         val = 1
@@ -39,5 +40,6 @@ class RemoveDuplicate(SparseModule):
         _, unique_inds = torch.unique(indices_index)
         new_inds = inds[unique_inds]
         new_features = x.features[unique_inds]
-        res = spconv.SparseConvTensor(new_features, new_inds, x.spatial_shape, x.batch_size, x.grid)
+        res = spconv.SparseConvTensor(new_features, new_inds, x.spatial_shape,
+                                      x.batch_size, x.grid)
         return res

@@ -24,6 +24,7 @@ from torch.nn.parameter import Parameter
 import spconv
 import spconv.functional as Fsp
 from spconv import ops
+from spconv.core import IndiceData, SparseConvTensor
 from spconv.modules import SparseModule
 
 
@@ -72,8 +73,9 @@ class SparseConvolution(SparseModule):
                  indice_key=None,
                  fused_bn=False,
                  use_hash=False,
-                 algo=ops.ConvAlgo.Native):
-        super(SparseConvolution, self).__init__()
+                 algo=ops.ConvAlgo.Native,
+                 name=None):
+        super(SparseConvolution, self).__init__(name=name)
         assert groups == 1
         if not isinstance(kernel_size, (list, tuple)):
             kernel_size = [kernel_size] * ndim
@@ -123,8 +125,8 @@ class SparseConvolution(SparseModule):
             bound = 1 / math.sqrt(fan_in)
             init.uniform_(self.bias, -bound, bound)
 
-    def forward(self, input):
-        assert isinstance(input, spconv.SparseConvTensor)
+    def forward(self, input: SparseConvTensor):
+        assert isinstance(input, SparseConvTensor)
         features = input.features
         device = features.device
         indices = input.indices
@@ -143,29 +145,58 @@ class SparseConvolution(SparseModule):
             out_spatial_shape = spatial_shape
         # input.update_grid(out_spatial_shape)
         # t = time.time()
+        out_tensor = input.shadow_copy()
+        if input.benchmark:
+            if self.name is None:
+                raise ValueError(
+                    "you need to assign name to spmodules before benchmark (spconv.utils.bench.assign_name_to_spmod)"
+                )
+            if self.name not in input.benchmark_record:
+                input.benchmark_record[self.name] = {
+                    "type": "SparseConvolution",
+                    "indice_gen_time": [],
+                    "time": [],
+                    "num_points": [],
+                    "num_out_points": [],
+                    "params": {
+                        "kernel_size": self.kernel_size,
+                        "stride": self.stride,
+                        "padding": self.padding,
+                        "dilation": self.dilation,
+                        "output_padding": self.output_padding,
+                        "subm": self.subm,
+                        "transposed": self.transposed,
+                        "input_channels": self.in_channels,
+                        "out_channels": self.out_channels,
+                    }
+                }
         if self.conv1x1:
             features = torch.mm(
                 input.features,
                 self.weight.view(self.in_channels, self.out_channels))
             if self.bias is not None:
                 features += self.bias
-            out_tensor = spconv.SparseConvTensor(features, input.indices,
-                                                 input.spatial_shape,
-                                                 input.batch_size)
-            out_tensor.indice_dict = input.indice_dict
-            out_tensor.grid = input.grid
+            out_tensor.features = features
             return out_tensor
         datas = input.find_indice_pair(self.indice_key)
         if self.inverse:
             assert datas is not None and self.indice_key is not None
-            _, outids, indice_pairs, indice_pair_num, out_spatial_shape = datas
+            outids = datas.indices
+            indice_pairs = datas.indice_pairs
+            indice_pair_num = datas.indice_pair_num
+            out_spatial_shape = datas.out_spatial_shape
             assert indice_pair_num.shape[0] == np.prod(
                 self.kernel_size
             ), "inverse conv must have same kernel size as its couple conv"
         else:
             if self.indice_key is not None and datas is not None:
-                outids, _, indice_pairs, indice_pair_num, _ = datas
+                outids = datas.out_indices
+                indice_pairs = datas.indice_pairs
+                indice_pair_num = datas.indice_pair_num
             else:
+                if input.benchmark:
+                    torch.cuda.synchronize()
+                    t = time.time()
                 outids, indice_pairs, indice_pair_num = ops.get_indice_pairs(
                     indices,
                     batch_size,
@@ -179,10 +210,19 @@ class SparseConvolution(SparseModule):
                     self.transposed,
                     grid=input.grid,
                     use_hash=self.use_hash)
-                input.indice_dict[self.indice_key] = (outids, indices,
-                                                      indice_pairs,
-                                                      indice_pair_num,
-                                                      spatial_shape)
+                if input.benchmark:
+                    torch.cuda.synchronize()
+                    interval = time.time() - t
+                    out_tensor.benchmark_record[
+                        self.name]["indice_gen_time"].append(interval)
+
+                indice_data = IndiceData(outids, indices, indice_pairs,
+                                         indice_pair_num, spatial_shape)
+                input.indice_dict[self.indice_key] = indice_data
+        if input.benchmark:
+            torch.cuda.synchronize()
+            t = time.time()
+
         if self.fused_bn:
             assert self.bias is not None
             out_features = ops.fused_indice_conv(features, self.weight,
@@ -210,10 +250,18 @@ class SparseConvolution(SparseModule):
 
             if self.bias is not None:
                 out_features += self.bias
-        out_tensor = spconv.SparseConvTensor(out_features, outids,
-                                             out_spatial_shape, batch_size)
-        out_tensor.indice_dict = input.indice_dict
-        out_tensor.grid = input.grid
+        if input.benchmark:
+            torch.cuda.synchronize()
+            interval = time.time() - t
+            out_tensor.benchmark_record[self.name]["time"].append(interval)
+            out_tensor.benchmark_record[self.name]["num_points"].append(
+                features.shape[0])
+            out_tensor.benchmark_record[self.name]["num_out_points"].append(
+                out_features.shape[0])
+
+        out_tensor.features = out_features
+        out_tensor.indices = outids
+        out_tensor.spatial_shape = out_spatial_shape
         return out_tensor
 
 
@@ -229,7 +277,8 @@ class SparseConv2d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  use_hash=False,
-                 algo=ops.ConvAlgo.Native):
+                 algo=ops.ConvAlgo.Native,
+                 name=None):
         super(SparseConv2d, self).__init__(2,
                                            in_channels,
                                            out_channels,
@@ -241,7 +290,8 @@ class SparseConv2d(SparseConvolution):
                                            bias,
                                            indice_key=indice_key,
                                            use_hash=use_hash,
-                                           algo=algo)
+                                           algo=algo,
+                                           name=name)
 
 
 class SparseConv3d(SparseConvolution):
@@ -256,7 +306,8 @@ class SparseConv3d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  use_hash=False,
-                 algo=ops.ConvAlgo.Native):
+                 algo=ops.ConvAlgo.Native,
+                 name=None):
         super(SparseConv3d, self).__init__(3,
                                            in_channels,
                                            out_channels,
@@ -268,7 +319,8 @@ class SparseConv3d(SparseConvolution):
                                            bias,
                                            indice_key=indice_key,
                                            use_hash=use_hash,
-                                           algo=algo)
+                                           algo=algo,
+                                           name=name)
 
 
 class SparseConv4d(SparseConvolution):
@@ -283,7 +335,8 @@ class SparseConv4d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  use_hash=False,
-                 algo=ops.ConvAlgo.Native):
+                 algo=ops.ConvAlgo.Native,
+                 name=None):
         super(SparseConv4d, self).__init__(4,
                                            in_channels,
                                            out_channels,
@@ -295,7 +348,8 @@ class SparseConv4d(SparseConvolution):
                                            bias,
                                            indice_key=indice_key,
                                            use_hash=use_hash,
-                                           algo=algo)
+                                           algo=algo,
+                                           name=name)
 
 
 class SparseConvTranspose2d(SparseConvolution):
@@ -310,7 +364,8 @@ class SparseConvTranspose2d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  use_hash=False,
-                 algo=ops.ConvAlgo.Native):
+                 algo=ops.ConvAlgo.Native,
+                 name=None):
         super(SparseConvTranspose2d, self).__init__(2,
                                                     in_channels,
                                                     out_channels,
@@ -323,7 +378,8 @@ class SparseConvTranspose2d(SparseConvolution):
                                                     transposed=True,
                                                     indice_key=indice_key,
                                                     use_hash=use_hash,
-                                                    algo=algo)
+                                                    algo=algo,
+                                                    name=name)
 
 
 class SparseConvTranspose3d(SparseConvolution):
@@ -338,7 +394,8 @@ class SparseConvTranspose3d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  use_hash=False,
-                 algo=ops.ConvAlgo.Native):
+                 algo=ops.ConvAlgo.Native,
+                 name=None):
         super(SparseConvTranspose3d, self).__init__(3,
                                                     in_channels,
                                                     out_channels,
@@ -351,7 +408,8 @@ class SparseConvTranspose3d(SparseConvolution):
                                                     transposed=True,
                                                     indice_key=indice_key,
                                                     use_hash=use_hash,
-                                                    algo=algo)
+                                                    algo=algo,
+                                                    name=name)
 
 
 class SparseInverseConv2d(SparseConvolution):
@@ -361,7 +419,8 @@ class SparseInverseConv2d(SparseConvolution):
                  kernel_size,
                  indice_key,
                  bias=True,
-                 algo=ops.ConvAlgo.Native):
+                 algo=ops.ConvAlgo.Native,
+                 name=None):
         super(SparseInverseConv2d, self).__init__(2,
                                                   in_channels,
                                                   out_channels,
@@ -369,7 +428,8 @@ class SparseInverseConv2d(SparseConvolution):
                                                   bias=bias,
                                                   inverse=True,
                                                   indice_key=indice_key,
-                                                  algo=algo)
+                                                  algo=algo,
+                                                  name=name)
 
 
 class SparseInverseConv3d(SparseConvolution):
@@ -379,7 +439,8 @@ class SparseInverseConv3d(SparseConvolution):
                  kernel_size,
                  indice_key,
                  bias=True,
-                 algo=ops.ConvAlgo.Native):
+                 algo=ops.ConvAlgo.Native,
+                 name=None):
         super(SparseInverseConv3d, self).__init__(3,
                                                   in_channels,
                                                   out_channels,
@@ -387,7 +448,8 @@ class SparseInverseConv3d(SparseConvolution):
                                                   bias=bias,
                                                   inverse=True,
                                                   indice_key=indice_key,
-                                                  algo=algo)
+                                                  algo=algo,
+                                                  name=name)
 
 
 class SubMConv2d(SparseConvolution):
@@ -402,7 +464,8 @@ class SubMConv2d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  use_hash=False,
-                 algo=ops.ConvAlgo.Native):
+                 algo=ops.ConvAlgo.Native,
+                 name=None):
         super(SubMConv2d, self).__init__(2,
                                          in_channels,
                                          out_channels,
@@ -415,7 +478,8 @@ class SubMConv2d(SparseConvolution):
                                          True,
                                          indice_key=indice_key,
                                          use_hash=use_hash,
-                                         algo=algo)
+                                         algo=algo,
+                                         name=name)
 
 
 class SubMConv3d(SparseConvolution):
@@ -430,7 +494,8 @@ class SubMConv3d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  use_hash=False,
-                 algo=ops.ConvAlgo.Native):
+                 algo=ops.ConvAlgo.Native,
+                 name=None):
         super(SubMConv3d, self).__init__(3,
                                          in_channels,
                                          out_channels,
@@ -443,7 +508,8 @@ class SubMConv3d(SparseConvolution):
                                          True,
                                          indice_key=indice_key,
                                          use_hash=use_hash,
-                                         algo=algo)
+                                         algo=algo,
+                                         name=name)
 
 
 class SubMConv4d(SparseConvolution):
@@ -458,7 +524,8 @@ class SubMConv4d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  use_hash=False,
-                 algo=ops.ConvAlgo.Native):
+                 algo=ops.ConvAlgo.Native,
+                 name=None):
         super(SubMConv4d, self).__init__(4,
                                          in_channels,
                                          out_channels,
@@ -471,4 +538,5 @@ class SubMConv4d(SparseConvolution):
                                          True,
                                          indice_key=indice_key,
                                          use_hash=use_hash,
-                                         algo=algo)
+                                         algo=algo,
+                                         name=name)

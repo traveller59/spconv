@@ -21,15 +21,16 @@
 
 namespace spconv {
 
-template <bool UseDeconv, typename Index, unsigned NDim> struct ConvIndiceDispatch;
+template <bool UseDeconv, typename Index, unsigned NDim>
+struct ConvIndiceDispatch;
 
 template <typename Index, unsigned NDim>
-struct ConvIndiceDispatch<true, Index, NDim>{
-  constexpr static auto* func = getValidOutPosTranspose<Index, NDim>;
+struct ConvIndiceDispatch<true, Index, NDim> {
+  constexpr static auto *func = getValidOutPosTranspose<Index, NDim>;
 };
 template <typename Index, unsigned NDim>
-struct ConvIndiceDispatch<false, Index, NDim>{
-  constexpr static auto* func = getValidOutPos<Index, NDim>;
+struct ConvIndiceDispatch<false, Index, NDim> {
+  constexpr static auto *func = getValidOutPos<Index, NDim>;
 };
 
 template <typename Index, unsigned NDim, bool UseDeconv,
@@ -61,8 +62,8 @@ __global__ void prepareIndicePairsKernel(
   for (int ix : tv::KernelLoopX<int>(numActIn)) {
     numValidPoints = ConvIndiceDispatch<UseDeconv, Index, NDim>::func(
         indicesIn.data() + ix * (NDim + 1) + 1, kernelSize.data(),
-        stride.data(), padding.data(), dilation.data(),
-        outSpatialShape.data(), validPoints);
+        stride.data(), padding.data(), dilation.data(), outSpatialShape.data(),
+        validPoints);
     for (Index i = 0; i < numValidPoints; ++i) {
       pointPtr = validPoints + i * (NDim + 1);
       auto offset = pointPtr[NDim];
