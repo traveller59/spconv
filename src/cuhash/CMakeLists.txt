@@ -1,7 +1,7 @@
 if(WIN32)
     add_library(cuhash SHARED hash_functions.cu hash_table.cpp hash_table.cu hash_functions.cpp)
 else()
-    add_library(cuhash STATIC hash_functions.cu hash_table.cpp hash_table.cu hash_functions.cpp)
+    add_library(cuhash SHARED hash_functions.cu hash_table.cpp hash_table.cu hash_functions.cpp)
 endif()
 target_include_directories(cuhash PRIVATE ${ALL_INCLUDE} )
 set_property(TARGET cuhash PROPERTY CUDA_STANDARD 14)

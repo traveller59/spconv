@@ -46,8 +46,5 @@ cublasStatus_t cublasTgemm(cublasHandle_t handle, cublasOperation_t transa,
                      beta, C, ldc);
 }
 
-template <> inline __half constant_scalar(float data) {
-  return __float2half(data);
-}
 
 } // namespace spconv
