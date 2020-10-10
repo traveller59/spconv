@@ -29,9 +29,9 @@ void maxpool_fwd_cpu(torch::Tensor outFeatures, torch::Tensor inFeatures,
   auto dtype = inFeatures.scalar_type();
   auto int_dtype = indicesIn.scalar_type();
   tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
-    using T = decltype(TValue);
+    using T = TV_DECLTYPE(TValue);
     tv::DispatchTorch<int_types_t>()(int_dtype, [&](auto IndexValue) {
-      using Index = decltype(IndexValue);
+      using Index = TV_DECLTYPE(IndexValue);
       auto outFeaturesData = outFeatures.data_ptr<T>();
       auto inFeaturesData = inFeatures.data_ptr<T>();
       auto indicesInData = indicesIn.data_ptr<Index>();
@@ -58,9 +58,9 @@ void maxpool_bwd_cpu(torch::Tensor outFeatures, torch::Tensor inFeatures,
   auto dtype = inFeatures.scalar_type();
   auto int_dtype = indicesIn.scalar_type();
   tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
-    using T = decltype(TValue);
+    using T = TV_DECLTYPE(TValue);
     tv::DispatchTorch<int_types_t>()(int_dtype, [&](auto IndexValue) {
-      using Index = decltype(IndexValue);
+      using Index = TV_DECLTYPE(IndexValue);
       auto outFeaturesData = outFeatures.data_ptr<T>();
       auto inFeaturesData = inFeatures.data_ptr<T>();
       auto doutData = dout.data_ptr<T>();

@@ -19,10 +19,15 @@ SPCONV_FORCE_BUILD_CUDA = os.getenv("SPCONV_FORCE_BUILD_CUDA")
 
 PYTHON_VERSION = "{}.{}".format(sys.version_info.major, sys.version_info.minor)
 
-remove_plus = torch.__version__.find("+")
+remove_plus = torch.__version__.find("+dev")
+remove_dot = torch.__version__.find(".dev")
+
 PYTORCH_VERSION = torch.__version__
 if remove_plus != -1:
     PYTORCH_VERSION = torch.__version__[:remove_plus]
+if remove_dot != -1:
+    PYTORCH_VERSION = torch.__version__[:remove_dot]
+
 PYTORCH_VERSION = list(map(int, PYTORCH_VERSION.split(".")))
 PYTORCH_VERSION_NUMBER = PYTORCH_VERSION[0] * 10000 + PYTORCH_VERSION[1] * 100 + PYTORCH_VERSION[2]
 

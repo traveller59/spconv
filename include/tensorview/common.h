@@ -24,6 +24,23 @@
 #endif
 #include <boost/stacktrace.hpp>
 #endif
+#ifdef TV_CUDA
+#include <cuda.h>
+#endif
+#if defined(TV_USE_BOOST_TYPEOF) || (!defined(__clang__) && defined(CUDA_VERSION) && CUDA_VERSION >= 11000)
+// a workaround when built with cuda 11
+// two options: use BOOST_TYPEOF or identity_t.
+// this is a nvcc bug, msvc/gcc/clang don't have this problem.
+// #include <boost/typeof/typeof.hpp>
+// #define TV_DECLTYPE(x) BOOST_TYPEOF(x)
+namespace tv{
+template <typename T>
+using identity_t = T;
+}
+#define TV_DECLTYPE(x) tv::identity_t<decltype(x)>
+#else
+#define TV_DECLTYPE(x) decltype(x)
+#endif
 
 namespace tv {
 

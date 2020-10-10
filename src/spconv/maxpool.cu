@@ -320,13 +320,13 @@ void maxpool_fwd_cuda(torch::Tensor outFeatures, torch::Tensor inFeatures,
   auto stream = at::cuda::getCurrentCUDAStream();
 
   tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
-    using T = decltype(TValue);
+    using T = TV_DECLTYPE(TValue);
     using vecload_type_t =
         std::conditional_t<std::is_same<T, at::Half>::value, int2, int4>;
     using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
 
     tv::DispatchTorch<int_types_t>()(int_dtype, [&](auto IndexValue) {
-      using Index = decltype(IndexValue);
+      using Index = TV_DECLTYPE(IndexValue);
       bool notFound = true;
       constexpr int vecloadFactor = sizeof(vecload_type_t) / sizeof(T);
       tv::mp_for_each<kernel_block_t>([=, &outFeatures, &inFeatures, &indicesIn,
@@ -404,12 +404,12 @@ void maxpool_bwd_cuda(torch::Tensor outFeatures, torch::Tensor inFeatures,
   auto stream = at::cuda::getCurrentCUDAStream();
 
   tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
-    using T = decltype(TValue);
+    using T = TV_DECLTYPE(TValue);
     using vecload_type_t =
         std::conditional_t<std::is_same<T, at::Half>::value, int2, int4>;
     using kernel_block_t = tv::mp_list_c<int, 64, 32, 16>;
     tv::DispatchTorch<int_types_t>()(int_dtype, [&](auto IndexValue) {
-      using Index = decltype(IndexValue);
+      using Index = TV_DECLTYPE(IndexValue);
       bool notFound = true;
       constexpr int vecloadFactor = sizeof(vecload_type_t) / sizeof(T);
       tv::mp_for_each<kernel_block_t>([=, &outFeatures, &inFeatures, &dout,

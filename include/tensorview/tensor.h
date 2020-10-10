@@ -318,8 +318,8 @@ template <class... Ts, typename F> bool dispatch_noexcept(DType t, F &&f) {
   static_assert(sizeof...(Ts) > 0, "you need to provide at least one type");
   bool notFound = true;
   mp_for_each<mp_list<Ts...>>([=, &notFound, &f](auto I) {
-    if (type_v<decltype(I)> == t && notFound) {
-      std::forward<F>(f)(decltype(I)());
+    if (type_v<TV_DECLTYPE(I)> == t && notFound) {
+      std::forward<F>(f)(TV_DECLTYPE(I)());
       notFound = false;
     }
   });
@@ -330,7 +330,7 @@ template <class... Ts, typename F> void dispatch(DType t, F &&f) {
   if (!dispatch_noexcept<Ts...>(t, std::forward<F>(f))) {
     std::stringstream ss;
     mp_for_each<mp_list<Ts...>>([=, &ss](auto I) {
-      ss << detail::TypeToString<decltype(I)>::value << " ";
+      ss << detail::TypeToString<TV_DECLTYPE(I)>::value << " ";
     });
     TV_THROW_RT_ERR("unknown type", detail::typeString(t),
                     ", available:", ss.str());
@@ -359,7 +359,7 @@ template <int... Is, typename F> bool dispatch_int_noexcept(int idx, F &&f) {
                 "you need to provide at least one candidate");
   bool notFound = true;
   mp_for_each<mp_list_c<int, Is...>>([=, &notFound, &f](auto I) {
-    if (decltype(I)::value == idx && notFound) {
+    if (TV_DECLTYPE(I)::value == idx && notFound) {
       std::forward<F>(f)(I);
       notFound = false;
     }
@@ -373,7 +373,7 @@ bool dispatch_int_noexcept(int idx, BinaryPredicate p, F &&f) {
                 "you need to provide at least one candidate");
   bool notFound = true;
   mp_for_each<mp_list_c<int, Is...>>([=, &notFound, &f](auto I) {
-    if (p(idx, decltype(I)::value) && notFound) {
+    if (p(idx, TV_DECLTYPE(I)::value) && notFound) {
       std::forward<F>(f)(I);
       notFound = false;
     }
@@ -385,7 +385,7 @@ template <int... Is, typename F> void dispatch_int(int idx, F &&f) {
   if (!dispatch_int_noexcept<Is...>(idx, std::forward<F>(f))) {
     std::stringstream ss;
     mp_for_each<mp_list_c<int, Is...>>(
-        [=, &ss](auto I) { ss << decltype(I)::value << " "; });
+        [=, &ss](auto I) { ss << TV_DECLTYPE(I)::value << " "; });
     TV_THROW_RT_ERR("unknown value", idx, ", available:", ss.str());
   }
 }
@@ -396,7 +396,7 @@ void dispatch_int(int idx, BinaryPredicate p, F &&f) {
   if (!dispatch_int_noexcept<Is...>(idx, p, std::forward<F>(f))) {
     std::stringstream ss;
     mp_for_each<mp_list_c<int, Is...>>(
-        [=, &ss](auto I) { ss << decltype(I)::value << " "; });
+        [=, &ss](auto I) { ss << TV_DECLTYPE(I)::value << " "; });
     TV_THROW_RT_ERR("unknown value", idx, ", available:", ss.str());
   }
 }
@@ -408,7 +408,7 @@ bool dispatch_container_noexcept(Iterator begin, Iterator end, F &&f) {
                 "you need to provide at least one candidate");
   bool notFound = true;
   mp_for_each<mp_list<Ts...>>([=, &notFound, &f](auto I) {
-    using val_lst_t = decltype(I);
+    using val_lst_t = TV_DECLTYPE(I);
     auto val_lst_size = mp_size<val_lst_t>::value;
     bool equal = true;
     std::size_t count = 0;
@@ -420,7 +420,7 @@ bool dispatch_container_noexcept(Iterator begin, Iterator end, F &&f) {
       if (count >= val_lst_size) {
         TV_THROW_INVALID_ARG("iterator length invalid:", val_lst_size);
       }
-      constexpr auto c = decltype(E)::value;
+      constexpr auto c = TV_DECLTYPE(E)::value;
       if (c != *iter) {
         equal = false;
       }
@@ -450,8 +450,8 @@ void dispatch_container(Iterator begin, Iterator end, F &&f) {
     ss << "], available: ";
     mp_for_each<mp_list<Ts...>>([=, &ss](auto I) {
       ss << "[";
-      mp_for_each<decltype(I)>(
-          [=, &ss](auto E) { ss << decltype(E)::value << ","; });
+      mp_for_each<TV_DECLTYPE(I)>(
+          [=, &ss](auto E) { ss << TV_DECLTYPE(E)::value << ","; });
       ss << "]";
     });
     TV_THROW_RT_ERR(ss.str());
@@ -791,7 +791,7 @@ struct Tensor {
     writable_check();
     TV_ASSERT_RT_ERR(device() == -1, "error");
     Dispatch<detail::all_tensor_types_t>()(dtype_, [&](auto I) {
-      using Treal = decltype(I);
+      using Treal = TV_DECLTYPE(I);
       if (std::is_convertible<T, Treal>::value) {
         auto ptr = reinterpret_cast<Treal *>(raw_data());
         std::fill(ptr, ptr + size(), Treal(value));
@@ -940,9 +940,9 @@ struct Tensor {
     TV_ASSERT_INVALID_ARG(contiguous_, "only support contiguous for now");
     auto tensor = Tensor();
     Dispatch<detail::all_tensor_types_t>()(dtype, [&](auto Idst) {
-      using Tdst = decltype(Idst);
+      using Tdst = TV_DECLTYPE(Idst);
       Dispatch<detail::all_tensor_types_t>()(this->dtype_, [&](auto Icur) {
-        using Tcur = decltype(Icur);
+        using Tcur = TV_DECLTYPE(Icur);
         if (std::is_convertible<Tcur, Tdst>::value) {
           auto ptr = this->data<Tcur>();
           tensor = Tensor(this->shape_, this->stride_, dtype, this->device(),
@@ -981,7 +981,7 @@ private:
 template <typename Os> Os &operator<<(Os &os, const Tensor &tensor) {
   TV_ASSERT_INVALID_ARG(tensor.device() == -1, "must be cpu tensor");
   Dispatch<detail::all_tensor_types_t>()(tensor.dtype(), [&](auto I) {
-    using T = decltype(I);
+    using T = TV_DECLTYPE(I);
     std::stringstream ss;
     if (std::is_same<T, float>::value || std::is_same<T, double>::value) {
       ss << std::setprecision(4);

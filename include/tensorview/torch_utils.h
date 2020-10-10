@@ -76,15 +76,15 @@ void dispatch_torch(at::ScalarType t, F &&f) {
   static_assert(sizeof...(Ts) > 0, "you need to provide at least one type");
   bool notFound = true;
   tv::mp_for_each<mp_list<Ts...>>([=, &notFound, &f](auto I) {
-    if (detail::TypeToTorchDtypeTraits<decltype(I)>::value == t) {
-      std::forward<F>(f)(decltype(I)());
+    if (detail::TypeToTorchDtypeTraits<TV_DECLTYPE(I)>::value == t) {
+      std::forward<F>(f)(TV_DECLTYPE(I)());
       notFound = false;
     }
   });
   if (notFound) {
     std::stringstream ss;
     tv::mp_for_each<mp_list<Ts...>>([=, &ss](auto I) {
-      ss << tv::detail::TypeToString<decltype(I)>::value << " ";
+      ss << tv::detail::TypeToString<TV_DECLTYPE(I)>::value << " ";
     });
     TV_THROW_RT_ERR("unknown type", t, ", available:", ss.str());
   }
@@ -101,7 +101,7 @@ struct DispatchTorch<T<Args...>> {
 
 template <typename T> void check_torch_dtype(const torch::Tensor &tensor) {
   DispatchTorch<detail::all_torch_types_t>()(tensor.scalar_type(), [&](auto I) {
-    using Ttensor = decltype(I);
+    using Ttensor = TV_DECLTYPE(I);
     constexpr bool val = std::is_same<std::remove_cv_t<T>, Ttensor>::value;
     TV_ASSERT_RT_ERR(val, "error");
   });

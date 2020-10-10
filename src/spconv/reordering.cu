@@ -51,10 +51,10 @@ void sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
   auto dtype = features.scalar_type();
   auto inds_dtype = indices.scalar_type();
   tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
-    using T = decltype(TValue);
+    using T = TV_DECLTYPE(TValue);
     using vecload_type_t = typename half_vec_sadd<T>::type;
     tv::DispatchTorch<int_types_t>()(inds_dtype, [&](auto IndexValue) {
-      using Index = decltype(IndexValue);
+      using Index = TV_DECLTYPE(IndexValue);
       bool notFound = true;
       constexpr int vecloadFactor = sizeof(vecload_type_t) / sizeof(T);
 
@@ -140,10 +140,10 @@ void sparse_scatter_add_cuda(torch::Tensor buffer, torch::Tensor outFeatures,
   auto inds_dtype = indices.scalar_type();
 
   tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
-    using T = decltype(TValue);
+    using T = TV_DECLTYPE(TValue);
     using vecload_type_t = typename half_vec_sadd<T>::type;
     tv::DispatchTorch<int_types_t>()(inds_dtype, [&](auto IndexValue) {
-      using Index = decltype(IndexValue);
+      using Index = TV_DECLTYPE(IndexValue);
       bool notFound = true;
       constexpr int vecloadFactor =
           sizeof(vecload_type_t) / sizeof(T); // important for half.
@@ -235,10 +235,10 @@ void batch_sparse_gather_cuda(torch::Tensor buffer, torch::Tensor features,
   int inds_stride = indices.size(1);
   int feature_stride = buffer.size(1);
   tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
-    using T = decltype(TValue);
+    using T = TV_DECLTYPE(TValue);
     using vecload_type_t = typename half_vec<T>::type;
     tv::DispatchTorch<int_types_t>()(inds_dtype, [&](auto IndexValue) {
-      using Index = decltype(IndexValue);
+      using Index = TV_DECLTYPE(IndexValue);
       bool notFound = true;
       constexpr int vecloadFactor = sizeof(vecload_type_t) / sizeof(T);
       tv::mp_for_each<kernel_block_t>(
@@ -308,10 +308,10 @@ void batch_sparse_scatter_add_cuda(torch::Tensor buffer,
   int feature_stride = buffer.size(1);
 
   tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
-    using T = decltype(TValue);
+    using T = TV_DECLTYPE(TValue);
     using vecload_type_t = typename half_vec_sadd<T>::type;
     tv::DispatchTorch<int_types_t>()(inds_dtype, [&](auto IndexValue) {
-      using Index = decltype(IndexValue);
+      using Index = TV_DECLTYPE(IndexValue);
       bool notFound = true;
       constexpr int vecloadFactor = 1; // important for half.
 

@@ -26,9 +26,9 @@ void sparse_gather_cpu(torch::Tensor buffer, torch::Tensor features,
   auto dtype = features.scalar_type();
   auto int_dtype = indices.scalar_type();
   tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
-    using T = decltype(TValue);
+    using T = TV_DECLTYPE(TValue);
     tv::DispatchTorch<int_types_t>()(int_dtype, [&](auto IndexValue) {
-      using Index = decltype(IndexValue);
+      using Index = TV_DECLTYPE(IndexValue);
       Index *indices_data = indices.data_ptr<Index>();
       T *buffer_data = buffer.data_ptr<T>();
       const T *features_data = features.data_ptr<T>();
@@ -50,9 +50,9 @@ void sparse_scatter_add_cpu(torch::Tensor buffer, torch::Tensor outFeatures,
   auto int_dtype = indices.scalar_type();
 
   tv::DispatchTorch<float_types_t>()(dtype, [&](auto TValue) {
-    using T = decltype(TValue);
+    using T = TV_DECLTYPE(TValue);
     tv::DispatchTorch<int_types_t>()(int_dtype, [&](auto IndexValue) {
-      using Index = decltype(IndexValue);
+      using Index = TV_DECLTYPE(IndexValue);
       Index *indices_data = indices.data_ptr<Index>();
       const T *buffer_data = buffer.data_ptr<T>();
       T *features_data = outFeatures.data_ptr<T>();

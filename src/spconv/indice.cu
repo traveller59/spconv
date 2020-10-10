@@ -45,10 +45,10 @@ int create_conv_indice_pair_p1_cuda(
   if (numActIn == 0)
     return 0;
   tv::dispatch_torch<int32_t>(indicesIn.scalar_type(), [&](auto IndexValue) {
-    using Index = decltype(IndexValue);
+    using Index = TV_DECLTYPE(IndexValue);
     using IndexGrid = int32_t;
     tv::dispatch_int<2, 3, 4>(ndim, [&](auto I) {
-      constexpr int NDim = decltype(I)::value;
+      constexpr int NDim = TV_DECLTYPE(I)::value;
       tv::SimpleVector<Index, NDim> ks(kernelSize.begin(), kernelSize.end());
       tv::SimpleVector<Index, NDim> st(stride.begin(), stride.end());
       tv::SimpleVector<Index, NDim> pa(padding.begin(), padding.end());
@@ -57,7 +57,7 @@ int create_conv_indice_pair_p1_cuda(
                                        outSpatialShape.end());
       tv::DispatchInt<max_kernel_vol_t>()(
           kernelVolume, std::less_equal<int>(), [&](auto I2) {
-            constexpr int MaxKernelVolume = decltype(I2)::value;
+            constexpr int MaxKernelVolume = TV_DECLTYPE(I2)::value;
             if (transpose) {
               prepareDeConvIndicePairsKernel<Index, NDim, MaxKernelVolume>
                   <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS,
@@ -106,10 +106,10 @@ int create_conv_indice_pair_p2_cuda(
   if (numActIn == 0)
     return 0;
   tv::dispatch_torch<int32_t>(indicesIn.scalar_type(), [&](auto IndexValue) {
-    using Index = decltype(IndexValue);
+    using Index = TV_DECLTYPE(IndexValue);
     using IndexGrid = int32_t;
     tv::dispatch_int<2, 3, 4>(ndim, [&](auto I) {
-      constexpr int NDim = decltype(I)::value;
+      constexpr int NDim = TV_DECLTYPE(I)::value;
       using IndexGrid = int32_t;
       tv::SimpleVector<Index, NDim> ou(outSpatialShape.begin(),
                                        outSpatialShape.end());
@@ -212,10 +212,10 @@ int create_submconv_indice_pair_cuda(
   if (numActIn == 0)
     return 0;
   tv::dispatch_torch<int32_t>(indicesIn.scalar_type(), [&](auto IndexValue) {
-    using Index = decltype(IndexValue);
+    using Index = TV_DECLTYPE(IndexValue);
     using IndexGrid = int32_t;
     tv::dispatch_int<2, 3, 4>(ndim, [&](auto I) {
-      constexpr int NDim = decltype(I)::value;
+      constexpr int NDim = TV_DECLTYPE(I)::value;
       tv::SimpleVector<Index, NDim> ks(kernelSize.begin(), kernelSize.end());
       tv::SimpleVector<Index, NDim> st(stride.begin(), stride.end());
       tv::SimpleVector<Index, NDim> pa(padding.begin(), padding.end());
@@ -254,7 +254,7 @@ int create_submconv_indice_pair_cuda(
         auto stash_count = table.get_stash_count();
         tv::DispatchInt<max_kernel_vol_t>()(
             kernelVolume, std::less_equal<int>(), [&](auto I2) {
-              constexpr int MaxKernelVolume = decltype(I2)::value;
+              constexpr int MaxKernelVolume = TV_DECLTYPE(I2)::value;
               getSubMIndicePairsHashKernel<Index, NDim, MaxKernelVolume>
                   <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS,
                      0, stream>>>(tv::torch2tv<Index>(indicesIn),
@@ -286,8 +286,8 @@ int create_submconv_indice_pair_cuda(
 
             tv::dispatch_int_noexcept<1, 3, 5>(kernelSize[0], [&](auto K0C) {
               tv::dispatch_int_noexcept<1, 3, 5>(kernelSize[1], [&](auto K1C) {
-                constexpr int K0 = decltype(K0C)::value;
-                constexpr int K1 = decltype(K1C)::value;
+                constexpr int K0 = TV_DECLTYPE(K0C)::value;
+                constexpr int K1 = TV_DECLTYPE(K1C)::value;
                 found = true;
                 getSubMIndicePairsKernel2<Index, IndexGrid, K0, K1>
                     <<<tv::cuda::getBlocks(numActIn),
@@ -306,9 +306,9 @@ int create_submconv_indice_pair_cuda(
               tv::dispatch_int_noexcept<1, 3, 5>(kernelSize[1], [&](auto K1C) {
                 tv::dispatch_int_noexcept<1, 3, 5>(
                     kernelSize[2], [&](auto K2C) {
-                      constexpr int K0 = decltype(K0C)::value;
-                      constexpr int K1 = decltype(K1C)::value;
-                      constexpr int K2 = decltype(K2C)::value;
+                      constexpr int K0 = TV_DECLTYPE(K0C)::value;
+                      constexpr int K1 = TV_DECLTYPE(K1C)::value;
+                      constexpr int K2 = TV_DECLTYPE(K2C)::value;
                       found = true;
                       getSubMIndicePairsKernel3<Index, IndexGrid, K0, K1, K2>
                           <<<tv::cuda::getBlocks(numActIn),
@@ -326,7 +326,7 @@ int create_submconv_indice_pair_cuda(
         if (!found) {
           tv::DispatchInt<
               max_kernel_vol_t>()(ndim, std::less_equal<int>(), [&](auto I2) {
-            constexpr int MaxKernelVolume = decltype(I2)::value;
+            constexpr int MaxKernelVolume = TV_DECLTYPE(I2)::value;
             getSubMIndicePairsKernel<Index, IndexGrid, NDim, MaxKernelVolume>
                 <<<tv::cuda::getBlocks(numActIn), tv::cuda::CUDA_NUM_THREADS, 0,
                    stream>>>(tv::torch2tv<Index>(indicesIn),

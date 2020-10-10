@@ -268,10 +268,10 @@ int create_conv_indice_pair_cpu(
   if (numActIn == 0)
     return 0;
   tv::dispatch_torch<int32_t, int64_t>(indicesIn.scalar_type(), [&](auto V) {
-    using Index = decltype(V);
+    using Index = TV_DECLTYPE(V);
     using IndexGrid = int32_t;
     tv::dispatch_int<2, 3, 4>(ndim, [&](auto I) {
-      constexpr int NDim = decltype(I)::value;
+      constexpr int NDim = TV_DECLTYPE(I)::value;
       tv::SimpleVector<Index, NDim> ks(kernelSize.begin(), kernelSize.end());
       tv::SimpleVector<Index, NDim> st(stride.begin(), stride.end());
       tv::SimpleVector<Index, NDim> pa(padding.begin(), padding.end());
@@ -308,10 +308,10 @@ int create_submconv_indice_pair_cpu(
   if (numActIn == 0)
     return 0;
   tv::dispatch_torch<int32_t, int64_t>(indicesIn.scalar_type(), [&](auto V) {
-    using Index = decltype(V);
+    using Index = TV_DECLTYPE(V);
     using IndexGrid = int32_t;
     tv::dispatch_int<2, 3, 4>(ndim, [&](auto I) {
-      constexpr int NDim = decltype(I)::value;
+      constexpr int NDim = TV_DECLTYPE(I)::value;
       tv::SimpleVector<Index, NDim> ks(kernelSize.begin(), kernelSize.end());
       tv::SimpleVector<Index, NDim> st(stride.begin(), stride.end());
       tv::SimpleVector<Index, NDim> pa(padding.begin(), padding.end());
