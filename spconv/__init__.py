@@ -29,9 +29,13 @@ from spconv.pool import SparseMaxPool2d, SparseMaxPool3d
 from spconv.tables import AddTable, ConcatTable, JoinTable
 
 _LIB_FILE_NAME = "libspconv.so"
+_CU_HASH_FILE_NAME = "libcuhash.so"
+
 if platform.system() == "Windows":
     _LIB_FILE_NAME = "spconv.dll"
 _LIB_PATH = str(Path(__file__).parent / _LIB_FILE_NAME)
+_CU_HASH_PATH = str(Path(__file__).parent / _CU_HASH_FILE_NAME)
+torch.ops.load_library(_CU_HASH_PATH)
 torch.ops.load_library(_LIB_PATH)
 
 
