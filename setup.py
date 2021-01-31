@@ -23,7 +23,7 @@ remove_device = re.search(r"(\+|\.)(dev|cu|cpu)", torch.__version__)
 PYTORCH_VERSION = torch.__version__
 if remove_device is not None:
     PYTORCH_VERSION = torch.__version__[:remove_device.start()]
-PYTORCH_VERSION = list(map(int, PYTORCH_VERSION.split(".")))
+PYTORCH_VERSION = [ int(c) if c.isdigit() else -1 for c in PYTORCH_VERSION.split(".") ]
 PYTORCH_VERSION_NUMBER = PYTORCH_VERSION[0] * 10000 + PYTORCH_VERSION[1] * 100 + PYTORCH_VERSION[2]
 class CMakeExtension(Extension):
     def __init__(self, name, sourcedir='', library_dirs=[]):
