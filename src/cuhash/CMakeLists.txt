@@ -12,6 +12,11 @@ if(NOT WIN32)
     set_property(TARGET cuhash PROPERTY POSITION_INDEPENDENT_CODE ON)
 endif()
 target_link_libraries(cuhash PRIVATE ${ALL_LIBS})
+
+# fix compilation issue: nvcc doesn't support -Wall
+set_property(TARGET torch_cuda PROPERTY INTERFACE_COMPILE_OPTIONS "")  
+set_property(TARGET torch_cpu PROPERTY INTERFACE_COMPILE_OPTIONS "")
+
 install (TARGETS cuhash DESTINATION lib)
 
 if (SPCONV_BuildTests)
