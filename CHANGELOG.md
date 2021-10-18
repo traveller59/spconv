@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.0] - 2021-10-16
+### Changed
+- Change build system from cmake to pccm.
+- Change pytorch python code to spconv.pytorch
+- Rewrite All c++ code.
+
 ## [1.2.1] - 2020-06-04
 ### Changed
 - The subm indice pair generation speed is greatly increased by two tricks: 1. most subm conv use only kernelsize=3, so we can unroll loops to get 100% performance increase. 2. subm indice pairs have a property: indicePairs[0, i] = indicePairs[1, kernelVolume - i - 1], so we can get another 100% performance increase. 

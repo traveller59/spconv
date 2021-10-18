@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import build as _build
-
-from .algo import ConvAlgo
-from . import utils, constants
+$installPath = &"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -property installationpath
+Import-Module (Join-Path $installPath "Common7\Tools\Microsoft.VisualStudio.DevShell.dll")
+Enter-VsDevShell -VsInstallPath $installPath -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -no_logo'
