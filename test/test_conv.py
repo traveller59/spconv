@@ -381,17 +381,17 @@ class TestSpConv(TestCase):
             else:
                 filters = np.random.uniform(0, 1, size=[k, k, k, OC,
                                                         IC]).astype(np.float32)
-
+            dtype = torch.float16
             indices_t = torch.from_numpy(indices).int().to(device)
-            features_t = torch.from_numpy(features).to(device)
+            features_t = torch.from_numpy(features).to(device).to(dtype)
             features_t.requires_grad = True
-            features_dense_t = torch.from_numpy(features_dense).to(device)
+            features_dense_t = torch.from_numpy(features_dense).to(device).to(dtype)
             features_dense_t.requires_grad = True
             net = SparseConv3dTestTorch(1, 3, shape, IC, OC, k, s, p,
-                                        d).to(device)
+                                        d).to(device).to(dtype)
             net_ref = Conv3dTestTorch(1, 3, shape, IC, OC, k, s, p,
-                                      d).to(device)
-            filters_t = torch.from_numpy(filters).to(device)
+                                      d).to(device).to(dtype)
+            filters_t = torch.from_numpy(filters).to(device).to(dtype)
             if FILTER_HWIO:
                 net_ref.net[0].weight.data[:] = filters_t.permute(4, 3, 0, 1,
                                                                 2).contiguous()
@@ -442,6 +442,11 @@ class TestSpConv(TestCase):
         strides = [2, 3]
         paddings = [0, 1, 2]
         dilations = [1, 2, 3]
+        ksizes = [3]
+
+        strides = [1]
+        paddings = [0]
+        dilations = [1]
 
         for dev, shape, bs, IC, OC, k, s, p, d in params_grid(
                 devices, shapes, batchsizes, in_channels, out_channels, ksizes,
@@ -458,8 +463,13 @@ class TestSpConv(TestCase):
             indices = np.ascontiguousarray(
                 sparse_dict["indices"][:, [3, 0, 1, 2]]).astype(np.int32)
             features_dense = sparse_dict["features_dense"].astype(np.float32)
-            filters = np.random.uniform(0, 1, size=[k, k, k, IC,
-                                                    OC]).astype(np.float32)
+            if FILTER_HWIO:
+                filters = np.random.uniform(0, 1, size=[k, k, k, IC,
+                                                        OC]).astype(np.float32)
+            else:
+                filters = np.random.uniform(0, 1, size=[k, k, k, OC,
+                                                        IC]).astype(np.float32)
+
             indices_t = torch.from_numpy(indices).int().to(device)
             features_t = torch.from_numpy(features).to(device)
             features_t.requires_grad = True
@@ -470,11 +480,20 @@ class TestSpConv(TestCase):
             net_ref = DeConv3dTestTorch(1, 3, shape, IC, OC, k, s, p,
                                         d).to(device)
             filters_t = torch.from_numpy(filters).to(device)
-            net_ref.net[0].weight.data[:] = filters_t.permute(4, 3, 0, 1,
-                                                              2).contiguous()
+            print(net_ref.net[0].weight.shape)
+            if FILTER_HWIO:
+                net_ref.net[0].weight.data[:] = filters_t.permute(3, 4, 0, 1,
+                                                                2).contiguous()
+            else:
+                net_ref.net[0].weight.data[:] = filters_t.permute(4, 3, 0, 1,
+                                                                2).contiguous()
             net.net[0].weight.data[:] = filters_t
             out_ref = net_ref(features_dense_t)
             out = net(features_t, indices_t, bs).dense()
+            out_np = out.detach().cpu().numpy()
+            out_ref_np = out_ref.detach().cpu().numpy()
+            self.assertAllClose(out_np, out_ref_np, atol=1e-4)
+
             dout = np.random.uniform(-0.2, 0.2,
                                      out_ref.shape).astype(features.dtype)
             dout_t = torch.from_numpy(dout).to(device)
@@ -490,12 +509,12 @@ class TestSpConv(TestCase):
             for layer, layer_ref in zip(net.net, net_ref.net):
                 dw = layer.weight.grad.detach().cpu().numpy()
                 dw_ref = layer_ref.weight.grad.detach().cpu().numpy()
-                dw = dw.transpose(4, 3, 0, 1, 2)
+                if FILTER_HWIO:
+                    dw = dw.transpose(3, 4, 0, 1, 2)
+                else:
+                    dw = dw.transpose(4, 3, 0, 1, 2)
                 self.assertAllClose(dw, dw_ref, atol=1e-4)
 
-            out_np = out.detach().cpu().numpy()
-            out_ref_np = out_ref.detach().cpu().numpy()
-            self.assertAllClose(out_np, out_ref_np, atol=1e-4)
 
     def testSpCpConv3d(self):
         np.random.seed(484)

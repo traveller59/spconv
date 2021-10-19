@@ -224,25 +224,26 @@ def main():
     # voxels, coors, spatial_shape = waymo_data()
     # with open("/home/yy/test_spconv.pkl", "wb") as f:
     #     pickle.dump((voxels, coors, spatial_shape), f)
-    with open("/home/yy/test_spconv.pkl", "rb") as f:
+    with open(Path(__file__).parent / "data" / "test_spconv.pkl", "rb") as f:
         (voxels, coors, spatial_shape) = pickle.load(f)
     print(spatial_shape)
     print(voxels.shape)
     # voxels = voxels[:100]
     # coors = coors[:100]
-    voxels_th = torch.from_numpy(voxels).cuda().float()
+    dtype = torch.float32
+
+    voxels_th = torch.from_numpy(voxels).cuda().to(dtype)
     coors_th = torch.from_numpy(coors).cuda().int()
     voxels_th.requires_grad = True
-
     algo = spconv.ConvAlgo.Native
-    net = Net(spatial_shape, algo).cuda().eval().float()
+    net = Net(spatial_shape, algo).cuda().eval().to(dtype)
     print(coors_th.shape)
     out = net(voxels_th, coors_th, 1)
     print(out.spatial_shape)
     print(voxels.mean(),  voxels.max(), voxels.min())
     dout = np.random.uniform(-0.2, 0.2,
                                 out.features.shape).astype(np.float32)
-    dout_t = torch.from_numpy(dout).cuda()
+    dout_t = torch.from_numpy(dout).cuda().to(dtype)
 
     print(out.spatial_shape, out.features.mean(),  out.features.max(),  out.features.min())
     times = []

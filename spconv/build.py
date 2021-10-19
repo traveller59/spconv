@@ -22,7 +22,6 @@ from .constants import PACKAGE_NAME, PACKAGE_ROOT
 if project_is_installed(PACKAGE_NAME) and project_is_editable(PACKAGE_NAME):
     from cumm.gemm.main import GemmMainUnitTest, SHUFFLE_SIMT_PARAMS, SHUFFLE_VOLTA_PARAMS, SHUFFLE_TURING_PARAMS
     from spconv.csrc.sparse.all import SpconvOps
-    # from cumm.gemm.gather import GatherAll, ScatterAll
     cu = GemmMainUnitTest(SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS)
     cu.namespace = "cumm.gemm.main"
     pccm.builder.build_pybind([cu, SpconvOps()],

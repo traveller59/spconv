@@ -27,8 +27,8 @@ function repair_wheel {
 
 export SPCONV_DISABLE_JIT="1"
 export CUMM_CUDA_ARCH_LIST="all"
-# Compile wheels, we only support 3.7-3.10.
-# "/opt/python/cp36-cp36m/bin/pip" wheel /io/ --no-deps -w /io/wheelhouse_tmp
+# Compile wheels, we only support 3.6-3.10.
+"/opt/python/cp36-cp36m/bin/pip" wheel /io/ --no-deps -w /io/wheelhouse_tmp
 "/opt/python/cp37-cp37m/bin/pip" wheel /io/ --no-deps -w /io/wheelhouse_tmp
 "/opt/python/cp38-cp38/bin/pip" wheel /io/ --no-deps -w /io/wheelhouse_tmp
 "/opt/python/cp39-cp39/bin/pip" wheel /io/ --no-deps -w /io/wheelhouse_tmp

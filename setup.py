@@ -30,7 +30,7 @@ DESCRIPTION = 'spatial sparse convolution'
 URL = 'https://github.com/traveller59/spconv'
 EMAIL = 'yanyan.sub@outlook.com'
 AUTHOR = 'Yan Yan'
-REQUIRES_PYTHON = '>=3.7'
+REQUIRES_PYTHON = '>=3.6'
 VERSION = None
 
 # What packages are required for this module to be executed?
@@ -134,12 +134,11 @@ if disable_jit is not None and disable_jit == "1":
     }
     from cumm.gemm.main import GemmMainUnitTest, SHUFFLE_SIMT_PARAMS, SHUFFLE_VOLTA_PARAMS, SHUFFLE_TURING_PARAMS
     from spconv.csrc.sparse.all import SpconvOps
-    from cumm.gemm.gather import GatherAll
     cu = GemmMainUnitTest(SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS)
 
     cu.namespace = "cumm.gemm.main"
     ext_modules: List[Extension] = [
-        PCCMExtension([cu, SpconvOps(), GatherAll()],
+        PCCMExtension([cu, SpconvOps()],
                       "spconv/core_cc",
                       Path(__file__).resolve().parent / "spconv")
     ]

@@ -34,7 +34,6 @@
 * training/inference speed is increased
 * support int8/tensor core
 * doesn't depend on pytorch binary. 
-* If your GPU has tensor core, try mixed precision training in spconv 2.x!
 * since spconv 2.x doesn't depend on pytorch binary (never in future), it's impossible to support torch.jit/libtorch inference.
 
 ## TODO in Spconv 2.x

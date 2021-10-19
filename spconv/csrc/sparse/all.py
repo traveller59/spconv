@@ -35,47 +35,10 @@ class SpconvOps(pccm.Class):
             problem = ConvProblem(ndim, ConvOpType.kForward, NHWC, NHWC, NHWC)
             indices = SparseConvIndicesKernel(problem, dtypes.int32)
             # self.add_param_class("ops", indices, "SpconvIndices")
-            cuda_funcs = [self.generate_conv_inds, self.generate_subm_conv_inds, 
-                self.generate_conv_inds_stage1, self.generate_conv_inds_stage2, self.sort_1d_by_key]
+            cuda_funcs = [self.generate_subm_conv_inds, 
+                self.generate_conv_inds_stage1, self.generate_conv_inds_stage1_5, self.generate_conv_inds_stage2, self.sort_1d_by_key]
             self.add_impl_only_param_class(cuda_funcs, f"ops{ndim}d", indices, f"SpconvIndices{ndim}D")
 
-
-    @pccm.pybind.mark
-    @pccm.cuda.static_function
-    def generate_conv_inds(self):
-        code = pccm.FunctionCode()
-        code.arg("indices, hashdata", "tv::Tensor")
-        code.arg("indice_pairs, indice_pairs_uniq, out_inds, indice_num_per_loc", "tv::Tensor")
-        code.arg("batch_size", "int")
-        code.arg("output_dims, input_dims", f"std::vector<int>")
-        code.arg("ksize, stride, padding, dilation", f"std::vector<int>")
-        code.raw(f"""
-        int ndim = indices.dim(1) - 1;
-        TV_ASSERT_RT_ERR(output_dims.size() == ndim && input_dims.size() == ndim &&
-            ksize.size() == ndim && stride.size() == ndim && dilation.size() == ndim &&
-            padding.size() == ndim, "your params size not equal to ndim", ndim);
-        """)
-        for ndim in self.ndims:
-            code.raw(f"""
-            if (ndim == {ndim}){{
-                tv::array<int, {ndim}> output_dims_, input_dims_;
-                tv::array<int, {ndim}> ksize_, stride_, padding_, dilation_;
-                for (int i = 0; i < {ndim}; ++i){{
-                    output_dims_[i] = output_dims[i];
-                    input_dims_[i] = input_dims[i];
-                    ksize_[i] = ksize[i];
-                    stride_[i] = stride[i];
-                    padding_[i] = padding[i];
-                    dilation_[i] = dilation[i];
-                }}
-                return SpconvIndices{ndim}D::generate_conv_inds(indices, hashdata,
-                    indice_pairs, indice_pairs_uniq, out_inds, indice_num_per_loc,
-                    batch_size, output_dims_, input_dims_, 
-                    ksize_, stride_, padding_, dilation_);
-            }}
-            """)
-        code.raw(f"""TV_THROW_RT_ERR("unknown ndim", ndim);""")
-        return code.ret("int")
 
     @pccm.pybind.mark
     @pccm.cuda.static_function
@@ -86,6 +49,8 @@ class SpconvOps(pccm.Class):
         code.arg("batch_size", "int")
         code.arg("output_dims, input_dims", f"std::vector<int>")
         code.arg("ksize, stride, padding, dilation", f"std::vector<int>")
+        code.arg("transposed", f"bool", "false")
+
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
         code.raw(f"""
         int ndim = indices.dim(1) - 1;
@@ -110,11 +75,28 @@ class SpconvOps(pccm.Class):
                 return SpconvIndices{ndim}D::generate_conv_inds_stage1(indices,
                     indice_pairs, indice_pairs_uniq, indice_num_per_loc,
                     batch_size, output_dims_, input_dims_, 
-                    ksize_, stride_, padding_, dilation_);
+                    ksize_, stride_, padding_, dilation_, transposed, stream_int);
             }}
             """)
         code.raw(f"""TV_THROW_RT_ERR("unknown ndim", ndim);""")
 
+        return code# .ret("int")
+
+    @pccm.pybind.mark
+    @pccm.cuda.static_function
+    def generate_conv_inds_stage1_5(self):
+        code = pccm.FunctionCode()
+        code.arg("indice_pairs_uniq", "tv::Tensor")
+        code.arg("ndim", "int")
+        code.arg("uniq_size", "int64_t")
+        code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
+        for ndim in self.ndims:
+            code.raw(f"""
+            if (ndim == {ndim}){{
+                return SpconvIndices{ndim}D::generate_conv_inds_stage1_5(indice_pairs_uniq, uniq_size, stream_int);
+            }}
+            """)
+        code.raw(f"""TV_THROW_RT_ERR("unknown ndim", ndim);""")
         return code.ret("int")
 
     @pccm.pybind.mark
@@ -127,6 +109,7 @@ class SpconvOps(pccm.Class):
         code.arg("batch_size", "int")
         code.arg("output_dims, input_dims", f"std::vector<int>")
         code.arg("ksize, stride, padding, dilation", f"std::vector<int>")
+        code.arg("transposed", f"bool", "false")
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
         code.raw(f"""
         int ndim = indices.dim(1) - 1;
@@ -151,7 +134,7 @@ class SpconvOps(pccm.Class):
                 return SpconvIndices{ndim}D::generate_conv_inds_stage2(indices, hashdata,
                     indice_pairs, indice_pairs_uniq, out_inds, num_out_act,
                     batch_size, output_dims_, input_dims_, 
-                    ksize_, stride_, padding_, dilation_);
+                    ksize_, stride_, padding_, dilation_, transposed, stream_int);
             }}
             """)
         code.raw(f"""TV_THROW_RT_ERR("unknown ndim", ndim);""")

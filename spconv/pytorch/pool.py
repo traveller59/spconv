@@ -142,6 +142,20 @@ class SparseMaxPool(SparseModule):
         return out_tensor
 
 
+class SparseMaxPool1d(SparseMaxPool):
+    def __init__(self,
+                 kernel_size,
+                 stride=None,
+                 padding=0,
+                 dilation=1,
+                 name=None):
+        super(SparseMaxPool1d, self).__init__(1,
+                                              kernel_size,
+                                              stride,
+                                              padding,
+                                              dilation,
+                                              name=name)
+
 class SparseMaxPool2d(SparseMaxPool):
     def __init__(self,
                  kernel_size,
@@ -165,6 +179,20 @@ class SparseMaxPool3d(SparseMaxPool):
                  dilation=1,
                  name=None):
         super(SparseMaxPool3d, self).__init__(3,
+                                              kernel_size,
+                                              stride,
+                                              padding,
+                                              dilation,
+                                              name=name)
+
+class SparseMaxPool4d(SparseMaxPool):
+    def __init__(self,
+                 kernel_size,
+                 stride=None,
+                 padding=0,
+                 dilation=1,
+                 name=None):
+        super(SparseMaxPool4d, self).__init__(4,
                                               kernel_size,
                                               stride,
                                               padding,

@@ -22,7 +22,9 @@ from cumm.common import TensorView, TensorViewHashKernel, TensorViewKernel, Thru
 from cumm.gemm import codeops
 from typing import List 
 from cumm.conv.params import ConvProblem
+from cumm.gemm.mask_iters import MaskTileIterator, MaskTileIteratorParams
 import numpy as np 
+from cumm.gemm import (thread_map)
 
 class IndiceMaxPool(pccm.Class):
     # TODO optimize this function
@@ -171,4 +173,3 @@ class IndiceMaxPool(pccm.Class):
         }});
         """)
         return code
-

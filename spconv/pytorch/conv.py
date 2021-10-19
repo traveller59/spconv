@@ -14,6 +14,7 @@
 
 import math
 import time
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -40,8 +41,12 @@ def _calculate_fan_in_and_fan_out_hwio(tensor):
         fan_in = tensor.size(-2)
         fan_out = tensor.size(-1)
     else:
-        num_input_fmaps = tensor.size(-1)
-        num_output_fmaps = tensor.size(-2)
+        if FILTER_HWIO:
+            num_input_fmaps = tensor.size(-2)
+            num_output_fmaps = tensor.size(-1)
+        else:
+            num_input_fmaps = tensor.size(-1)
+            num_output_fmaps = tensor.size(-2)
         receptive_field_size = 1
         if tensor.dim() > 2:
             receptive_field_size = tensor[..., 0, 0].numel()
@@ -58,22 +63,22 @@ class SparseConvolution(SparseModule):
     ]
 
     def __init__(self,
-                 ndim,
-                 in_channels,
-                 out_channels,
-                 kernel_size=3,
-                 stride=1,
-                 padding=0,
-                 dilation=1,
-                 groups=1,
-                 bias=True,
-                 subm=False,
-                 output_padding=0,
-                 transposed=False,
-                 inverse=False,
-                 indice_key=None,
-                 fused_bn=False,
-                 algo=ops.ConvAlgo.Native,
+                 ndim: int,
+                 in_channels: int,
+                 out_channels: int,
+                 kernel_size: Union[int, List[int], Tuple[int, ...]]=3,
+                 stride: Union[int, List[int], Tuple[int, ...]]=1,
+                 padding: Union[int, List[int], Tuple[int, ...]]=0,
+                 dilation: Union[int, List[int], Tuple[int, ...]]=1,
+                 groups: Union[int, List[int], Tuple[int, ...]]=1,
+                 bias: bool=True,
+                 subm: bool=False,
+                 output_padding: Union[int, List[int], Tuple[int, ...]]=0,
+                 transposed: bool=False,
+                 inverse: bool=False,
+                 indice_key: Optional[str]=None,
+                 fused_bn: bool=False,
+                 algo: ops.ConvAlgo=ops.ConvAlgo.Native,
                  name=None):
         super(SparseConvolution, self).__init__(name=name)
         assert groups == 1
@@ -117,8 +122,6 @@ class SparseConvolution(SparseModule):
             self.bias = Parameter(torch.Tensor(out_channels))
         else:
             self.register_parameter('bias', None)
-        # self.workspace_for_splitk = torch.zeros((GLOBAL_MAXIMUM_SPLITK,), dtype=torch.int8)
-        # self.register_buffer("workspace_for_splitk", self.workspace_for_splitk)
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -234,6 +237,7 @@ class SparseConvolution(SparseModule):
             t = time.time()
 
         if self.fused_bn:
+            raise NotImplementedError
             assert self.bias is not None
             out_features = ops.fused_indice_conv(features, self.weight,
                                                  self.bias,
@@ -382,6 +386,34 @@ class SparseConv4d(SparseConvolution):
                                            name=name)
 
 
+class SparseConvTranspose1d(SparseConvolution):
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size,
+                 stride=1,
+                 padding=0,
+                 dilation=1,
+                 groups=1,
+                 bias=True,
+                 indice_key=None,
+                 algo=ops.ConvAlgo.Native,
+                 name=None):
+        super(SparseConvTranspose1d, self).__init__(1,
+                                                    in_channels,
+                                                    out_channels,
+                                                    kernel_size,
+                                                    stride,
+                                                    padding,
+                                                    dilation,
+                                                    groups,
+                                                    bias,
+                                                    transposed=True,
+                                                    indice_key=indice_key,
+                                                    algo=algo,
+                                                    name=name)
+
+
 class SparseConvTranspose2d(SparseConvolution):
     def __init__(self,
                  in_channels,
@@ -436,6 +468,34 @@ class SparseConvTranspose3d(SparseConvolution):
                                                     indice_key=indice_key,
                                                     algo=algo,
                                                     name=name)
+
+class SparseConvTranspose4d(SparseConvolution):
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size,
+                 stride=1,
+                 padding=0,
+                 dilation=1,
+                 groups=1,
+                 bias=True,
+                 indice_key=None,
+                 algo=ops.ConvAlgo.Native,
+                 name=None):
+        super(SparseConvTranspose4d, self).__init__(4,
+                                                    in_channels,
+                                                    out_channels,
+                                                    kernel_size,
+                                                    stride,
+                                                    padding,
+                                                    dilation,
+                                                    groups,
+                                                    bias,
+                                                    transposed=True,
+                                                    indice_key=indice_key,
+                                                    algo=algo,
+                                                    name=name)
+
 
 class SparseInverseConv1d(SparseConvolution):
     def __init__(self,
