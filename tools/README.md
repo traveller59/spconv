@@ -21,3 +21,8 @@ docker run --rm -it -e PLAT=manylinux2014_x86_64 -v `pwd`:/io -v $HOME:/myhome s
 /io/tools/build-wheels.sh
 
 ```
+
+## Windows C++ Tips
+
+* cuda attributes such as ```__device__``` must put before return type. when you see ```warning: __declspec attributes ignored```, this means ```__device__``` is ignored because you put it after return type, then cause error.
+

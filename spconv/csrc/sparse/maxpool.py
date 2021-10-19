@@ -112,15 +112,15 @@ class IndiceMaxPool(pccm.Class):
             bool found = tv::dispatch_int_noexcept<512, 256, 128, 64, 32, 16>(out.dim(1), [](int my, int expect){{return my >= expect;}}, [&](auto V){{
                 // if out.dim(1) > value in list above, run this function.
                 // if a value is found, other value won't be executed.
-                constexpr int NumFeatures = TV_DECLTYPE(V)::value;
-                constexpr int Num0 = MaxThreads / NumFeatures;
+                int NumFeatures = TV_DECLTYPE(V)::value;
+                int Num0 = MaxThreads / NumFeatures;
                 dim3 blocks(tv::div_up(out.dim(1), NumFeatures), tv::div_up(nhot, Num0));
                 dim3 threads(NumFeatures, Num0);
                 launcher = tv::cuda::Launch(blocks, threads, cudastream);
             }});
             if (!found){{
-                constexpr int NumFeatures = 16;
-                constexpr int Num0 = MaxThreads / NumFeatures;
+                int NumFeatures = 16;
+                int Num0 = MaxThreads / NumFeatures;
                 dim3 blocks(tv::div_up(out.dim(1), NumFeatures), tv::div_up(nhot, Num0));
                 dim3 threads(NumFeatures, Num0);
                 launcher = tv::cuda::Launch(blocks, threads, cudastream);
@@ -154,15 +154,15 @@ class IndiceMaxPool(pccm.Class):
             bool found = tv::dispatch_int_noexcept<512, 256, 128, 64, 32, 16>(out.dim(1), [](int my, int expect){{return my >= expect;}}, [&](auto V){{
                 // if out.dim(1) > value in list above, run this function.
                 // if a value is found, other value won't be executed.
-                constexpr int NumFeatures = TV_DECLTYPE(V)::value;
-                constexpr int Num0 = MaxThreads / NumFeatures;
+                int NumFeatures = TV_DECLTYPE(V)::value;
+                int Num0 = MaxThreads / NumFeatures;
                 dim3 blocks(tv::div_up(out.dim(1), NumFeatures), tv::div_up(nhot, Num0));
                 dim3 threads(NumFeatures, Num0);
                 launcher = tv::cuda::Launch(blocks, threads, cudastream);
             }});
             if (!found){{
-                constexpr int NumFeatures = 16;
-                constexpr int Num0 = MaxThreads / NumFeatures;
+                int NumFeatures = 16;
+                int Num0 = MaxThreads / NumFeatures;
                 dim3 blocks(tv::div_up(out.dim(1), NumFeatures), tv::div_up(nhot, Num0));
                 dim3 threads(NumFeatures, Num0);
                 launcher = tv::cuda::Launch(blocks, threads, cudastream);
