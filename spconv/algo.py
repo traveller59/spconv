@@ -23,20 +23,7 @@ from typing import Optional
 import time
 
 import numpy as np
-
-
-class ConvAlgo(Enum):
-    Native = "Native"
-    MaskImplicitGemm = "MaskImplicitGemm"
-    MaskSplitImplicitGemm = "MaskSplitImplicitGemm"
-
-
-class AlgoHint(Enum):
-    NoHint = 0b000
-    Fowrard = 0b001
-    BackwardInput = 0b010
-    BackwardWeight = 0b100
-
+from .core import ConvAlgo, AlgoHint
 
 ALL_ALGO_DESPS = GemmMainUnitTest.get_all_algo_desp()
 

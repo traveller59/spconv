@@ -11,8 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from enum import Enum
 
-from . import build as _build
+class ConvAlgo(Enum):
+    Native = "Native"
+    MaskImplicitGemm = "MaskImplicitGemm"
+    MaskSplitImplicitGemm = "MaskSplitImplicitGemm"
 
-from .core import ConvAlgo, AlgoHint
-from . import constants
+
+class AlgoHint(Enum):
+    NoHint = 0b000
+    Fowrard = 0b001
+    BackwardInput = 0b010
+    BackwardWeight = 0b100
+
