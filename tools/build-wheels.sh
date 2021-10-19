@@ -27,12 +27,22 @@ function repair_wheel {
 
 export SPCONV_DISABLE_JIT="1"
 export CUMM_CUDA_ARCH_LIST="all"
+# export SPCONV_PYTHON_LIST="3.7;3.8;3.9;3.10"
 # Compile wheels, we only support 3.6-3.10.
 # "/opt/python/cp36-cp36m/bin/pip" wheel /io/ --no-deps -w /io/wheelhouse_tmp
-"/opt/python/cp37-cp37m/bin/pip" wheel /io/ --no-deps -w /io/wheelhouse_tmp
-"/opt/python/cp38-cp38/bin/pip" wheel /io/ --no-deps -w /io/wheelhouse_tmp
-"/opt/python/cp39-cp39/bin/pip" wheel /io/ --no-deps -w /io/wheelhouse_tmp
-"/opt/python/cp310-cp310/bin/pip" wheel /io/ --no-deps -w /io/wheelhouse_tmp
+
+for PYVER in ${SPCONV_PYTHON_LIST//;/ }
+do
+    PYVER2=`echo "$PYVER" | sed 's/\.//'`
+    PYVER_CP="cp$PYVER2-cp$PYVER2"
+    if [ "$PYVER2" = "36" ]; then
+        PYVER_CP="cp$PYVER2-cp${PYVER2}m"
+    fi
+    if [ "$PYVER2" = "37" ]; then
+        PYVER_CP="cp$PYVER2-cp${PYVER2}m"
+    fi
+    "/opt/python/$PYVER_CP/bin/pip" wheel /io/  -v --no-deps -w /io/wheelhouse_tmp
+done
 
 # Bundle external shared libraries into the wheels
 for whl in /io/wheelhouse_tmp/*.whl; do

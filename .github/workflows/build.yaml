@@ -15,7 +15,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: ['3.6', '3.7', '3.8', '3.9', '3.10'] 
+        python-version: ['3.7', '3.8', '3.9', '3.10'] 
         cuda-version: ['10.2', '11.1', '11.4']
     steps:
       - uses: actions/checkout@master
@@ -64,7 +64,7 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python-version: ['3.8'] # this version is only used for upload.
+        python-version: ['3.7', '3.8', '3.9', '3.10'] # this version is only used for upload.
         cuda-version: ['102', '111', '114']
 
     steps:
@@ -88,7 +88,7 @@ jobs:
           PLAT: manylinux2014_x86_64
         if: (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) && (env.CUDA_VERSION != '') ) || env.CUDA_VERSION == '114'
         run: |
-          docker run --rm -e PLAT=$PLAT -e CUMM_CUDA_VERSION=${{ matrix.cuda-version }} -v `pwd`:/io $DOCKER_IMAGE bash -c "/io/tools/build-wheels.sh"
+          docker run --rm -e PLAT=$PLAT -e CUMM_CUDA_VERSION=${{ matrix.cuda-version }} -e SPCONV_PYTHON_LIST=${{env.PYTHON_VERSION}} -v `pwd`:/io $DOCKER_IMAGE bash -c "/io/tools/build-wheels.sh"
 
       - name: Publish a Python distribution to PyPI
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')

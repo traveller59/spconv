@@ -20,7 +20,8 @@ from pccm.utils import project_is_editable, project_is_installed
 from .constants import PACKAGE_NAME, PACKAGE_ROOT
 
 if project_is_installed(PACKAGE_NAME) and project_is_editable(PACKAGE_NAME):
-    from cumm.gemm.main import GemmMainUnitTest, SHUFFLE_SIMT_PARAMS, SHUFFLE_VOLTA_PARAMS, SHUFFLE_TURING_PARAMS
+    from spconv.core import SHUFFLE_SIMT_PARAMS, SHUFFLE_VOLTA_PARAMS, SHUFFLE_TURING_PARAMS
+    from cumm.gemm.main import GemmMainUnitTest
     from spconv.csrc.sparse.all import SpconvOps
     cu = GemmMainUnitTest(SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS)
     cu.namespace = "cumm.gemm.main"
