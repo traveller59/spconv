@@ -506,7 +506,7 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         int filter_offset = blockIdx.y;
         uint32_t filter_mask_out = (1u << (filter_offset));
         uint32_t filter_mask_in = (1u << (RS - 1 - filter_offset));
-        uint32_t filter_mask_center = (1u << (RS / 2));
+        // uint32_t filter_mask_center = (1u << (RS / 2));
 
         loc_iter.set_filter_offset(filter_offset);
         auto indice_ptr_inv = indice_pairs + indices_pair_size * RS;

@@ -28,4 +28,5 @@ if project_is_installed(PACKAGE_NAME) and project_is_editable(PACKAGE_NAME):
     pccm.builder.build_pybind([cu, SpconvOps()],
                               PACKAGE_ROOT / "core_cc",
                               namespace_root=PACKAGE_ROOT,
+                              objects_folder="objects",
                               load_library=False)

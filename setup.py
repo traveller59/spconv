@@ -140,7 +140,8 @@ if disable_jit is not None and disable_jit == "1":
     ext_modules: List[Extension] = [
         PCCMExtension([cu, SpconvOps()],
                       "spconv/core_cc",
-                      Path(__file__).resolve().parent / "spconv")
+                      Path(__file__).resolve().parent / "spconv",
+                      objects_folder="objects")
     ]
 else:
     cmdclass = {
