@@ -399,7 +399,6 @@ class Point2VoxelCPU(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         auto N = points.dim(0);
         int c;
         TV_ASSERT_RT_ERR(num_features == voxels.dim(2), "your points num features doesn't equal to voxel.");
-        constexpr bool kUseMean = {pccm.boolean(mean)};
         tv::dispatch<float, double>(points.dtype(), [&](auto I){{
             using T = decltype(I);
             auto points_rw = points.tview<T, 2>();
@@ -443,7 +442,7 @@ class Point2VoxelCPU(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
                         voxels_rw(voxelidx, num, k) = points_rw(i, k);
                     }}
                     num_points_per_voxel_rw(voxelidx) += 1;
-                    if TV_IF_CONSTEXPR (kUseMean){{
+                    if TV_IF_CONSTEXPR ({pccm.boolean(mean)}){{
                         for (int k = 0; k < num_features; ++k) {{
                             means_rw(voxelidx, k) +=
                                 (points_rw(i, k) - means_rw(voxelidx, k)) / {self.dtype}(num + 1);
@@ -453,7 +452,7 @@ class Point2VoxelCPU(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
             }}
             for (int i = 0; i < voxel_num; ++i) {{
                 coor_to_voxelidx_rw({codeops.unpack("coors_rw", range(self.ndim), left="(i, ", right=")")}) = -1;
-                if TV_IF_CONSTEXPR (kUseMean){{
+                if TV_IF_CONSTEXPR ({pccm.boolean(mean)}){{
                     num = num_points_per_voxel_rw(i);
                     for (int j = num; j < max_num_points_per_voxel; ++j) {{
                         for (int k = 0; k < num_features; ++k) {{

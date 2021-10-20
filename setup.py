@@ -24,7 +24,7 @@ import re
 NAME = 'spconv'
 RELEASE_NAME = NAME
 deps = ["cumm"]
-cuda_ver = os.environ.get("CUMM_CUDA_VERSON", "")
+cuda_ver = os.environ.get("CUMM_CUDA_VERSION", "")
 if not cuda_ver:
     nvcc_version = subprocess.check_output(["nvcc", "--version"
                                             ]).decode("utf-8").strip()
