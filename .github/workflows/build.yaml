@@ -11,56 +11,56 @@ on:
       - '*'
   
 jobs:
-  build-windows:
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        python-version: ['3.7', '3.8', '3.9', '3.10'] 
-        cuda-version: ['10.2', '11.1', '11.4']
-    steps:
-      - uses: actions/checkout@master
-      - name: Install CUDA
-        env:
-          CUDA_VERSION: ${{ matrix.cuda-version }}
-          PYTHON_VERSION: ${{ matrix.python-version }}
-          cuda: ${{ matrix.cuda-version }}
-        if: (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) && (env.CUDA_VERSION != '') ) || (env.CUDA_VERSION == '11.1' && env.PYTHON_VERSION == '3.10')
-        shell: powershell
-        run: .\tools\install_windows_cuda.ps1
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
-      - uses: ilammy/msvc-dev-cmd@v1
-      - name: Install pep build
-        run: |
-          python -m pip install build --user
-          python -m pip install --upgrade pip twine wheel
-          python -m pip install pytest setuptools
+  # build-windows:
+  #   runs-on: windows-latest
+  #   strategy:
+  #     matrix:
+  #       python-version: ['3.7', '3.8', '3.9', '3.10'] 
+  #       cuda-version: ['10.2', '11.1', '11.4']
+  #   steps:
+  #     - uses: actions/checkout@master
+  #     - name: Install CUDA
+  #       env:
+  #         CUDA_VERSION: ${{ matrix.cuda-version }}
+  #         PYTHON_VERSION: ${{ matrix.python-version }}
+  #         cuda: ${{ matrix.cuda-version }}
+  #       if: (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) && (env.CUDA_VERSION != '') ) || (env.CUDA_VERSION == '11.1' && env.PYTHON_VERSION == '3.10')
+  #       shell: powershell
+  #       run: .\tools\install_windows_cuda.ps1
+  #     - name: Set up Python ${{ matrix.python-version }}
+  #       uses: actions/setup-python@v2
+  #       with:
+  #         python-version: ${{ matrix.python-version }}
+  #     - uses: ilammy/msvc-dev-cmd@v1
+  #     - name: Install pep build
+  #       run: |
+  #         python -m pip install build --user
+  #         python -m pip install --upgrade pip twine wheel
+  #         python -m pip install pytest setuptools
 
-      - name: Build a windows binary wheel
-        env:
-          CUDA_VERSION: ${{ matrix.cuda-version }}
-          PYTHON_VERSION: ${{ matrix.python-version }}
-        if: (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) ) || (env.CUDA_VERSION == '11.1' && env.PYTHON_VERSION == '3.10')
-        run: |
-          $Env:CUMM_CUDA_VERSION = "${{ matrix.cuda-version }}"
-          $Env:CUMM_CUDA_ARCH_LIST = "all"
-          $Env:SPCONV_DISABLE_JIT = "1"
-          pip install pccm pybind11
-          python -m build --wheel --outdir dist/ .
-        shell: powershell
+  #     - name: Build a windows binary wheel
+  #       env:
+  #         CUDA_VERSION: ${{ matrix.cuda-version }}
+  #         PYTHON_VERSION: ${{ matrix.python-version }}
+  #       if: (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) ) || (env.CUDA_VERSION == '11.1' && env.PYTHON_VERSION == '3.10')
+  #       run: |
+  #         $Env:CUMM_CUDA_VERSION = "${{ matrix.cuda-version }}"
+  #         $Env:CUMM_CUDA_ARCH_LIST = "all"
+  #         $Env:SPCONV_DISABLE_JIT = "1"
+  #         pip install pccm pybind11
+  #         python -m build --wheel --outdir dist/ .
+  #       shell: powershell
 
-      - name: Publish a Python distribution to PyPI
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
-        run: |
-          $Env:TWINE_USERNAME = "__token__"
-          $Env:TWINE_PASSWORD = "${{ secrets.pypi_password }}"
-          twine upload dist/*
-        shell: powershell
+  #     - name: Publish a Python distribution to PyPI
+  #       if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+  #       run: |
+  #         $Env:TWINE_USERNAME = "__token__"
+  #         $Env:TWINE_PASSWORD = "${{ secrets.pypi_password }}"
+  #         twine upload dist/*
+  #       shell: powershell
   
   build:
-    needs: build-windows
+    # needs: build-windows
     runs-on: ubuntu-20.04
     strategy:
       matrix:
@@ -86,8 +86,9 @@ jobs:
           PYTHON_VERSION: ${{ matrix.python-version }}
           DOCKER_IMAGE: scrin/manylinux2014-cuda:cu${{ matrix.cuda-version }}-devel
           PLAT: manylinux2014_x86_64
-        if: (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) && (env.CUDA_VERSION != '') ) || env.CUDA_VERSION == '114'
+        if: (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) && (env.CUDA_VERSION != '') ) || (env.CUDA_VERSION == '114' && env.PYTHON_VERSION == '3.10')
         run: |
+          chmod +x tools/build-wheels.sh
           docker run --rm -e PLAT=$PLAT -e CUMM_CUDA_VERSION=${{ matrix.cuda-version }} -e SPCONV_PYTHON_LIST=${{env.PYTHON_VERSION}} -v `pwd`:/io $DOCKER_IMAGE bash -c "/io/tools/build-wheels.sh"
 
       - name: Publish a Python distribution to PyPI
