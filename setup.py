@@ -156,7 +156,7 @@ if disable_jit is not None and disable_jit == "1":
     else:
         std = "c++17"
     ext_modules: List[Extension] = [
-        PCCMExtension([cu],
+        PCCMExtension([cu, SpconvOps()],
                       "spconv/core_cc",
                       Path(__file__).resolve().parent / "spconv",
                       objects_folder="objects",

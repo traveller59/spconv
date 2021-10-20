@@ -18,8 +18,6 @@
 
 [![Build Status](https://github.com/traveller59/spconv/workflows/build/badge.svg)](https://github.com/traveller59/spconv/actions?query=workflow%3Abuild)
 
-# WORK IN PROGRESS, DON'T USE!!!
-
 ## Breaking changes in Spconv 2.x
 
 * ```spconv.xxx``` move to ```spconv.pytorch.xxx```, change all ```import spconv``` to ```import spconv.pytorch as spconv``` and ```from spconv.xxx import``` to ```from spconv.pytorch.xxx import```.
