@@ -31,6 +31,7 @@ if not cuda_ver:
     nvcc_version_str = nvcc_version.split("\n")[3]
     version_str: str = re.findall(r"release (\d+.\d+)",
                                     nvcc_version_str)[0]
+    cuda_ver = version_str
 cuda_ver = cuda_ver.replace(".", "") # 10.2 to 102
 
 RELEASE_NAME += "-cu{}".format(cuda_ver)
