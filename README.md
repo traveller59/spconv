@@ -54,13 +54,13 @@ You need at least CUDA 10.2 to build and run spconv 2.x. We won't offer any supp
 
 ### Prebuilt
 
-We offer python 3.7-3.10 and cuda 10.2/11.1/11.4 prebuilt binaries for linux (manylinux) and windows 10/11.
+We offer python 3.7-3.10 and 11.1/11.4 prebuilt binaries for linux (manylinux) and windows 10/11.
+
+CUDA 10.2 support will be added in version 2.0.1.
 
 We will offer prebuilts for CUDA versions supported by latest pytorch release. For example, pytorch 1.9 support cuda 10.2 and 11.1, so we support them too.
 
 For Linux users, you need to install pip >= 20.3 first to install prebuilt.
-
-```pip install spconv-cu102``` for CUDA 10.2
 
 ```pip install spconv-cu111``` for CUDA 11.1
 

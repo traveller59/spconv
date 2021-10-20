@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.7', '3.8', '3.9', '3.10'] 
-        cuda-version: ['10.2', '11.1', '11.4']
+        cuda-version: ['11.1', '11.4']
     steps:
       - uses: actions/checkout@master
       - name: Install CUDA
@@ -65,7 +65,7 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.7', '3.8', '3.9', '3.10'] # this version is only used for upload.
-        cuda-version: ['102', '111', '114']
+        cuda-version: ['111', '114']
 
     steps:
       - uses: actions/checkout@master
