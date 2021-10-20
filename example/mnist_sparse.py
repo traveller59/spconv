@@ -28,14 +28,14 @@ class Net(nn.Module):
         super(Net, self).__init__()
         self.net = spconv.SparseSequential(
             nn.BatchNorm1d(1),
-            spconv.SparseConv2d(1, 32, 3, 1),
+            spconv.SubMConv2d(1, 32, 3, 1),
             nn.ReLU(),
-            spconv.SparseConv2d(32, 64, 3, 1),
+            spconv.SubMConv2d(32, 64, 3, 1),
             nn.ReLU(),
             spconv.SparseMaxPool2d(2, 2),
             spconv.ToDense(), 
         )
-        self.fc1 = nn.Linear(9216, 128)
+        self.fc1 = nn.Linear(14 * 14 * 64, 128)
         self.fc2 = nn.Linear(128, 10)
         self.dropout1 = nn.Dropout2d(0.25)
         self.dropout2 = nn.Dropout2d(0.5)

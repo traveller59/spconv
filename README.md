@@ -24,6 +24,7 @@
 
 * ```spconv.xxx``` move to ```spconv.pytorch.xxx```, change all ```import spconv``` to ```import spconv.pytorch as spconv``` and ```from spconv.xxx import``` to ```from spconv.pytorch.xxx import```.
 * ```use_hash``` in Sparse Convolution is removed, we only use hash table in 2.x.
+* ```x.features = F.relu(x)``` now raise error. use ```x = x.replace_feature(F.relu(x.features))``` instead.
 * weight layout has been changed to RSKC (native algorithm) or KRSC (implicit gemm), no longer RSCK (spconv 1.x). RS is kernel size, C is input channel, K is output channel.
 * all util ops are removed (pillar scatter/nms/...)
 * VoxelGenerator has been replaced by Point2VoxelGPU[1-4]d/Point2VoxelCPU[1-4]d.
@@ -47,7 +48,7 @@
 
 ## Install
 
-You need to install python >= 3.6 first to use spconv 2.x.
+You need to install python >= 3.7 first to use spconv 2.x.
 
 You need to install CUDA toolkit first before using prebuilt binaries or build from source.
 
@@ -55,7 +56,7 @@ You need at least CUDA 10.2 to build and run spconv 2.x. We won't offer any supp
 
 ### Prebuilt
 
-We offer python 3.6-3.10 and cuda 10.2/11.1/11.4 prebuilt binaries for linux (manylinux) and windows 10/11.
+We offer python 3.7-3.10 and cuda 10.2/11.1/11.4 prebuilt binaries for linux (manylinux) and windows 10/11.
 
 We will offer prebuilts for CUDA versions supported by latest pytorch release. For example, pytorch 1.9 support cuda 10.2 and 11.1, so we support them too.
 
