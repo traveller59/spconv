@@ -16,6 +16,7 @@ import pccm
 from pccm.extension import ExtCallback, PCCMBuild, PCCMExtension
 from setuptools import Command, find_packages, setup
 from setuptools.extension import Extension
+from ccimport import compat
 
 # Package meta-data.
 NAME = 'spconv'
@@ -137,11 +138,16 @@ if disable_jit is not None and disable_jit == "1":
     cu = GemmMainUnitTest(SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS)
 
     cu.namespace = "cumm.gemm.main"
+    if compat.InWindows:
+        std = None 
+    else:
+        std = "-std=c++14"
     ext_modules: List[Extension] = [
         PCCMExtension([cu, SpconvOps()],
                       "spconv/core_cc",
                       Path(__file__).resolve().parent / "spconv",
                       objects_folder="objects",
+                      std=std,
                       disable_pch=True)
     ]
 else:

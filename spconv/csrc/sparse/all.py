@@ -17,7 +17,7 @@ from cumm.conv.bases import ConvOpType, NHWC
 from cumm.conv.params import ConvProblem
 from cumm import dtypes
 import pccm 
-
+from ccimport import compat
 from .pointops import Point2Voxel, Point2VoxelCPU
 from .indices import SparseConvIndicesKernel, CudaCommonKernel
 from .maxpool import IndiceMaxPool
@@ -26,6 +26,15 @@ class SpconvOps(pccm.Class):
     def __init__(self):
         super().__init__()
         self.ndims = [1, 2, 3, 4]
+        if compat.InWindows:
+            if "cl" not in self.build_meta.compiler_to_cflags:
+                self.build_meta.compiler_to_cflags["cl"] = []
+            self.build_meta.compiler_to_cflags["cl"].extend("-Xcompiler=\"/std:c++17\"")
+
+            if "nvcc" not in self.build_meta.compiler_to_cflags:
+                self.build_meta.compiler_to_cflags["nvcc"] = []
+            self.build_meta.compiler_to_cflags["nvcc"].extend("-std=c++14")
+
         for ndim in self.ndims:
             p2v = Point2Voxel(dtypes.float32,  ndim)
             p2v_cpu = Point2VoxelCPU(dtypes.float32, ndim)
