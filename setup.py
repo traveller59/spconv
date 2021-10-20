@@ -45,7 +45,7 @@ REQUIRES_PYTHON = '>=3.6'
 VERSION = None
 
 # What packages are required for this module to be executed?
-REQUIRED = ["pccm>=0.2.10", "pybind11>=2.6.0", "fire", "numpy", *deps]
+REQUIRED = ["pccm>=0.2.14", "pybind11>=2.6.0", "fire", "numpy", *deps]
 
 # What packages are optional?
 EXTRAS = {
@@ -161,8 +161,7 @@ if disable_jit is not None and disable_jit == "1":
                       Path(__file__).resolve().parent / "spconv",
                       objects_folder="objects",
                       std=std,
-                      disable_pch=True,
-                      debug_file_gen=True)
+                      disable_pch=True)
     ]
 else:
     cmdclass = {
