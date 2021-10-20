@@ -1,109 +1,205 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+# Note: To use the 'upload' functionality of this file, you must:
+#   $ pip install twine
+
+import io
 import os
-import platform
-import re
-import subprocess
+import shutil
 import sys
-from distutils.version import LooseVersion
 from pathlib import Path
+from shutil import rmtree
+from typing import List
 
-import torch
-from setuptools import Extension, find_packages, setup
-from setuptools.command.build_ext import build_ext
+import pccm
+from pccm.extension import ExtCallback, PCCMBuild, PCCMExtension
+from setuptools import Command, find_packages, setup
+from setuptools.extension import Extension
+from ccimport import compat
+import subprocess 
+import re 
 
-# if 'LIBTORCH_ROOT' not in os.environ:
-#     raise ValueError("You must set LIBTORCH_ROOT to your torch c++ library.")
+# Package meta-data.
+NAME = 'spconv'
+RELEASE_NAME = NAME
+deps = ["cumm"]
+cuda_ver = os.environ.get("CUMM_CUDA_VERSION", "")
+if not cuda_ver:
+    nvcc_version = subprocess.check_output(["nvcc", "--version"
+                                            ]).decode("utf-8").strip()
+    nvcc_version_str = nvcc_version.split("\n")[3]
+    version_str: str = re.findall(r"release (\d+.\d+)",
+                                    nvcc_version_str)[0]
+    cuda_ver = version_str
+cuda_ver = cuda_ver.replace(".", "") # 10.2 to 102
 
-LIBTORCH_ROOT = str(Path(torch.__file__).parent)
+RELEASE_NAME += "-cu{}".format(cuda_ver)
+deps = ["cumm-cu{}".format(cuda_ver)]
 
-SPCONV_FORCE_BUILD_CUDA = os.getenv("SPCONV_FORCE_BUILD_CUDA")
+DESCRIPTION = 'spatial sparse convolution'
+URL = 'https://github.com/traveller59/spconv'
+EMAIL = 'yanyan.sub@outlook.com'
+AUTHOR = 'Yan Yan'
+REQUIRES_PYTHON = '>=3.6'
+VERSION = None
 
-PYTHON_VERSION = "{}.{}".format(sys.version_info.major, sys.version_info.minor)
+# What packages are required for this module to be executed?
+REQUIRED = ["pccm>=0.2.14", "pybind11>=2.6.0", "fire", "numpy", *deps]
 
-remove_device = re.search(r"(\+|\.)(dev|cu|cpu)", torch.__version__)
-PYTORCH_VERSION = torch.__version__
-if remove_device is not None:
-    PYTORCH_VERSION = torch.__version__[:remove_device.start()]
-PYTORCH_VERSION = list(map(int, PYTORCH_VERSION.split(".")))
-PYTORCH_VERSION_NUMBER = PYTORCH_VERSION[0] * 10000 + PYTORCH_VERSION[1] * 100 + PYTORCH_VERSION[2]
-class CMakeExtension(Extension):
-    def __init__(self, name, sourcedir='', library_dirs=[]):
-        Extension.__init__(self, name, sources=[], library_dirs=library_dirs)
-        self.sourcedir = os.path.abspath(sourcedir)
+# What packages are optional?
+EXTRAS = {
+    # 'fancy feature': ['django'],
+}
+
+# The rest you shouldn't have to touch too much :)
+# ------------------------------------------------
+# Except, perhaps the License and Trove Classifiers!
+# If you do change the License, remember to change the Trove Classifier for that!
+
+here = os.path.abspath(os.path.dirname(__file__))
+sys.path.append(str(Path(__file__).parent))
+
+# Import the README and use it as the long-description.
+# Note: this will only work if 'README.md' is present in your MANIFEST.in file!
+try:
+    with io.open(os.path.join(here, 'README.md'), encoding='utf-8') as f:
+        long_description = '\n' + f.read()
+except FileNotFoundError:
+    long_description = DESCRIPTION
+
+# Load the package's __version__.py module as a dictionary.
+about = {}
+if not VERSION:
+    with open('version.txt', 'r') as f:
+        version = f.read().strip()
+else:
+    version = VERSION
+cwd = os.path.dirname(os.path.abspath(__file__))
 
 
-class CMakeBuild(build_ext):
+def _convert_build_number(build_number):
+    parts = build_number.split(".")
+    if len(parts) == 2:
+        return "{}{:03d}".format(int(parts[0]), int(parts[1]))
+    elif len(parts) == 1:
+        return build_number
+    else:
+        raise NotImplementedError
+
+
+env_suffix = os.environ.get("SPCONV_VERSION_SUFFIX", "")
+if env_suffix != "":
+    version += ".dev{}".format(_convert_build_number(env_suffix))
+version_path = os.path.join(cwd, NAME, '__version__.py')
+about['__version__'] = version
+
+with open(version_path, 'w') as f:
+    f.write("__version__ = '{}'\n".format(version))
+
+class UploadCommand(Command):
+    """Support setup.py upload."""
+
+    description = 'Build and publish the package.'
+    user_options = []
+
+    @staticmethod
+    def status(s):
+        """Prints things in bold."""
+        print('\033[1m{0}\033[0m'.format(s))
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
     def run(self):
         try:
-            out = subprocess.check_output(['cmake', '--version'])
+            self.status('Removing previous builds...')
+            rmtree(os.path.join(here, 'dist'))
         except OSError:
-            raise RuntimeError("CMake must be installed to build the following extensions: " +
-                               ", ".join(e.name for e in self.extensions))
+            pass
 
-        if platform.system() == "Windows":
-            cmake_version = LooseVersion(re.search(r'version\s*([\d.]+)', out.decode()).group(1))
-            if cmake_version < '3.13.0':
-                raise RuntimeError("CMake >= 3.13.0 is required on Windows")
+        self.status('Building Source and Wheel (universal) distribution...')
+        os.system('{0} setup.py sdist bdist_wheel --universal'.format(
+            sys.executable))
 
-        for ext in self.extensions:
-            self.build_extension(ext)
+        self.status('Uploading the package to PyPI via Twine...')
+        os.system('twine upload dist/*')
 
-    def build_extension(self, ext):
-        extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
-        cmake_args = [# '-G "Visual Studio 15 2017 Win64"',
-                      '-DCMAKE_PREFIX_PATH={}'.format(LIBTORCH_ROOT),
-                      '-DPYBIND11_PYTHON_VERSION={}'.format(PYTHON_VERSION),
-                      '-DSPCONV_BuildTests=OFF',
-                      '-DPYTORCH_VERSION={}'.format(PYTORCH_VERSION_NUMBER)
-                      ] #  -arch=sm_61
-        if not torch.cuda.is_available() and SPCONV_FORCE_BUILD_CUDA is None:
-            cmake_args += ['-DSPCONV_BuildCUDA=OFF']
-        else:
-            cuda_flags = ["\"--expt-relaxed-constexpr\""]
-            # must add following flags to use at::Half
-            # but will remove raw half operators.
-            cuda_flags += ["-D__CUDA_NO_HALF_OPERATORS__", "-D__CUDA_NO_HALF_CONVERSIONS__"]
-            # cuda_flags += ["-D__CUDA_NO_HALF2_OPERATORS__"] 
-            cmake_args += ['-DCMAKE_CUDA_FLAGS=' + " ".join(cuda_flags)]
-        cfg = 'Debug' if self.debug else 'Release'
-        assert cfg == "Release", "pytorch ops don't support debug build."
-        build_args = ['--config', cfg]
-        print(cfg)
-        if platform.system() == "Windows":
-            cmake_args += ['-DCMAKE_BUILD_TYPE=' + cfg]
-            cmake_args += ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{}={}'.format(cfg.upper(), str(Path(extdir) / "spconv"))]
-            # cmake_args += ['-DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_{}={}'.format(cfg.upper(), str(Path(extdir) / "spconv"))]
-            cmake_args += ['-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_{}={}'.format(cfg.upper(), str(Path(extdir) / "spconv"))]
-            cmake_args += ["-DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE"]
-            if sys.maxsize > 2**32:
-                cmake_args += ['-A', 'x64']
-            build_args += ['--', '/m']
-        else:
-            cmake_args += ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={}'.format(str(Path(extdir) / "spconv"))]
-            cmake_args += ['-DCMAKE_BUILD_TYPE=' + cfg]
-            build_args += ['--', '-j4']
+        self.status('Pushing git tags...')
+        os.system('git tag v{0}'.format(about['__version__']))
+        os.system('git push --tags')
 
-        env = os.environ.copy()
-        env['CXXFLAGS'] = '{} -DVERSION_INFO=\\"{}\\"'.format(env.get('CXXFLAGS', ''),
-                                                              self.distribution.get_version())
-        if not os.path.exists(self.build_temp):
-            os.makedirs(self.build_temp)
-        print("|||||CMAKE ARGS|||||", cmake_args)
-        subprocess.check_call(['cmake', ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env)
-        subprocess.check_call(['cmake', '--build', '.'] + build_args, cwd=self.build_temp)
+        sys.exit()
 
 
-packages = find_packages(exclude=('tools', 'tools.*'))
+
+disable_jit = os.getenv("SPCONV_DISABLE_JIT", None)
+
+if disable_jit is not None and disable_jit == "1":
+    cmdclass = {
+        'upload': UploadCommand,
+        'build_ext': PCCMBuild,
+    }
+    from cumm.gemm.main import GemmMainUnitTest
+    from spconv.core import SHUFFLE_SIMT_PARAMS, SHUFFLE_VOLTA_PARAMS, SHUFFLE_TURING_PARAMS
+
+    from spconv.csrc.sparse.all import SpconvOps
+    cu = GemmMainUnitTest(SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS)
+
+    cu.namespace = "cumm.gemm.main"
+    cuda_ver_number = int(cuda_ver)
+    if cuda_ver_number < 110:
+        std = "c++14" 
+    else:
+        std = "c++17"
+    ext_modules: List[Extension] = [
+        PCCMExtension([cu, SpconvOps()],
+                      "spconv/core_cc",
+                      Path(__file__).resolve().parent / "spconv",
+                      objects_folder="objects",
+                      std=std,
+                      disable_pch=True)
+    ]
+else:
+    cmdclass = {
+        'upload': UploadCommand,
+    }
+    ext_modules = []
+
+# Where the magic happens:
 setup(
-    name='spconv',
-    version='1.2.1',
-    author='Yan Yan',
-    author_email='scrin@foxmail.com',
-    description='spatial sparse convolution for pytorch',
-    long_description='',
-    setup_requires = ['torch>=1.3.0'],
-    packages=packages,
-    package_dir = {'spconv': 'spconv'},
-    ext_modules=[CMakeExtension('spconv', library_dirs=[])],
-    cmdclass=dict(build_ext=CMakeBuild),
-    zip_safe=False,
+    name=RELEASE_NAME,
+    version=about['__version__'],
+    description=DESCRIPTION,
+    long_description=long_description,
+    long_description_content_type='text/markdown',
+    author=AUTHOR,
+    author_email=EMAIL,
+    python_requires=REQUIRES_PYTHON,
+    url=URL,
+    packages=find_packages(exclude=('tests', )),
+    # If your package is a single module, use this instead of 'packages':
+    # py_modules=['mypackage'],
+    entry_points={
+        'console_scripts': [],
+    },
+    install_requires=REQUIRED,
+    extras_require=EXTRAS,
+    include_package_data=True,
+    license='MIT',
+    classifiers=[
+        # Trove classifiers
+        # Full list: https://pypi.python.org/pypi?%3Aaction=list_classifiers
+        'License :: OSI Approved :: MIT License',
+        'Programming Language :: Python',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: Implementation :: CPython',
+        'Programming Language :: Python :: Implementation :: PyPy'
+    ],
+    # $ setup.py publish support.
+    cmdclass=cmdclass,
+    ext_modules=ext_modules,
 )

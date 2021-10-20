@@ -3,34 +3,97 @@ name: build
 on:
   push:
     branches:
+      - main
+      - develop
       - master
-  schedule:
-    # * is a special character in YAML so you have to quote this string
-    - cron:  '0 0 * * 6' # base builds run every saturday
-
+      - feature/*
+    tags:
+      - '*'
+  
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    env:
-      DOCKER_IMAGE_NAME: scrin/dev-spconv
-      DOCKER_FILE_PATH: ./Dockerfile
-
-    # TODO: create a action to reuse code. the problem is how to reuse docker-login.
+  build-windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ['3.7', '3.8', '3.9', '3.10'] 
+        cuda-version: ['10.2', '11.1', '11.4']
     steps:
       - uses: actions/checkout@master
-      - name: Build Docker
-        run: |
-          docker build . --file ${{env.DOCKER_FILE_PATH}} --tag ${{env.DOCKER_IMAGE_NAME}}:latest
-          docker tag ${{env.DOCKER_IMAGE_NAME}}:latest ${{env.DOCKER_IMAGE_NAME}}:${{ github.sha }}
-          
-
-      - name: Login to Registry
-        uses: azure/docker-login@v1
+      - name: Install CUDA
+        env:
+          CUDA_VERSION: ${{ matrix.cuda-version }}
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          cuda: ${{ matrix.cuda-version }}
+        if: (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) && (env.CUDA_VERSION != '') ) || (env.CUDA_VERSION == '11.1' && env.PYTHON_VERSION == '3.10')
+        shell: powershell
+        run: .\tools\install_windows_cuda.ps1
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Publish to Registry
+          python-version: ${{ matrix.python-version }}
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Install pep build
         run: |
-          docker push ${{env.DOCKER_IMAGE_NAME}}:latest
-          docker push ${{env.DOCKER_IMAGE_NAME}}:${{ github.sha }}
+          python -m pip install build --user
+          python -m pip install --upgrade pip twine wheel
+          python -m pip install pytest setuptools
+
+      - name: Build a windows binary wheel
+        env:
+          CUDA_VERSION: ${{ matrix.cuda-version }}
+          PYTHON_VERSION: ${{ matrix.python-version }}
+        if: (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) ) || (env.CUDA_VERSION == '11.1' && env.PYTHON_VERSION == '3.10')
+        run: |
+          $Env:CUMM_CUDA_VERSION = "${{ matrix.cuda-version }}"
+          $Env:CUMM_CUDA_ARCH_LIST = "all"
+          $Env:SPCONV_DISABLE_JIT = "1"
+          pip install pccm pybind11
+          python -m build --wheel --outdir dist/ .
+        shell: powershell
+
+      - name: Publish a Python distribution to PyPI
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+        run: |
+          $Env:TWINE_USERNAME = "__token__"
+          $Env:TWINE_PASSWORD = "${{ secrets.pypi_password }}"
+          twine upload dist/*
+        shell: powershell
+  
+  build:
+    # needs: build-windows
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        python-version: ['3.7', '3.8', '3.9', '3.10'] # this version is only used for upload.
+        cuda-version: ['102', '111', '114']
+
+    steps:
+      - uses: actions/checkout@master
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install pep build
+        run: |
+          python -m pip install build --user
+          python -m pip install --upgrade pip twine wheel
+          python -m pip install pytest setuptools
+
+      - name: Build a cuda wheel
+        env:
+          CUDA_VERSION: ${{ matrix.cuda-version }}
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          DOCKER_IMAGE: scrin/manylinux2014-cuda:cu${{ matrix.cuda-version }}-devel
+          PLAT: manylinux2014_x86_64
+        if: (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) && (env.CUDA_VERSION != '') ) || (env.CUDA_VERSION == '114' && env.PYTHON_VERSION == '3.10')
+        run: |
+          chmod +x tools/build-wheels.sh
+          docker run --rm -e PLAT=$PLAT -e CUMM_CUDA_VERSION=${{ matrix.cuda-version }} -e SPCONV_PYTHON_LIST=${{env.PYTHON_VERSION}} -v `pwd`:/io $DOCKER_IMAGE bash -c "/io/tools/build-wheels.sh"
+
+      - name: Publish a Python distribution to PyPI
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+        uses: pypa/gh-action-pypi-publish@master
+        with:
+          user: __token__
+          password: ${{ secrets.pypi_password }}

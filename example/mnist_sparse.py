@@ -1,7 +1,21 @@
+# Copyright 2021 Yan Yan
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import print_function
 import argparse
 import torch
-import spconv
+import spconv.pytorch as spconv
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
@@ -14,14 +28,14 @@ class Net(nn.Module):
         super(Net, self).__init__()
         self.net = spconv.SparseSequential(
             nn.BatchNorm1d(1),
-            spconv.SparseConv2d(1, 32, 3, 1),
+            spconv.SubMConv2d(1, 32, 3, 1),
             nn.ReLU(),
-            spconv.SparseConv2d(32, 64, 3, 1),
+            spconv.SubMConv2d(32, 64, 3, 1),
             nn.ReLU(),
             spconv.SparseMaxPool2d(2, 2),
             spconv.ToDense(), 
         )
-        self.fc1 = nn.Linear(9216, 128)
+        self.fc1 = nn.Linear(14 * 14 * 64, 128)
         self.fc2 = nn.Linear(128, 10)
         self.dropout1 = nn.Dropout2d(0.25)
         self.dropout2 = nn.Dropout2d(0.5)

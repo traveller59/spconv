@@ -12,7 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import build as _build
+import os
+from pathlib import Path
+from typing import List
+from pccm.utils import project_is_editable, project_is_installed
 
-from .core import ConvAlgo, AlgoHint
-from . import constants
+PACKAGE_NAME = "spconv"
+PACKAGE_ROOT = Path(__file__).parent.resolve()
+
+EDITABLE_INSTALLED = project_is_installed(PACKAGE_NAME) and project_is_editable(PACKAGE_NAME)
+
+
+_filter_hwio_env = os.getenv("SPCONV_FILTER_HWIO", "0")
+FILTER_HWIO = _filter_hwio_env == "1"

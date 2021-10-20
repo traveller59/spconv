@@ -1,161 +1,93 @@
+<!--
+ Copyright 2021 Yan Yan
+ 
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
 # SpConv: PyTorch Spatially Sparse Convolution Library
 
 [![Build Status](https://github.com/traveller59/spconv/workflows/build/badge.svg)](https://github.com/traveller59/spconv/actions?query=workflow%3Abuild)
 
-This is a spatially sparse convolution library like [SparseConvNet](https://github.com/facebookresearch/SparseConvNet) but faster and easy to read. This library provide sparse convolution/transposed, submanifold convolution, inverse convolution and sparse maxpool.
+## Breaking changes in Spconv 2.x
 
+* ```spconv.xxx``` move to ```spconv.pytorch.xxx```, change all ```import spconv``` to ```import spconv.pytorch as spconv``` and ```from spconv.xxx import``` to ```from spconv.pytorch.xxx import```.
+* ```use_hash``` in Sparse Convolution is removed, we only use hash table in 2.x.
+* ```x.features = F.relu(x)``` now raise error. use ```x = x.replace_feature(F.relu(x.features))``` instead.
+* weight layout has been changed to RSKC (native algorithm) or KRSC (implicit gemm), no longer RSCK (spconv 1.x). RS is kernel size, C is input channel, K is output channel.
+* all util ops are removed (pillar scatter/nms/...)
+* VoxelGenerator has been replaced by Point2VoxelGPU[1-4]d/Point2VoxelCPU[1-4]d.
+* spconv 2.x don't support CPU for now
 
-2020-5-2, we add ConcatTable, JoinTable, AddTable, and Identity function to build ResNet and Unet in this version of spconv.
+## News in Spconv 2.0.0
 
+* training/inference speed is increased
+* support int8/tensor core
+* doesn't depend on pytorch binary. 
+* since spconv 2.x doesn't depend on pytorch binary (never in future), it's impossible to support torch.jit/libtorch inference.
 
-## Docker:
+## TODO in Spconv 2.x
+- [ ] Ampere (A100 / RTX 3000 series) feature support (work in progress)
+- [ ] torch QAT support (work in progress)
+- [ ] TensorRT (torch.fx based)
+- [ ] Build C++ only package
+- [ ] JIT compilation for CUDA kernels
+- [ ] Document (low priority)
+- [ ] CPU support (low priority)
 
-```docker pull scrin/dev-spconv```, contains python 3.8, cuda 10.1, fish shell, newest pytorch and tensorflow.
+## Install
 
-## Install on Ubuntu 16.04/18.04
+You need to install python >= 3.7 first to use spconv 2.x.
 
-* if you are using pytorch 1.4+ and encounter "nvcc fatal: unknown -Wall", you need to go to torch package dir and remove flags contains "-Wall" in INTERFACE_COMPILE_OPTIONS in Caffe2Targets.cmake. This problem can't be fixed in this project (to avoid this, I need to remove all torch dependency in cuda sources and drop half support).
+You need to install CUDA toolkit first before using prebuilt binaries or build from source.
 
-0. Use ```git clone xxx.git --recursive``` to clone this repo.
+You need at least CUDA 10.2 to build and run spconv 2.x. We won't offer any support for CUDA < 10.2.
 
-1. Install boost headers to your system include path, you can use either ```sudo apt-get install libboost-all-dev``` or download compressed files from boost official website and copy headers to include path.
+### Prebuilt
 
-2. Download cmake >= 3.13.2, then add cmake executables to PATH.
+We offer python 3.7-3.10 and cuda 10.2/11.1/11.4 prebuilt binaries for linux (manylinux) and windows 10/11.
 
-3. Ensure you have installed pytorch 1.0+ in your environment, run ```python setup.py bdist_wheel``` (don't use ```python setup.py install```).
+We will offer prebuilts for CUDA versions supported by latest pytorch release. For example, pytorch 1.9 support cuda 10.2 and 11.1, so we support them too.
 
-4. Run ```cd ./dist```, use pip to install generated whl file.
+For Linux users, you need to install pip >= 20.3 first to install prebuilt.
 
-## Install on Windows 10 (Not supported for now)
+```pip install spconv-cu102``` for CUDA 10.2
 
-## Compare with SparseConvNet
+```pip install spconv-cu111``` for CUDA 11.1
 
-### Features
+```pip install spconv-cu114``` for CUDA 11.4
 
-* SparseConvNet's Sparse Convolution don't support padding and dilation, spconv support this.
+### Build from source
 
-* spconv only contains sparse convolutions, the batchnorm and activations can directly use layers from torch.nn, SparseConvNet contains lots of their own implementation of layers such as batchnorm and activations.
+You need to rebuild ```cumm``` first if you are build along a CUDA version that not provided in prebuilts.
 
-### Speed
+#### Linux
 
-* spconv is faster than SparseConvNet due to gpu indice generation and gather-gemm-scatter algorithm. SparseConvNet use hand-written gemm which is slow.
+1. install build-essential, install CUDA
+2. run ```export SPCONV_DISABLE_JIT="1"```
+3. run ```python setup.py install```/```pip install -e .```/```python setup.py bdist_wheel```+```pip install dists/xxx.whl```
 
-## Usage
+#### Windows 10/11
 
-### SparseConvTensor
+1. install visual studio 2019 or newer. make sure C++ development package is installed. install CUDA
+2. set [powershell script execution policy](https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies?view=powershell-7.1)
+3. start a new powershell, run ```tools/msvc_setup.ps1```
+4. run ```$Env:SPCONV_DISABLE_JIT = "1"```
+5. run ```python setup.py install```/```pip install -e .```/```python setup.py bdist_wheel```+```pip install dists/xxx.whl```
 
-```Python
-features = # your features with shape [N, numPlanes]
-indices = # your indices/coordinates with shape [N, ndim + 1], batch index must be put in indices[:, 0]
-spatial_shape = # spatial shape of your sparse tensor, spatial_shape[i] is shape of indices[:, 1 + i].
-batch_size = # batch size of your sparse tensor.
-x = spconv.SparseConvTensor(features, indices, spatial_shape, batch_size)
-x_dense_NCHW = x.dense() # convert sparse tensor to dense NCHW tensor.
-print(x.sparity) # helper function to check sparity. 
-```
+## Note
 
-### Sparse Convolution
+The work is done when the author is an employee at Tusimple.
 
-```Python
-import spconv
-from torch import nn
-class ExampleNet(nn.Module):
-    def __init__(self, shape):
-        super().__init__()
-        self.net = spconv.SparseSequential(
-            spconv.SparseConv3d(32, 64, 3), # just like nn.Conv3d but don't support group and all([d > 1, s > 1])
-            nn.BatchNorm1d(64), # non-spatial layers can be used directly in SparseSequential.
-            nn.ReLU(),
-            spconv.SubMConv3d(64, 64, 3, indice_key="subm0"),
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
-            # when use submanifold convolutions, their indices can be shared to save indices generation time.
-            spconv.SubMConv3d(64, 64, 3, indice_key="subm0"),
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
-            spconv.SparseConvTranspose3d(64, 64, 3, 2),
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
-            spconv.ToDense(), # convert spconv tensor to dense and convert it to NCHW format.
-            nn.Conv3d(64, 64, 3),
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
-        )
-        self.shape = shape
+## LICENSE
 
-    def forward(self, features, coors, batch_size):
-        coors = coors.int() # unlike torch, this library only accept int coordinates.
-        x = spconv.SparseConvTensor(features, coors, self.shape, batch_size)
-        return self.net(x)# .dense()
-```
-
-### Inverse Convolution
-
-Inverse sparse convolution means "inv" of sparse convolution. the output of inverse convolution contains same indices as input of sparse convolution.
-
-Inverse convolution usually used in semantic segmentation.
-
-```Python
-class ExampleNet(nn.Module):
-    def __init__(self, shape):
-        super().__init__()
-        self.net = spconv.SparseSequential(
-            spconv.SparseConv3d(32, 64, 3, 2, indice_key="cp0"),
-            spconv.SparseInverseConv3d(64, 32, 3, indice_key="cp0"), # need provide kernel size to create weight
-        )
-        self.shape = shape
-
-    def forward(self, features, coors, batch_size):
-        coors = coors.int()
-        x = spconv.SparseConvTensor(features, coors, self.shape, batch_size)
-        return self.net(x)
-```
-
-### Utility functions
-
-* convert point cloud to voxel
-
-```Python
-
-voxel_generator = spconv.utils.VoxelGenerator(
-    voxel_size=[0.1, 0.1, 0.1], 
-    point_cloud_range=[-50, -50, -3, 50, 50, 1],
-    max_num_points=30,
-    max_voxels=40000
-)
-
-points = # [N, 3+] tensor.
-voxels, coords, num_points_per_voxel = voxel_generator.generate(points)
-```
-
-## Implementation Details
-
-This implementation use gather-gemm-scatter framework to do sparse convolution.
-
-## Projects using spconv:
-
-* [second.pytorch](https://github.com/traveller59/second.pytorch): Point Cloud Object Detection in KITTI Dataset.
-
-## Authors
-
-* **Yan Yan** - *Initial work* - [traveller59](https://github.com/traveller59)
-
-* **Bo Li** - *gpu indice generation idea, owner of patent of the sparse conv gpu indice generation algorithm (don't include subm)* - [prclibo](https://github.com/prclibo)
-
-## Third party libraries
-
-* [CUDPP](https://github.com/cudpp/cudpp): A cuda library. contains a cuda hash implementation.
-
-* [robin-map](https://github.com/Tessil/robin-map): A fast c++ hash library. almost 2x faster than std::unordered_map in this project.
-
-* [pybind11](https://github.com/pybind/pybind11): A head-only python c++ binding library.
-
-* [prettyprint](https://github.com/louisdx/cxx-prettyprint): A head-only library for container print.
-
-## License
-
-This project is licensed under the Apache license 2.0 License - see the [LICENSE.md](LICENSE.md) file for details
-
-The [CUDPP](https://github.com/cudpp/cudpp) hash code is licensed under BSD License.
-
-The [robin-map](https://github.com/Tessil/robin-map) code is licensed under MIT license.
+Apache 2.0
