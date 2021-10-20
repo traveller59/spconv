@@ -17,16 +17,25 @@ from pccm.extension import ExtCallback, PCCMBuild, PCCMExtension
 from setuptools import Command, find_packages, setup
 from setuptools.extension import Extension
 from ccimport import compat
+import subprocess 
+import re 
 
 # Package meta-data.
 NAME = 'spconv'
 RELEASE_NAME = NAME
 deps = ["cumm"]
 cuda_ver = os.environ.get("CUMM_CUDA_VERSON", "")
-if cuda_ver:
-    cuda_ver = cuda_ver.replace(".", "") # 10.2 to 102
-    RELEASE_NAME += "-cu{}".format(cuda_ver)
-    deps = ["cumm-cu{}".format(cuda_ver)]
+if not cuda_ver:
+    nvcc_version = subprocess.check_output(["nvcc", "--version"
+                                            ]).decode("utf-8").strip()
+    nvcc_version_str = nvcc_version.split("\n")[3]
+    version_str: str = re.findall(r"release (\d+.\d+)",
+                                    nvcc_version_str)[0]
+cuda_ver = cuda_ver.replace(".", "") # 10.2 to 102
+
+RELEASE_NAME += "-cu{}".format(cuda_ver)
+deps = ["cumm-cu{}".format(cuda_ver)]
+
 DESCRIPTION = 'spatial sparse convolution'
 URL = 'https://github.com/traveller59/spconv'
 EMAIL = 'yanyan.sub@outlook.com'
@@ -138,10 +147,11 @@ if disable_jit is not None and disable_jit == "1":
     cu = GemmMainUnitTest(SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS)
 
     cu.namespace = "cumm.gemm.main"
-    if compat.InWindows:
-        std = None 
+    cuda_ver_number = int(cuda_ver)
+    if cuda_ver_number < 110:
+        std = "c++14" 
     else:
-        std = "-std=c++14"
+        std = "c++17"
     ext_modules: List[Extension] = [
         PCCMExtension([cu, SpconvOps()],
                       "spconv/core_cc",
