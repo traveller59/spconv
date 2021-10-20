@@ -161,7 +161,8 @@ if disable_jit is not None and disable_jit == "1":
                       Path(__file__).resolve().parent / "spconv",
                       objects_folder="objects",
                       std=std,
-                      disable_pch=True)
+                      disable_pch=True,
+                      debug_file_gen=True)
     ]
 else:
     cmdclass = {
