@@ -143,7 +143,9 @@ if disable_jit is not None and disable_jit == "1":
         'upload': UploadCommand,
         'build_ext': PCCMBuild,
     }
-    from cumm.gemm.main import GemmMainUnitTest, SHUFFLE_SIMT_PARAMS, SHUFFLE_VOLTA_PARAMS, SHUFFLE_TURING_PARAMS
+    from cumm.gemm.main import GemmMainUnitTest
+    from spconv.core import SHUFFLE_SIMT_PARAMS, SHUFFLE_VOLTA_PARAMS, SHUFFLE_TURING_PARAMS
+
     from spconv.csrc.sparse.all import SpconvOps
     cu = GemmMainUnitTest(SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS)
 
@@ -154,7 +156,7 @@ if disable_jit is not None and disable_jit == "1":
     else:
         std = "c++17"
     ext_modules: List[Extension] = [
-        PCCMExtension([cu, SpconvOps()],
+        PCCMExtension([cu],
                       "spconv/core_cc",
                       Path(__file__).resolve().parent / "spconv",
                       objects_folder="objects",
