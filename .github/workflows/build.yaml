@@ -51,7 +51,7 @@ jobs:
         env:
           CUDA_VERSION: ${{ matrix.cuda-version }}
           PYTHON_VERSION: ${{ matrix.python-version }}
-        if: ((github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) ) || ((steps.changes.outputs.nobuild == 'false') && env.PYTHON_VERSION == '3.10')
+        if: (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags'))) || ((steps.changes.outputs.nobuild == 'false') && env.PYTHON_VERSION == '3.10')
         run: |
           $Env:CUMM_CUDA_VERSION = "${{ matrix.cuda-version }}"
           $Env:CUMM_CUDA_ARCH_LIST = "all"
