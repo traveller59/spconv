@@ -23,6 +23,7 @@ if (($CUDA_VERSION_FULL -eq "10.2") -or ($CUDA_VERSION_FULL -eq "11.0") -or ($CU
         "visual_studio_integration";
         "nvrtc_dev";
         "cudart";
+        "curand_dev";
         # before 11.3, thrust are included by default and no explicit package exists
     )
 } elseif ($CUDA_VERSION_FULL -eq "11.3"){
@@ -32,6 +33,7 @@ if (($CUDA_VERSION_FULL -eq "10.2") -or ($CUDA_VERSION_FULL -eq "11.0") -or ($CU
         "cuda_nvrtc";
         "cuda_cudart";
         "cuda_thrust";
+        "libcurand";
     )
 } else {
     # after cuda 11.4
@@ -41,6 +43,7 @@ if (($CUDA_VERSION_FULL -eq "10.2") -or ($CUDA_VERSION_FULL -eq "11.0") -or ($CU
         "nvrtc_dev";
         "cudart";
         "thrust"; 
+        "curand_dev";
     )
 }
 
