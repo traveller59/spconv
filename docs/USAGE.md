@@ -33,6 +33,7 @@
 * indices: ```[N, (batch_idx + x + y + z)]``` coordinate tensor with batch axis. note that the coordinates xyz order MUST match spatial shape and conv params such as kernel size
 
 ```Python
+import spconv.pytorch as spconv
 features = # your features with shape [N, num_channels]
 indices = # your indices/coordinates with shape [N, ndim + 1], batch index must be put in indices[:, 0]
 spatial_shape = # spatial shape of your sparse tensor, spatial_shape[i] is shape of indices[:, 1 + i].
@@ -45,7 +46,7 @@ x_dense_NCHW = x.dense() # convert sparse tensor to dense NCHW tensor.
 ### Sparse Convolution
 
 ```Python
-import spconv
+import spconv.pytorch as spconv
 from torch import nn
 class ExampleNet(nn.Module):
     def __init__(self, shape):

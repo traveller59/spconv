@@ -13,7 +13,17 @@
 # limitations under the License.
 
 import torch 
-if torch.__version__ >= "1.8.0":
+remove_plus = torch.__version__.find("+")
+remove_dotdev = torch.__version__.find(".dev")
+
+PYTORCH_VERSION = torch.__version__
+if remove_plus != -1:
+    PYTORCH_VERSION = torch.__version__[:remove_plus]
+if remove_dotdev != -1:
+    PYTORCH_VERSION = torch.__version__[:remove_dotdev]
+
+PYTORCH_VERSION = list(map(int, PYTORCH_VERSION.split(".")))
+if PYTORCH_VERSION >= [1, 8, 0]:
     from .core_fx import *
 else:
     from .core import *

@@ -28,23 +28,22 @@
 * VoxelGenerator has been replaced by Point2VoxelGPU[1-4]d/Point2VoxelCPU[1-4]d.
 * spconv 2.x don't support CPU for now
 
-* test spconv 2.x in spconv 1.x model: set environment variable before run program. Linux: ```export SPCONV_FILTER_HWIO="1"```, Windows powershell: ```$Env:SPCONV_FILTER_HWIO = "1"```
+* test spconv 1.x model in spconv 2.x: set environment variable before run program. Linux: ```export SPCONV_FILTER_HWIO="1"```, Windows powershell: ```$Env:SPCONV_FILTER_HWIO = "1"```
 
 ## News in Spconv 2.0.0
 
-* training/inference speed is increased
+* training/inference speed is increased (+50~80% for float32)
 * support int8/tensor core
 * doesn't depend on pytorch binary. 
 * since spconv 2.x doesn't depend on pytorch binary (never in future), it's impossible to support torch.jit/libtorch inference.
 
-## TODO in Spconv 2.x
-- [ ] Ampere (A100 / RTX 3000 series) feature support (work in progress)
-- [ ] torch QAT support (work in progress)
-- [ ] TensorRT (torch.fx based)
-- [ ] Build C++ only package
-- [ ] JIT compilation for CUDA kernels
-- [ ] Document (low priority)
-- [ ] CPU support (low priority)
+
+## Usage
+
+Firstly you need to use ```import spconv.pytorch as spconv``` in spconv 2.x.
+
+Then see docs/USAGE.md.
+
 
 ## Install
 
@@ -58,7 +57,7 @@ You need at least CUDA 10.2 to build and run spconv 2.x. We won't offer any supp
 
 We offer python 3.7-3.10 and 11.1/11.4 prebuilt binaries for linux (manylinux) and windows 10/11.
 
-CUDA 10.2 support will be added in version 2.0.1.
+CUDA 10.2 support will be added in version 2.0.2.
 
 We will offer prebuilts for CUDA versions supported by latest pytorch release. For example, pytorch 1.9 support cuda 10.2 and 11.1, so we support them too.
 
@@ -68,6 +67,8 @@ For Linux users, you need to install pip >= 20.3 first to install prebuilt.
 
 ```pip install spconv-cu114``` for CUDA 11.4
 
+**NOTE** It's safe to have different minor cuda version between system and conda (pytorch). for example, you can use spconv-cu114 with anaconda version of pytorch cuda 11.1 in a OS with CUDA 11.2 installed.
+
 ### Build from source
 
 You need to rebuild ```cumm``` first if you are build along a CUDA version that not provided in prebuilts.
@@ -76,7 +77,7 @@ You need to rebuild ```cumm``` first if you are build along a CUDA version that 
 
 1. install build-essential, install CUDA
 2. run ```export SPCONV_DISABLE_JIT="1"```
-3. run ```python setup.py install```/```pip install -e .```/```python setup.py bdist_wheel```+```pip install dists/xxx.whl```
+3. run ```python setup.py bdist_wheel```+```pip install dists/xxx.whl```
 
 #### Windows 10/11
 
@@ -84,15 +85,16 @@ You need to rebuild ```cumm``` first if you are build along a CUDA version that 
 2. set [powershell script execution policy](https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies?view=powershell-7.1)
 3. start a new powershell, run ```tools/msvc_setup.ps1```
 4. run ```$Env:SPCONV_DISABLE_JIT = "1"```
-5. run ```python setup.py install```/```pip install -e .```/```python setup.py bdist_wheel```+```pip install dists/xxx.whl```
+5. run ```python setup.py bdist_wheel```+```pip install dists/xxx.whl```
 
-
-
-
-
-## Documents
-
-see docs/USAGE.md.
+## TODO in Spconv 2.x
+- [ ] Ampere (A100 / RTX 3000 series) feature support (work in progress)
+- [ ] torch QAT support (work in progress)
+- [ ] TensorRT (torch.fx based)
+- [ ] Build C++ only package
+- [ ] JIT compilation for CUDA kernels
+- [ ] Document (low priority)
+- [ ] CPU support (low priority)
 
 ## Note
 
