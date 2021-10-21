@@ -28,6 +28,8 @@
 * VoxelGenerator has been replaced by Point2VoxelGPU[1-4]d/Point2VoxelCPU[1-4]d.
 * spconv 2.x don't support CPU for now
 
+* test spconv 2.x in spconv 1.x model: set environment variable before run program. Linux: ```export SPCONV_FILTER_HWIO="1"```, Windows powershell: ```$Env:SPCONV_FILTER_HWIO = "1"```
+
 ## News in Spconv 2.0.0
 
 * training/inference speed is increased
@@ -83,6 +85,10 @@ You need to rebuild ```cumm``` first if you are build along a CUDA version that 
 3. start a new powershell, run ```tools/msvc_setup.ps1```
 4. run ```$Env:SPCONV_DISABLE_JIT = "1"```
 5. run ```python setup.py install```/```pip install -e .```/```python setup.py bdist_wheel```+```pip install dists/xxx.whl```
+
+
+
+
 
 ## Documents
 
