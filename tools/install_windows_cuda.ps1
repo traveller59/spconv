@@ -18,7 +18,7 @@ $CUDA_KNOWN_URLS = @{
 
 if (($CUDA_VERSION_FULL -eq "10.2") -or ($CUDA_VERSION_FULL -eq "11.0") -or ($CUDA_VERSION_FULL -eq "11.1") -or ($CUDA_VERSION_FULL -eq "11.2")){
     $CUDA_PACKAGES_IN = @(
-        "cuda_nvcc";
+        "nvcc";
         "visual_studio_integration";
         "nvrtc_dev";
         "cudart";
