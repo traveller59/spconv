@@ -12,7 +12,7 @@ on:
   
 jobs:
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2019
     strategy:
       matrix:
         python-version: ['3.7', '3.8', '3.9', '3.10'] 
@@ -48,16 +48,7 @@ jobs:
           $Env:CUMM_CUDA_ARCH_LIST = "all"
           $Env:SPCONV_DISABLE_JIT = "1"
           pip install pccm pybind11
-          $CUDA_INCLUDE_THRUST = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v${{ matrix.cuda-version }}\include\thrust"
-          if (Test-Path -Path $CUDA_INCLUDE_THRUST) {
-          
-          } else {
-            git clone -b cuda-${{ matrix.cuda-version }} https://github.com/NVIDIA/thrust $HOME/thrust_git
-            ls $HOME/thrust_git/thrust
-            mv $HOME/thrust_git/thrust "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v${{ matrix.cuda-version }}\include"
-          }
           ls "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v${{ matrix.cuda-version }}\include\thrust"
-          $Env:CUMM_THRUST_INCLUDE = "$HOME/thrust_git"
           python -m build --wheel --outdir dist/ .
         shell: powershell
 

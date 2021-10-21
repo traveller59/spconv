@@ -10,17 +10,38 @@ $CUDA_KNOWN_URLS = @{
     "11.2" = "https://developer.download.nvidia.com/compute/cuda/11.2.2/network_installers/cuda_11.2.2_win10_network.exe";
     "11.3" = "https://developer.download.nvidia.com/compute/cuda/11.3.1/network_installers/cuda_11.3.1_win10_network.exe";
     "11.4" = "https://developer.download.nvidia.com/compute/cuda/11.4.2/network_installers/cuda_11.4.2_win10_network.exe";
+    "11.5" = "https://developer.download.nvidia.com/compute/cuda/11.5.0/network_installers/cuda_11.5.0_win10_network.exe";
 }
 
 # cuda_runtime.h is in nvcc <= 10.2, but cudart >= 11.0
 # @todo - make this easier to vary per CUDA version.
-$CUDA_PACKAGES_IN = @(
-    "nvcc";
-    "visual_studio_integration";
-    "curand_dev";
-    "nvrtc_dev";
-    "cudart";
-)
+
+if (($CUDA_VERSION_FULL -eq "10.2") -or ($CUDA_VERSION_FULL -eq "11.0") -or ($CUDA_VERSION_FULL -eq "11.1") -or ($CUDA_VERSION_FULL -eq "11.2")){
+    $CUDA_PACKAGES_IN = @(
+        "cuda_nvcc";
+        "visual_studio_integration";
+        "nvrtc_dev";
+        "cudart";
+        # before 11.3, thrust are included by default and no explicit package exists
+    )
+} elseif ($CUDA_VERSION_FULL -eq "11.3"){
+    $CUDA_PACKAGES_IN = @(
+        "nvcc";
+        "visual_studio_integration";
+        "cuda_nvrtc";
+        "cuda_cudart";
+        "cuda_thrust";
+    )
+} else {
+    # after cuda 11.4
+    $CUDA_PACKAGES_IN = @(
+        "nvcc";
+        "visual_studio_integration";
+        "nvrtc_dev";
+        "cudart";
+        "thrust"; 
+    )
+}
 
 
 ## -------------------
@@ -39,6 +60,7 @@ if(-not $cuda_ver_matched){
 }
 $CUDA_MAJOR=$Matches.major
 $CUDA_MINOR=$Matches.minor
+
 
 ## ------------------------------------------------
 ## Select CUDA packages to install from environment
