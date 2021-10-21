@@ -151,6 +151,9 @@ class Net(nn.Module):
                               bias=False,
                               indice_key="c6",
                               algo=algo),
+            spconv.SparseInverseConv3d(256, 128, 3, indice_key="c6", bias=False),
+            spconv.SparseInverseConv3d(128, 64, 3, indice_key="c5", bias=False),
+
         )
         max_batch_size = 1
         # grid (dense map) is used for indice generation. use pre-allocated grid can run faster.

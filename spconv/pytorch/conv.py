@@ -92,10 +92,6 @@ class SparseConvolution(SparseModule):
             dilation = [dilation] * ndim
         if not isinstance(output_padding, (list, tuple)):
             output_padding = [output_padding] * ndim
-
-        for d, s in zip(dilation, stride):
-            assert any([s == 1, d == 1]), "don't support this."
-
         self.ndim = ndim
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -186,11 +182,11 @@ class SparseConvolution(SparseModule):
             else:
                 features = torch.mm(
                     input.features,
-                    self.weight.view(self.in_channels, self.out_channels).T)
+                    self.weight.view(self.in_channels, self.out_channels))
 
             if self.bias is not None:
                 features += self.bias
-            out_tensor.features = features
+            out_tensor = out_tensor.replace_feature(features)
             return out_tensor
         datas = input.find_indice_pair(self.indice_key)
         if self.inverse:
@@ -272,8 +268,7 @@ class SparseConvolution(SparseModule):
                 features.shape[0])
             out_tensor.benchmark_record[self.name]["num_out_points"].append(
                 out_features.shape[0])
-
-        out_tensor.features = out_features
+        out_tensor = out_tensor.replace_feature(out_features)
         out_tensor.indices = outids
         out_tensor.spatial_shape = out_spatial_shape
         return out_tensor

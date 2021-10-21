@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
 import torch
@@ -44,15 +44,16 @@ def scatter_nd(indices, updates, shape):
     return ret
 
 
-class SparseConvTensor(object):
+class SparseConvTensor:
     def __init__(self,
-                 features,
-                 indices,
-                 spatial_shape,
-                 batch_size,
-                 grid=None,
-                 voxel_num=None,
-                 benchmark=False):
+                 features: torch.Tensor,
+                 indices: torch.Tensor,
+                 spatial_shape: List[int],
+                 batch_size: int,
+                 grid: Optional[torch.Tensor]=None,
+                 voxel_num: Optional[torch.Tensor]=None,
+                 indice_dict: Optional[dict] = None,
+                 benchmark: bool=False):
         """
         Args:
             features: [num_points, num_features] feature tensor
@@ -68,16 +69,18 @@ class SparseConvTensor(object):
         self.indices = indices
         self.spatial_shape = spatial_shape
         self.batch_size = batch_size
-        self.indice_dict = {}
+        if indice_dict is None:
+            indice_dict = {}
+        self.indice_dict = indice_dict
         if grid is None:
             grid = torch.Tensor()  # empty tensor
         self.grid = grid
-        self.voxel_num = voxel_num
+        self.voxel_num = voxel_num # for tensorrt
         self.benchmark = benchmark
         self.benchmark_record = {}
 
     def replace_feature(self, feature):
-        """we need to replace x.features = F.relu(x) with x = x.replace_feature(F.relu(x))
+        """we need to replace x.features = F.relu(x) with x = x.replace_feature(F.relu(x.features))
         due to limit of torch.fx
         """
         new_spt = SparseConvTensor(feature, self.indices, self.spatial_shape, self.batch_size, self.grid, self.voxel_num, self.indice_dict)
@@ -91,7 +94,7 @@ class SparseConvTensor(object):
 
     @features.setter
     def features(self, val):
-        msg = ("you can't set feature directly, use 'x = x.replace_feature(F.relu(x.feature))'"
+        msg = ("you can't set feature directly, use 'x = x.replace_feature(your_new_feature)'"
                 " to generate new SparseConvTensor instead.")
         raise ValueError(msg)
 
@@ -100,11 +103,11 @@ class SparseConvTensor(object):
         """create sparse tensor fron channel last dense tensor by to_sparse
         x must be NHWC tensor, channel last
         """
-        x = x.to_sparse(x.ndim - 1)
-        spatial_shape = x.shape[1:-1]
-        batch_size = x.shape[0]
-        indices_th = x.indices().permute(1, 0).contiguous().int()
-        features_th = x.values()
+        x_sp = x.to_sparse(x.ndim - 1)
+        spatial_shape = list(x_sp.shape[1:-1])
+        batch_size = x_sp.shape[0]
+        indices_th = x_sp.indices().permute(1, 0).contiguous().int()
+        features_th = x_sp.values()
         return cls(features_th, indices_th, spatial_shape, batch_size)
 
     @property
@@ -118,7 +121,7 @@ class SparseConvTensor(object):
             return self.indice_dict[key]
         return None
 
-    def dense(self, channels_first=True):
+    def dense(self, channels_first: bool=True):
         output_shape = [self.batch_size] + list(
             self.spatial_shape) + [self.features.shape[1]]
         res = scatter_nd(
@@ -131,6 +134,7 @@ class SparseConvTensor(object):
         trans_params.insert(1, ndim + 1)
         return res.permute(*trans_params).contiguous()
 
+    # remove this due to limit of torch.fx
     # @property
     # def sparity(self):
     #     return self.indices.shape[0] / np.prod(
@@ -140,7 +144,6 @@ class SparseConvTensor(object):
         """create a new spconv tensor with all member unchanged"""
         tensor = SparseConvTensor(self.features, self.indices,
                                   self.spatial_shape, self.batch_size,
-                                  self.grid, self.benchmark)
+                                  self.grid, self.voxel_num, self.indice_dict, self.benchmark)
         tensor.benchmark_record = self.benchmark_record
-        tensor.indice_dict = self.indice_dict
         return tensor

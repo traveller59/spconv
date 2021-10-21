@@ -135,8 +135,7 @@ class SparseMaxPool(SparseModule):
                 features.shape[0])
             out_tensor.benchmark_record[self.name]["num_out_points"].append(
                 out_features.shape[0])
-
-        out_tensor.features = out_features
+        out_tensor = out_tensor.replace_feature(out_features)
         out_tensor.indices = outids
         out_tensor.spatial_shape = out_spatial_shape
         return out_tensor

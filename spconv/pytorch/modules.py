@@ -100,7 +100,7 @@ class SparseSequential(SparseModule):
             if name in self._modules:
                 raise ValueError("name exists.")
             self.add_module(name, module)
-        self._sparity_dict = {}
+        # self._sparity_dict = {}
 
     def __getitem__(self, idx):
         if not (-len(self) <= idx < len(self)):
@@ -115,9 +115,9 @@ class SparseSequential(SparseModule):
     def __len__(self):
         return len(self._modules)
 
-    @property
-    def sparity_dict(self):
-        return self._sparity_dict
+    # @property
+    # def sparity_dict(self):
+    #     return self._sparity_dict
 
     def add(self, module, name=None):
         if name is None:
@@ -133,12 +133,12 @@ class SparseSequential(SparseModule):
                     input = module(input)
                 else:
                     assert isinstance(input, spconv.SparseConvTensor)
-                    self._sparity_dict[k] = input.sparity
+                    # self._sparity_dict[k] = input.sparity
                     input = module(input)
             else:
                 if isinstance(input, spconv.SparseConvTensor):
                     if input.indices.shape[0] != 0:
-                        input.features = module(input.features)
+                        input.replace_feature(module(input.features))
                 else:
                     input = module(input)
         return input

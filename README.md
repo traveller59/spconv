@@ -84,6 +84,10 @@ You need to rebuild ```cumm``` first if you are build along a CUDA version that 
 4. run ```$Env:SPCONV_DISABLE_JIT = "1"```
 5. run ```python setup.py install```/```pip install -e .```/```python setup.py bdist_wheel```+```pip install dists/xxx.whl```
 
+## Documents
+
+see docs/USAGE.md.
+
 ## Note
 
 The work is done when the author is an employee at Tusimple.
