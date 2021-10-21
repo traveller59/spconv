@@ -48,9 +48,8 @@ jobs:
           $Env:CUMM_CUDA_ARCH_LIST = "all"
           $Env:SPCONV_DISABLE_JIT = "1"
           pip install pccm pybind11
-          git clone -b cuda-$CUMM_CUDA_VERSION --depth 1 https://github.com/NVIDIA/thrust
-          $CURRENT_DIR = (Get-Location).path
-          $Env:CUMM_THRUST_INCLUDE = "$CURRENT_DIR\thrust"
+          git clone -b cuda-$CUMM_CUDA_VERSION https://github.com/NVIDIA/thrust $HOME/thrust_git
+          $Env:CUMM_THRUST_INCLUDE = "$HOME/thrust_git"
           python -m build --wheel --outdir dist/ .
         shell: powershell
 

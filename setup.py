@@ -162,7 +162,8 @@ if disable_jit is not None and disable_jit == "1":
                       objects_folder="objects",
                       std=std,
                       disable_pch=True,
-                      verbose=True)
+                      verbose=True,
+                      debug_file_gen=True)
     ]
 else:
     cmdclass = {
