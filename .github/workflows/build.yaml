@@ -49,7 +49,8 @@ jobs:
           $Env:SPCONV_DISABLE_JIT = "1"
           pip install pccm pybind11
           git clone https://github.com/NVIDIA/thrust -b cuda-{{ env.CUDA_VERSION }} --depth 1
-          $Env:CUMM_THRUST_INCLUDE = "$PSScriptRoot\thrust"
+          $CURRENT_DIR = (Get-Location).path
+          $Env:CUMM_THRUST_INCLUDE = "$CURRENT_DIR\thrust"
           python -m build --wheel --outdir dist/ .
         shell: powershell
 
@@ -91,7 +92,7 @@ jobs:
         if: (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) && (env.CUDA_VERSION != '') ) || (env.CUDA_VERSION == '114' && env.PYTHON_VERSION == '3.10')
         run: |
           chmod +x tools/build-wheels.sh
-          docker run --rm -e PLAT=$PLAT -e CUMM_CUDA_VERSION=${{ matrix.cuda-version }} -e SPCONV_PYTHON_LIST=${{env.PYTHON_VERSION}} -v `pwd`:/io $DOCKER_IMAGE bash -c "/io/tools/build-wheels.sh"
+          docker run --rm -e PLAT=$PLAT -e CUMM_CUDA_VERSION=${{ matrix.cuda-version }} -e SPCONV_PYTHON_LIST=${{env.PYTHON_VERSION}} -v `pwd`:/io $DOCKER_IMAGE bash -c "source /etc/bashrc && /io/tools/build-wheels.sh"
 
       - name: Publish a Python distribution to PyPI
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')

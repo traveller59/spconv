@@ -24,7 +24,7 @@ function repair_wheel {
         auditwheel repair "$wheel" --plat "$PLAT" -w "$outpath"
     fi
 }
-
+gcc -v
 export SPCONV_DISABLE_JIT="1"
 export CUMM_CUDA_ARCH_LIST="all"
 # export SPCONV_PYTHON_LIST="3.7;3.8;3.9;3.10"
