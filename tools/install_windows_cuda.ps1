@@ -15,6 +15,7 @@ $CUDA_KNOWN_URLS = @{
 
 # cuda_runtime.h is in nvcc <= 10.2, but cudart >= 11.0
 # @todo - make this easier to vary per CUDA version.
+$CUDA_VERSION_FULL = $env:cuda
 
 if (($CUDA_VERSION_FULL -eq "10.2") -or ($CUDA_VERSION_FULL -eq "11.0") -or ($CUDA_VERSION_FULL -eq "11.1") -or ($CUDA_VERSION_FULL -eq "11.2")){
     $CUDA_PACKAGES_IN = @(
@@ -49,7 +50,6 @@ if (($CUDA_VERSION_FULL -eq "10.2") -or ($CUDA_VERSION_FULL -eq "11.0") -or ($CU
 ## -------------------
 
 # Get the cuda version from the environment as env:cuda.
-$CUDA_VERSION_FULL = $env:cuda
 # Make sure CUDA_VERSION_FULL is set and valid, otherwise error.
 
 # Validate CUDA version, extracting components via regex
