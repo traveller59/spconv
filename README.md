@@ -30,6 +30,11 @@
 
 * test spconv 1.x model in spconv 2.x: set environment variable before run program. Linux: ```export SPCONV_FILTER_HWIO="1"```, Windows powershell: ```$Env:SPCONV_FILTER_HWIO = "1"```
 
+## Upcoming release Spconv 2.1.0 (10.31.2021): 
+* implicit gemm algorithm, greatly faster than native algorithm when using float16 (tested in RTX 3080 Laptop).
+* simple CPU support and CPU-only build
+* bug fix
+
 ## News in Spconv 2.0.0
 
 * training/inference speed is increased (+50~80% for float32)
