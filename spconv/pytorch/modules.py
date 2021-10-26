@@ -138,7 +138,7 @@ class SparseSequential(SparseModule):
             else:
                 if isinstance(input, spconv.SparseConvTensor):
                     if input.indices.shape[0] != 0:
-                        input.replace_feature(module(input.features))
+                        input = input.replace_feature(module(input.features))
                 else:
                     input = module(input)
         return input

@@ -119,7 +119,7 @@ class SparseMaxPool(SparseModule):
             datas = input.find_indice_pair(self.indice_key)
             if datas is None:
                 indice_data = IndiceData(outids, indices, indice_pairs,
-                                         indice_pairs_num, spatial_shape)
+                                         indice_pairs_num, spatial_shape, is_subm=False)
                 input.indice_dict[self.indice_key] = indice_data
             else:
                 raise ValueError("indice data exists")
@@ -147,12 +147,14 @@ class SparseMaxPool1d(SparseMaxPool):
                  stride=None,
                  padding=0,
                  dilation=1,
+                 indice_key=None,
                  name=None):
         super(SparseMaxPool1d, self).__init__(1,
                                               kernel_size,
                                               stride,
                                               padding,
                                               dilation,
+                                              indice_key=indice_key,
                                               name=name)
 
 class SparseMaxPool2d(SparseMaxPool):
@@ -161,12 +163,14 @@ class SparseMaxPool2d(SparseMaxPool):
                  stride=None,
                  padding=0,
                  dilation=1,
+                 indice_key=None,
                  name=None):
         super(SparseMaxPool2d, self).__init__(2,
                                               kernel_size,
                                               stride,
                                               padding,
                                               dilation,
+                                              indice_key=indice_key,
                                               name=name)
 
 
@@ -176,12 +180,14 @@ class SparseMaxPool3d(SparseMaxPool):
                  stride=None,
                  padding=0,
                  dilation=1,
+                 indice_key=None,
                  name=None):
         super(SparseMaxPool3d, self).__init__(3,
                                               kernel_size,
                                               stride,
                                               padding,
                                               dilation,
+                                              indice_key=indice_key,
                                               name=name)
 
 class SparseMaxPool4d(SparseMaxPool):
@@ -190,10 +196,12 @@ class SparseMaxPool4d(SparseMaxPool):
                  stride=None,
                  padding=0,
                  dilation=1,
+                 indice_key=None,
                  name=None):
         super(SparseMaxPool4d, self).__init__(4,
                                               kernel_size,
                                               stride,
                                               padding,
                                               dilation,
+                                              indice_key=indice_key,
                                               name=name)

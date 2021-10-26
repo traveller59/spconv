@@ -191,6 +191,7 @@ class SparseConvolution(SparseModule):
         datas = input.find_indice_pair(self.indice_key)
         if self.inverse:
             assert datas is not None and self.indice_key is not None
+            assert datas.is_subm is False, "inverse conv can only be used with standard conv and pool ops."
             outids = datas.indices
             indice_pairs = datas.indice_pairs
             indice_pair_num = datas.indice_pair_num
@@ -226,7 +227,7 @@ class SparseConvolution(SparseModule):
                         self.name]["indice_gen_time"].append(interval)
 
                 indice_data = IndiceData(outids, indices, indice_pairs,
-                                         indice_pair_num, spatial_shape)
+                                         indice_pair_num, spatial_shape, is_subm=self.subm)
                 input.indice_dict[self.indice_key] = indice_data
         if input.benchmark:
             torch.cuda.synchronize()

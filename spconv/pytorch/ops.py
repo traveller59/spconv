@@ -26,7 +26,8 @@ from spconv.core_cc.csrc.sparse.all import SpconvOps
 from spconv.algo import GEMM  # , GATHER, SCATTER
 import time
 from spconv.constants import FILTER_HWIO
-
+import pickle 
+from pathlib import Path 
 
 def get_conv_output_size(input_size, kernel_size, stride, padding, dilation):
     ndim = len(input_size)
@@ -78,6 +79,8 @@ def get_indice_pairs(indices: torch.Tensor,
                                              padding, dilation)
     else:
         out_shape = spatial_shape
+    if any([x == 0 for x in out_shape]):
+        raise ValueError(f"your out spatial shape {out_shape} reach zero!!! input shape: {spatial_shape}")
     assert algo == ConvAlgo.Native, "TODO"
     stream = get_current_stream()
 
@@ -205,6 +208,9 @@ def indice_conv(features: torch.Tensor,
 
     stream = get_current_stream()
     indice_pair_num_cpu = indice_pair_num.cpu().tolist()
+    if subm and all(x == 0 for x in indice_pair_num_cpu):
+        return out_features
+
     arch = torch.cuda.get_device_capability()
     inited: bool = subm
     a = torch_tensor_to_tv(features)
@@ -214,7 +220,14 @@ def indice_conv(features: torch.Tensor,
         profile_idx = kv_center - 1
     # profile_idx = first_n
     nhot_profile = indice_pair_num_cpu[profile_idx]
-
+    if nhot_profile == 0:
+        # find a non-zero profile index
+        profile_idx = 0
+        for i, nhot in enumerate(indice_pair_num_cpu):
+            if nhot > nhot_profile:
+                nhot_profile = nhot
+                profile_idx = i
+    assert nhot_profile > 0, "this shouldn't happen"
     # print(nhot_profile, indice_pair_num_cpu)
     profile_res = GEMM.get_profiled_algo(
         a.shape,
@@ -294,8 +307,6 @@ def indice_conv(features: torch.Tensor,
     # # print(stream, valid_count, maxnhot, features.shape[0], features.shape[1], out_channel, time.time() - t, total_times, txt)
     # # print(algo_desp, profile_res.external_gather, profile_res.splitk, features.shape[0], features.shape[1], out_channel, time.time() - t)
 
-    # # print(indice_pair_num_cpu)
-    # print("G", time.time() - t)
     return out_features
 
 
@@ -312,15 +323,14 @@ def indice_conv_backward(features: torch.Tensor,
                          inverse: bool = False,
                          subm: bool = False,
                          algo: ConvAlgo = ConvAlgo.Native):
-    # torch.cuda.synchronize()
-    # t = time.time()
-
     num_activate_out = out_bp.shape[0]
     out_channel = out_bp.shape[-1]
     filters_shape = filters.shape
     filters = filters.reshape(-1, *filters.shape[-2:])
     kv = filters.shape[0]
     kv_center = kv // 2
+    if not out_bp.is_contiguous():
+        out_bp = out_bp.contiguous()
     assert out_bp.is_contiguous()
     assert filters.is_contiguous()
     assert features.is_contiguous()
@@ -349,6 +359,9 @@ def indice_conv_backward(features: torch.Tensor,
 
     stream = get_current_stream()
     indice_pair_num_cpu = indice_pair_num.cpu().tolist()
+    if subm and all(x == 0 for x in indice_pair_num_cpu):
+        return (din, dfilters.reshape(filters_shape))
+
     arch = torch.cuda.get_device_capability()
     filters_tv = torch_tensor_to_tv(filters)
 
@@ -359,10 +372,18 @@ def indice_conv_backward(features: torch.Tensor,
     din_tv = torch_tensor_to_tv(din)
 
     profile_idx = kv_center
-    if subm:
+    if subm or indice_pair_num_cpu[profile_idx] == 0:
         profile_idx = kv_center - 1
     # profile_idx = first_n
     nhot_profile = indice_pair_num_cpu[profile_idx]
+    if nhot_profile == 0:
+        # find a non-zero profile index
+        profile_idx = 0
+        for i, nhot in enumerate(indice_pair_num_cpu):
+            if nhot > nhot_profile:
+                nhot_profile = nhot
+                profile_idx = i
+    assert nhot_profile > 0, "this shouldn't happen"
 
     # print(nhot_profile, indice_pair_num_cpu)
     profile_res_dgrad = GEMM.get_profiled_algo(
@@ -549,11 +570,12 @@ def indice_maxpool(features, indice_pairs, indice_pair_num, num_activate_out):
     indice_pair_num_cpu = indice_pair_num.cpu().tolist()
     out_features_tv = torch_tensor_to_tv(out_features)
     features_tv = torch_tensor_to_tv(features)
+    indice_pairs_tv = torch_tensor_to_tv(indice_pairs)
     for i, nhot in enumerate(indice_pair_num_cpu):
         if nhot <= 0:
             continue
-        inp_indices = torch_tensor_to_tv(indice_pairs[0][i, :nhot])
-        out_indices = torch_tensor_to_tv(indice_pairs[1][i, :nhot])
+        inp_indices = indice_pairs_tv[0][i].slice_first_axis(0, nhot)
+        out_indices = indice_pairs_tv[1][i].slice_first_axis(0, nhot)
         SpconvOps.maxpool_forward(out_features_tv, features_tv, out_indices,
                                   inp_indices, stream)
     # torch.cuda.synchronize()
@@ -568,15 +590,18 @@ def indice_maxpool_backward(features, out_features, out_bp, indice_pairs,
     din = torch.zeros_like(features)
     stream = get_current_stream()
     indice_pair_num_cpu = indice_pair_num.cpu().tolist()
+    if not out_bp.is_contiguous():
+        out_bp = out_bp.contiguous()
     out_features_tv = torch_tensor_to_tv(out_features)
     features_tv = torch_tensor_to_tv(features)
     out_bp_tv = torch_tensor_to_tv(out_bp)
     din_tv = torch_tensor_to_tv(din)
+    indice_pairs_tv = torch_tensor_to_tv(indice_pairs)
     for i, nhot in enumerate(indice_pair_num_cpu):
         if nhot <= 0:
             continue
-        inp_indices = torch_tensor_to_tv(indice_pairs[0][i, :nhot])
-        out_indices = torch_tensor_to_tv(indice_pairs[1][i, :nhot])
+        inp_indices = indice_pairs_tv[0][i].slice_first_axis(0, nhot)
+        out_indices = indice_pairs_tv[1][i].slice_first_axis(0, nhot)
         SpconvOps.maxpool_backward(out_features_tv, features_tv, out_bp_tv,
                                    din_tv, out_indices, inp_indices, stream)
 

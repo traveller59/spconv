@@ -18,6 +18,9 @@
 
 [![Build Status](https://github.com/traveller59/spconv/workflows/build/badge.svg)](https://github.com/traveller59/spconv/actions?query=workflow%3Abuild)
 
+# !!!!!!!!!!
+If you are using spconv < 2.0.2, update after spconv 2.0.2 build success or check [this issue](https://github.com/traveller59/spconv/issues/340#issuecomment-951493008) to fix a serious bug, I'm so sorry for this stupid bug.
+
 ## Breaking changes in Spconv 2.x
 
 * ```spconv.xxx``` move to ```spconv.pytorch.xxx```, change all ```import spconv``` to ```import spconv.pytorch as spconv``` and ```from spconv.xxx import``` to ```from spconv.pytorch.xxx import```.
@@ -42,6 +45,13 @@
 * doesn't depend on pytorch binary. 
 * since spconv 2.x doesn't depend on pytorch binary (never in future), it's impossible to support torch.jit/libtorch inference.
 
+Spconv 2.1.0 vs 1.x speed:
+
+|                | 1080Ti Spconv 1.x F32 | 1080Ti Spconv 2.0 F32 | 3080M* Spconv 2.1 F16  |
+| -------------- |:---------------------:| ---------------------:| ----------:|
+| 27x128x128 Fwd | 11ms                  | 5.4ms                 | 1.4ms      |
+
+\* 3080M (Laptop) ~= 3070 Desktop
 
 ## Usage
 

@@ -716,7 +716,7 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
             if (indice_pair_mask.ndim() == 2 && indice_pair_mask.dim(0) == 2){{
                 auto mask_0 = indice_pair_mask[0];
                 tv::cuda::Launch lanucher_fill(mask_0.size(), custream);
-                lanucher_fill(cudakers::fill_kernel<int>, mask_0.data_ptr<int>(), (1 << (kv / 2)), mask_0.size());
+                lanucher_fill(cudakers::fill_kernel<uint32_t>, mask_0.data_ptr<uint32_t>(), (1 << (kv / 2)), mask_0.size());
                 indice_pair_mask[1].zero_(ctx);
                 auto kernel = &calc_subm_conv_indices_split_mask<table_t>;
                 launcher_num_act_in(kernel, loc_iter, hash,  
@@ -725,7 +725,7 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                     indices.dim(0), indice_pairs.dim(2), kv);
             }}else{{
                 tv::cuda::Launch lanucher_fill(indice_pair_mask.size(), custream);
-                lanucher_fill(cudakers::fill_kernel<int>, indice_pair_mask.data_ptr<int>(), (1 << (kv / 2)), indice_pair_mask.size());
+                lanucher_fill(cudakers::fill_kernel<uint32_t>, indice_pair_mask.data_ptr<uint32_t>(), (1 << (kv / 2)), indice_pair_mask.size());
                 TV_ASSERT_RT_ERR(indice_pair_mask.ndim() == 1, "error");
                 launcher_num_act_in(calc_subm_conv_indices_mask<table_t>, loc_iter, hash, 
                     indices.data_ptr<int>(), indice_pairs.data_ptr<int>(), 
