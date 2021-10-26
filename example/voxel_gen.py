@@ -19,6 +19,7 @@ from spconv.utils import Point2VoxelCPU3d
 
 
 def main():
+    # voxel gen source code: spconv/csrc/sparse/pointops.py
     gen = Point2VoxelCPU3d(
         vsize_xyz=[0.1, 0.1, 0.1], 
         coors_range_xyz=[-80, -80, -2, 80, 80, 6], 
@@ -31,8 +32,18 @@ def main():
     # generate voxels, note that voxels_tv reference to a persistent buffer in generator,
     # so we can't run it in multi-thread.
     voxels_tv, indices_tv, num_p_in_vx_tv = gen.point_to_voxel(pc_tv)
+    voxels_np = voxels_tv.numpy_view()
+    indices_np = indices_tv.numpy_view()
+    num_p_in_vx_np = num_p_in_vx_tv.numpy_view()
+    print("------Raw Voxels-------")
+    print(voxels_np[0])
     # run voxel gen and FILL MEAN VALUE to voxel remain
     voxels_tv, indices_tv, num_p_in_vx_tv = gen.point_to_voxel_empty_mean(pc_tv)
+    voxels_np = voxels_tv.numpy_view()
+    indices_np = indices_tv.numpy_view()
+    num_p_in_vx_np = num_p_in_vx_tv.numpy_view()
+    print("------Voxels with mean filled-------")
+    print(voxels_np[0])
 
 if __name__ == "__main__":
     main()
