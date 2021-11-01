@@ -18,8 +18,7 @@
 
 [![Build Status](https://github.com/traveller59/spconv/workflows/build/badge.svg)](https://github.com/traveller59/spconv/actions?query=workflow%3Abuild)
 
-# !!!!!!!!!!
-If you are using spconv < 2.0.2, update after spconv 2.0.2 build success or check [this issue](https://github.com/traveller59/spconv/issues/340#issuecomment-951493008) to fix a serious bug, I'm so sorry for this stupid bug.
+[Spconv 1.x code](https://github.com/traveller59/spconv/tree/v1.2.1). We won't provide any support for spconv 1.x since it's deprecated. use spconv 2.x if possible.
 
 ## Breaking changes in Spconv 2.x
 
