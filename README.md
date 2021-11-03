@@ -32,10 +32,14 @@
 
 * test spconv 1.x model in spconv 2.x: set environment variable before run program. Linux: ```export SPCONV_FILTER_HWIO="1"```, Windows powershell: ```$Env:SPCONV_FILTER_HWIO = "1"```
 
-## Upcoming release Spconv 2.1.0 (10.31.2021, Delay to 11.3.2021, sorry): 
+## Upcoming release Spconv 2.1.0 (Delay to 11.7.2021, sorry):
+
+**Status**: CPU build is ready. implicit gemm is ready. working on implicit-gemm-style indice generation for standard conv/pool, and implicit-gemm-style maxpool op.
+
 * implicit gemm algorithm, greatly faster than native algorithm when using float16 (tested in RTX 3080 Laptop).
 * simple CPU support and CPU-only build
-* bug fix
+* add pytorch cpu/cuda voxel generator
+* fix a bug of mixed precision training.
 
 ## News in Spconv 2.0.0
 
