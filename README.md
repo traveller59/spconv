@@ -49,14 +49,6 @@ Spconv 2.1 vs 1.x speed:
 TODO Spconv vs [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine) vs [torchsparse](https://github.com/mit-han-lab/torchsparse)
 -->
 
-
-## Roadmap for Spconv 2.2-2.3: 
-* TensorFormat32 support for faster fp32 training when you use NVIDIA Geforce RTX 30x0/Tesla A100/Quadro RTX Ax000 (2.2)
-* change implicit gemm weight layout from KRSC to RSKC to make sure we can use native algorithm with implicit gemm weight. (2.2)
-* documents (2.2)
-* Ampere feature support (2.3)
-* pytorch int8 inference, and QAT support (2.3)
-
 ## Usage
 
 Firstly you need to use ```import spconv.pytorch as spconv``` in spconv 2.x.
@@ -89,7 +81,7 @@ CUDA 11.1 will be removed in spconv 2.2 because pytorch 1.10 don't provide prebu
 
 ```pip install spconv-cu111``` for CUDA 11.1
 
-```pip install spconv-cu113``` for CUDA 11.3
+```pip install spconv-cu113``` for CUDA 11.3 (**Linux Only**)
 
 ```pip install spconv-cu114``` for CUDA 11.4
 
@@ -137,6 +129,13 @@ You need to rebuild ```cumm``` first if you are build along a CUDA version that 
 4. run ```$Env:SPCONV_DISABLE_JIT = "1"```
 5. run ```pip install pccm cumm wheel```
 6. run ```python setup.py bdist_wheel```+```pip install dists/xxx.whl```
+
+## Roadmap for Spconv 2.2-2.3: 
+* TensorFormat32 support for faster fp32 training when you use NVIDIA Geforce RTX 30x0/Tesla A100/Quadro RTX Ax000 (2.2)
+* change implicit gemm weight layout from KRSC to RSKC to make sure we can use native algorithm with implicit gemm weight. (2.2)
+* documents (2.2)
+* Ampere feature support (2.3)
+* pytorch int8 inference, and QAT support (2.3)
 
 ## TODO in Spconv 2.x
 - [ ] Ampere (A100 / RTX 3000 series) feature support (work in progress)
