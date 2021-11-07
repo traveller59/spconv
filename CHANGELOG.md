@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.1.0] - 2021-10-31
+### Addad
+* add implicit gemm algorithm for all kind of convolution with kernel volume <= 32. this algorithm is very fast with float16.
+* add pytorch wrapper for voxel generator
+* add CPU support and CPU-only build.
+
+## [2.0.2] - 2021-10-26
+### Fixed
+- Fix a serious bug that do nothing with non-spconv layers in SparseSequential
+- Fix a bug of ProxyableClassMeta
+
 ## [2.0.0] - 2021-10-16
 ### Changed
 - Change build system from cmake to pccm.

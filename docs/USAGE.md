@@ -52,7 +52,7 @@ class ExampleNet(nn.Module):
     def __init__(self, shape):
         super().__init__()
         self.net = spconv.SparseSequential(
-            spconv.SparseConv3d(32, 64, 3), # just like nn.Conv3d but don't support group and all([d > 1, s > 1])
+            spconv.SparseConv3d(32, 64, 3), # just like nn.Conv3d but don't support group
             nn.BatchNorm1d(64), # non-spatial layers can be used directly in SparseSequential.
             nn.ReLU(),
             spconv.SubMConv3d(64, 64, 3, indice_key="subm0"),
@@ -100,6 +100,9 @@ class ExampleNet(nn.Module):
         return self.net(x)
 ```
 
+### Fast Mixed Percision Training
+
+see example/mnist_sparse. we support ```torch.cuda.amp```.
 
 ### Utility functions
 
@@ -107,23 +110,18 @@ class ExampleNet(nn.Module):
 
 voxel generator in spconv generate indices in **ZYX** order, the params format are **XYZ**.
 
-voxel generator in spconv takes a ```tv.Tensor``` return a ```tv.Tensor```, this tensor reference to a **permanent** storage in generator.
-
+generated indices don't include batch axis, you need to add it by yourself.
 
 ```Python
-from spconv.utils import Point2VoxelCPU3d
+from spconv.pytorch.utils import PointToVoxel
 # this generator generate ZYX indices.
-gen = Point2VoxelCPU3d(
+gen = PointToVoxel(
     vsize_xyz=[0.1, 0.1, 0.1], 
     coors_range_xyz=[-80, -80, -2, 80, 80, 6], 
     num_point_features=3, 
     max_num_voxels=5000, 
     max_num_points_per_voxel=5)
 pc = np.random.uniform(-10, 10, size=[1000, 3])
-pc_tv = tv.from_numpy(pc)
-voxels, coords, num_points_per_voxel = gen.generate(pc_tv)
-
-# get numpy
-voxels_np = voxels.numpy_view() # no copy, but become invalid if generator is destroyed.
-voxels_np = voxels.numpy() # will perform copy
+pc_th = torch.from_numpy(pc)
+voxels, coords, num_points_per_voxel = gen(pc_th)
 ```
