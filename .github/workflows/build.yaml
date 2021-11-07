@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.7', '3.8', '3.9', '3.10'] 
-        cuda-version: ['10.2', '11.1', '11.4']
+        cuda-version: ['10.2', '11.1', '11.3', '11.4']
     steps:
       - uses: actions/checkout@master
       - uses: dorny/paths-filter@v2

@@ -28,7 +28,7 @@ if (($CUDA_VERSION_FULL -eq "10.2") -or ($CUDA_VERSION_FULL -eq "11.0") -or ($CU
     )
 } elseif ($CUDA_VERSION_FULL -eq "11.3"){
     $CUDA_PACKAGES_IN = @(
-        "nvcc";
+        "cuda_nvcc";
         "visual_studio_integration";
         "cuda_nvrtc";
         "cuda_cudart";
