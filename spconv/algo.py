@@ -14,23 +14,23 @@
 
 from enum import Enum
 from cumm import tensorview as tv
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set, Tuple, Union
 from spconv.core_cc.cumm.gemm.main import GemmAlgoDesp, GemmMainUnitTest, GemmParams
-# from spconv.core_cc.cumm.gemm.gather import GatherAll, ScatterAll
-from cumm.gemm.algospec.core import ShuffleStrideType, get_min_arch_of_algo_str, get_available_algo_str_from_arch
+from spconv.core_cc.cumm.conv.main import ConvAlgoDesp, ConvMainUnitTest, ConvParams
+from cumm.conv.bases import ConvLayout, ConvLayoutType, ConvOpType
+from cumm.gemm.algospec.core import GemmAlgo, ShuffleStrideType, get_min_arch_of_algo_str, get_available_algo_str_from_arch
 from cumm.gemm.codeops import group_by, div_up
+from spconv.constants import NDIM_DONT_CARE
 from typing import Optional
 import time
-
+from threading import Lock
+import torch 
 import numpy as np
-from .core import ConvAlgo, AlgoHint
+from spconv.core import ConvAlgo, AlgoHint
 
 ALL_ALGO_DESPS = GemmMainUnitTest.get_all_algo_desp()
-
+ALL_CONV_ALGO_DESPS = ConvMainUnitTest.get_all_conv_algo_desp()
 _GEMM_STATIC_KEY = Tuple[bool, bool, bool, int, int, int, str, str]
-
-# GATHER = GatherAll()
-# SCATTER = ScatterAll()
 
 
 class SimpleGemmAlgoMeta:
@@ -44,25 +44,21 @@ class SimpleGemmAlgoMeta:
 
 
 class BestAlgoByProfile:
-    def __init__(self,
-                 algo_desp: GemmAlgoDesp,
-                 external_gather: bool,
-                 external_scatter: bool,
-                 gather_params: Optional[Tuple[int, int, int, int]] = None,
-                 scatter_params: Optional[Tuple[int, int, int, int]] = None,
-                 splitk: int = 1) -> None:
+    def __init__(self, algo_desp: GemmAlgoDesp, splitk: int = 1) -> None:
         self.algo_desp = algo_desp
-        self.external_gather = external_gather
-        self.external_scatter = external_scatter
-        self.gather_params = gather_params
-        self.scatter_params = scatter_params
+        self.splitk = splitk
+
+
+class BestConvAlgoByProfile:
+    def __init__(self, algo_desp: ConvAlgoDesp, splitk: int = 1) -> None:
+        self.algo_desp = algo_desp
         self.splitk = splitk
 
 
 class SimpleGemm:
     def __init__(self, desps: List[GemmAlgoDesp]) -> None:
         self.desps = desps
-
+        self.lock = Lock()
         self.static_key_to_desps = group_by(self.get_static_key, desps)
         self.static_key_to_meta: Dict[_GEMM_STATIC_KEY,
                                       SimpleGemmAlgoMeta] = {}
@@ -89,12 +85,13 @@ class SimpleGemm:
             self.static_key_to_meta[k] = SimpleGemmAlgoMeta(
                 tile_ms_list, tile_ns_list, tile_ks_list, tile_shape_to_algos)
 
-        self.nk_forward_cache: Dict[Tuple[int, int],
-                            BestAlgoByProfile] = {}  # for forward
-        self.nk_dgrad_cache: Dict[Tuple[int, int],
-                            BestAlgoByProfile] = {}  # for backward weight
+        self.nk_forward_cache: Dict[Tuple[int, int, int, int, int],
+                                    BestAlgoByProfile] = {}  # for forward
+        self.nk_dgrad_cache: Dict[Tuple[int, int,
+                                        int, int, int], BestAlgoByProfile] = {
+                                        }  # for backward weight
 
-        self.mn_cache: Dict[Tuple[int, int],
+        self.mn_cache: Dict[Tuple[int, int, int, int, int],
                             BestAlgoByProfile] = {}  # for backward weight
 
     @staticmethod
@@ -130,6 +127,9 @@ class SimpleGemm:
             if desps is None or len(desps) == 0:
                 continue
             for desp in desps:
+                # skip volta tensor op since it is very slow in architectures except volta.
+                if arch >= (7, 5) and desp.algo == GemmAlgo.Volta.value:
+                    continue
                 lda = a.dim(1)
                 ldb = b.dim(1)
                 ldc = c.dim(1)
@@ -150,8 +150,8 @@ class SimpleGemm:
                b_inds: tv.Tensor = tv.Tensor(),
                c_inds: tv.Tensor = tv.Tensor(),
                hint: int = AlgoHint.NoHint.value):
-        m, n, k = GemmMainUnitTest.extract_mnk(a.shape, b.shape,
-                                               trans_a, trans_b, trans_c,
+        m, n, k = GemmMainUnitTest.extract_mnk(a.shape, b.shape, trans_a,
+                                               trans_b, trans_c,
                                                shuffle_type.value,
                                                a_inds.shape, b_inds.shape,
                                                c_inds.shape)
@@ -227,8 +227,11 @@ class SimpleGemm:
             return finally_algos[0]
         return None
 
-    def get_profiled_algo(
+    def get_tuned_algo(
             self,
+            a_dtype: int,
+            b_dtype: int,
+            c_dtype: int,
             a_shape: List[int],
             b_shape: List[int],
             c_shape: List[int],
@@ -247,19 +250,19 @@ class SimpleGemm:
             b_inds_shape = []
         if c_inds_shape is None:
             c_inds_shape = []
-        m, n, k = GemmMainUnitTest.extract_mnk(a_shape, b_shape,
-                                               trans_a, trans_b, trans_c,
+        m, n, k = GemmMainUnitTest.extract_mnk(a_shape, b_shape, trans_a,
+                                               trans_b, trans_c,
                                                shuffle_type.value,
                                                a_inds_shape, b_inds_shape,
                                                c_inds_shape)
         if hint & AlgoHint.BackwardWeight.value:
-            key = (m, n)
+            key = (a_dtype, b_dtype, c_dtype, m, n)
             return self.mn_cache.get(key, None)
         elif hint & AlgoHint.BackwardInput.value:
-            key = (n, k)
+            key = (a_dtype, b_dtype, c_dtype, n, k)
             return self.nk_dgrad_cache.get(key, None)
         elif hint & AlgoHint.Fowrard.value:
-            key = (n, k)
+            key = (a_dtype, b_dtype, c_dtype, n, k)
             return self.nk_forward_cache.get(key, None)
         raise NotImplementedError
 
@@ -282,14 +285,14 @@ class SimpleGemm:
             b_inds_shape = []
         if c_inds_shape is None:
             c_inds_shape = []
-        m, n, k = GemmMainUnitTest.extract_mnk(a_shape, b_shape,
-                                               trans_a, trans_b, trans_c,
+        m, n, k = GemmMainUnitTest.extract_mnk(a_shape, b_shape, trans_a,
+                                               trans_b, trans_c,
                                                shuffle_type.value,
                                                a_inds_shape, b_inds_shape,
                                                c_inds_shape)
         return m, n, k
 
-    def profile_and_cache(
+    def tune_and_cache(
             self,
             a: tv.Tensor,
             b: tv.Tensor,
@@ -309,77 +312,18 @@ class SimpleGemm:
             scatter_data: tv.Tensor = tv.Tensor(),
             # mm_func
             stream: int = 0):
-        m, n, k = GemmMainUnitTest.extract_mnk(a.shape, b.shape,
-                                               trans_a, trans_b, trans_c,
+        m, n, k = GemmMainUnitTest.extract_mnk(a.shape, b.shape, trans_a,
+                                               trans_b, trans_c,
                                                shuffle_type.value,
                                                a_inds.shape, b_inds.shape,
                                                c_inds.shape)
-        if hint & AlgoHint.BackwardWeight.value:
-            key = (m, n)
-        else:
-            key = (n, k)
-
         avail = self.get_all_available(a, b, c, trans_a, trans_b, trans_c,
                                        arch, shuffle_type)
+
         c_ = c.clone()
         times: List[float] = []
-        # gather_algos: List[GemmAlgoDesp] = []
-        # find fastest gather algo for this input
         best_gather_params = (-1, -1, -1, -1)
         best_scatter_params = (-1, -1, -1, -1)
-        # gather_data_ = tv.Tensor()
-        # if not gather_data.empty(
-        # ) and not hint & AlgoHint.BackwardWeight.value:
-        #     # run gather here
-        #     all_gather_params = GATHER.get_all_gather_params()
-        #     gather_data_ = gather_data.clone()
-        #     gather_times: List[float] = []
-
-        #     for gather_params in all_gather_params:
-        #         if GATHER.supported(gather_params[2], a.dim(1), a.dtype):
-        #             this_times = []
-        #             for j in range(10):
-        #                 GemmMainUnitTest.stream_synchronize(stream)
-        #                 t = time.time()
-        #                 GATHER.gather(gather_data_, a, a_inds, *gather_params)
-        #                 GemmMainUnitTest.stream_synchronize(stream)
-        #                 this_times.append(time.time() - t)
-        #             gather_times.append(np.mean(this_times[5:]))
-
-        #     min_time = 1000
-        #     min_idx = -1
-        #     for i, t in enumerate(gather_times):
-        #         if t < min_time:
-        #             min_time = t
-        #             min_idx = i
-        #     best_gather_params = all_gather_params[min_idx]
-
-        # if not scatter_data.empty(
-        # ) and not hint & AlgoHint.BackwardWeight.value:
-        #     # run gather here
-        #     all_scatter_params = SCATTER.get_all_scatter_params()
-        #     scatter_data_ = scatter_data.clone()
-        #     scatter_times: List[float] = []
-
-        #     for params in all_scatter_params:
-        #         if SCATTER.supported_scatter(*params, a.dim(1), a.dtype):
-        #             this_times = []
-        #             for j in range(10):
-        #                 GemmMainUnitTest.stream_synchronize(stream)
-        #                 t = time.time()
-        #                 SCATTER.scatter(c_, scatter_data_, c_inds, *params)
-        #                 GemmMainUnitTest.stream_synchronize(stream)
-        #                 this_times.append(time.time() - t)
-        #             scatter_times.append(np.mean(this_times[5:]))
-
-        #     min_time = 1000
-        #     min_idx = -1
-        #     for i, t in enumerate(scatter_times):
-        #         if t < min_time:
-        #             min_time = t
-        #             min_idx = i
-        #     best_scatter_params = all_scatter_params[min_idx]
-
 
         all_profile_res: List[BestAlgoByProfile] = []
         for desp in avail:
@@ -416,39 +360,7 @@ class SimpleGemm:
                 times.append(np.mean(this_times[1:]))
                 spk_speeds.append(times[-1])
 
-                all_profile_res.append(
-                    BestAlgoByProfile(desp, False, False, best_gather_params, best_scatter_params, splitk=spk))
-            # if desp.split_k_serial:
-            #     print(a.shape, b.shape, spk_speeds)
-            # if not gather_data.empty(
-            # ) and not hint & AlgoHint.BackwardWeight.value:
-            #     # run gather here
-            #     for spk in splitk_tests:
-            #         this_times = []
-            #         for j in range(3):
-
-            #             GemmMainUnitTest.stream_synchronize(stream)
-            #             t = time.time()
-            #             params.a_inds = tv.Tensor()
-            #             params.a = gather_data_
-            #             params.split_k_slices = spk
-            #             GATHER.gather(gather_data_,
-            #                         a,
-            #                         a_inds,
-            #                         *best_gather_params,
-            #                         stream=stream)
-            #             GemmMainUnitTest.matmul2(params)
-            #             GemmMainUnitTest.stream_synchronize(stream)
-            #             this_times.append(time.time() - t)
-
-            #         times.append(np.mean(this_times[1:]))
-            #         # print("G", times[-1], times[-2])
-            #         all_profile_res.append(
-            #             BestAlgoByProfile(desp,
-            #                             True,
-            #                             False,
-            #                             best_gather_params, best_scatter_params,
-            #                             splitk=spk))
+                all_profile_res.append(BestAlgoByProfile(desp, splitk=spk))
 
         min_time = 1000
         min_idx = -1
@@ -457,21 +369,22 @@ class SimpleGemm:
                 min_time = t
                 min_idx = i
         res = all_profile_res[min_idx]
-        if hint & AlgoHint.BackwardWeight.value:
-            key = (m, n)
-            self.mn_cache[key] = res
-        elif hint & AlgoHint.BackwardInput.value:
-            key = (n, k)
-            self.nk_dgrad_cache[key] = res
-        elif hint & AlgoHint.Fowrard.value:
-            key = (n, k)
-            self.nk_forward_cache[key] = res
-        else:
-            raise NotImplementedError
+        with self.lock:
+            if hint & AlgoHint.BackwardWeight.value:
+                key = (a.dtype, b.dtype, c.dtype, m, n)
+                self.mn_cache[key] = res
+            elif hint & AlgoHint.BackwardInput.value:
+                key = (a.dtype, b.dtype, c.dtype, n, k)
+                self.nk_dgrad_cache[key] = res
+            elif hint & AlgoHint.Fowrard.value:
+                key = (a.dtype, b.dtype, c.dtype, n, k)
+                self.nk_forward_cache[key] = res
+            else:
+                raise NotImplementedError
 
         return res, min_time
 
-    def run_profile(
+    def run_with_tuned_result(
         self,
         profile_res: BestAlgoByProfile,
         a: tv.Tensor,
@@ -491,8 +404,8 @@ class SimpleGemm:
         beta: float = 0.0,
         gather_data: tv.Tensor = tv.Tensor(),
         workspace: tv.Tensor = tv.Tensor()):
-        m, n, k = GemmMainUnitTest.extract_mnk(a.shape, b.shape,
-                                               trans_a, trans_b, trans_c,
+        m, n, k = GemmMainUnitTest.extract_mnk(a.shape, b.shape, trans_a,
+                                               trans_b, trans_c,
                                                shuffle_type.value,
                                                a_inds.shape, b_inds.shape,
                                                c_inds.shape)
@@ -539,27 +452,281 @@ class SimpleGemm:
         return algo_desp
 
 
+_CONV_STATIC_KEY = Tuple[int, int, int, int, int, int, int, int, int, str, int]
+
+
+class SimpleConv:
+    def __init__(self, desps: List[ConvAlgoDesp]) -> None:
+        self.desps = desps
+        self.lock = Lock()
+
+        self.static_key_to_desps = group_by(self.get_static_key, desps)
+        self.static_key_to_meta: Dict[_CONV_STATIC_KEY,
+                                      SimpleGemmAlgoMeta] = {}
+        for k, static_desps in self.static_key_to_desps.items():
+            tile_shape_to_algos: Dict[int, List[int]] = {}
+            tile_ms: Set[int] = set()
+            tile_ns: Set[int] = set()
+            tile_ks: Set[int] = set()
+            for i, desp in enumerate(static_desps):
+                ts = desp.tile_shape
+                tile_ms.add(ts[0])
+                tile_ns.add(ts[1])
+                tile_ks.add(ts[2])
+                tile_key = ts[0] | (ts[1] << 20) | (ts[2] << 40)
+                if tile_key not in tile_shape_to_algos:
+                    tile_shape_to_algos[tile_key] = []
+                tile_shape_to_algos[tile_key].append(i)
+                tile_ms_list = list(tile_ms)
+                tile_ns_list = list(tile_ns)
+                tile_ks_list = list(tile_ks)
+                tile_ms_list.sort()
+                tile_ns_list.sort()
+                tile_ks_list.sort()
+            self.static_key_to_meta[k] = SimpleGemmAlgoMeta(
+                tile_ms_list, tile_ns_list, tile_ks_list, tile_shape_to_algos)
+
+        self.kc_forward_cache: Dict[Tuple[int, int, int, int, int, int, int,
+                                          int],
+                                    BestConvAlgoByProfile] = {}  # for forward
+        self.kc_dgrad_cache: Dict[Tuple[int, int, int, int, int, int, int,
+                                        int], BestConvAlgoByProfile] = {
+                                        }  # for backward weight
+        self.kc_wgrad_cache: Dict[Tuple[int, int, int, int, int, int, int,
+                                        int], BestConvAlgoByProfile] = {
+                                        }  # for backward weight
+
+    @staticmethod
+    def get_static_key(d: ConvAlgoDesp) -> _CONV_STATIC_KEY:
+        return (d.layout_i, d.layout_w, d.layout_o, d.interleave_i,
+                d.interleave_w, d.interleave_o, d.dtype_input, d.dtype_weight,
+                d.dtype_output, d.algo, d.op_type)
+
+    def device_synchronize(self):
+        return GemmMainUnitTest.device_synchronize()
+
+    def get_all_available(self, inp: tv.Tensor, weight: tv.Tensor,
+                          out: tv.Tensor, layout_i: ConvLayout,
+                          layout_w: ConvLayout, layout_o: ConvLayout,
+                          arch: Tuple[int, int], op_type: ConvOpType,
+                          mask_width: int):
+
+        avail_algos = get_available_algo_str_from_arch(arch)
+        finally_algos: List[ConvAlgoDesp] = []
+        for algo in avail_algos:
+            static_key = (layout_i.layout_type.value,
+                          layout_w.layout_type.value,
+                          layout_o.layout_type.value, layout_i.interleave,
+                          layout_w.interleave, layout_o.interleave, inp.dtype,
+                          weight.dtype, out.dtype, algo, op_type.value)
+            desps = self.static_key_to_desps.get(static_key, None)
+            if desps is None or len(desps) == 0:
+                continue
+            for desp in desps:
+                # skip volta tensor op since it is very slow in architectures except volta.
+                if arch >= (7, 5) and desp.algo == GemmAlgo.Volta.value:
+                    continue
+                ldi = inp.dim(-1)
+                ldw = weight.dim(-1)
+                ldo = out.dim(-1)
+                mask_width_valid = True
+                if desp.op_type == ConvOpType.kBackwardWeight.value:
+                    assert mask_width > 0
+                    mask_width_valid = mask_width % desp.tile_shape[2] == 0
+                if desp.supported_ldx_conv(ldi, ldw, ldo) and mask_width_valid:
+                    finally_algos.append(desp)
+        return finally_algos
+
+    def get_tuned_algo(self,
+                       op_type: ConvOpType,
+                       i_dtype: int,
+                       w_dtype: int,
+                       o_dtype: int,
+                       k: int,
+                       c: int,
+                       arch: Tuple[int, int],
+                       mask_width: int = -1):
+        if not op_type == ConvOpType.kBackwardWeight:
+            # fwd and dgrad don't need
+            mask_width = -1
+        key = (i_dtype, w_dtype, o_dtype, k, c, arch[0], arch[1], mask_width)
+        if op_type == ConvOpType.kForward:
+            return self.kc_forward_cache.get(key, None)
+        elif op_type == ConvOpType.kBackwardInput:
+            return self.kc_dgrad_cache.get(key, None)
+        elif op_type == ConvOpType.kBackwardWeight:
+            return self.kc_wgrad_cache.get(key, None)
+        raise NotImplementedError
+
+    def query_workspace_size(self, desp: ConvAlgoDesp, splitk: int,
+                             op_type: ConvOpType, N: int, C: int, K: int,
+                             kv: int):
+        mnk = ConvMainUnitTest.extract_mnk(op_type.value, N, C, K, kv, -1, -1,
+                                           True)
+        return desp.query_conv_workspace_size(mnk[0], mnk[1], mnk[2], splitk,
+                                              kv)
+
+    def tune_and_cache(self,
+                       op_type: ConvOpType,
+                       inp: tv.Tensor,
+                       weight: tv.Tensor,
+                       output: tv.Tensor,
+                       layout_i: ConvLayout,
+                       layout_w: ConvLayout,
+                       layout_o: ConvLayout,
+                       arch: Tuple[int, int],
+                       mask: tv.Tensor,
+                       mask_argsort: tv.Tensor,
+                       indices: tv.Tensor,
+                       reverse_mask: bool,
+                       mask_filter: int = 0xffffffff,
+                       mask_width: int = -1,
+                       mask_output: tv.Tensor = tv.Tensor(),
+                       alpha: float = 1.0,
+                       beta: float = 0.0,
+                       stream: int = 0):
+        avail = self.get_all_available(inp, weight, output, layout_i, layout_w,
+                                       layout_o, arch, op_type, mask_width)
+        inp = inp.clone()
+        weight = weight.clone()
+        output = output.clone()
+
+        channel_k = output.dim(1)
+        channel_c = inp.dim(1)
+
+        times: List[float] = []
+        all_profile_res: List[BestConvAlgoByProfile] = []
+        for desp in avail:
+            # for sparse conv, ndim isn't used, so we just provide a constant value.
+            params = ConvParams(NDIM_DONT_CARE, op_type.value)
+            params.conv_algo_desp = desp
+            params.input = inp
+            params.weight = weight.view([channel_k, -1, channel_c])
+            params.output = output
+
+            params.mask_width = mask_width
+            params.alpha = alpha
+            params.beta = beta
+            params.stream = stream
+            params.mask_argsort = mask_argsort
+            params.indices = indices
+            params.mask = mask
+            params.mask_output = mask_output
+            if op_type == ConvOpType.kBackwardWeight:
+                assert not mask_output.empty()
+            if op_type == ConvOpType.kBackwardInput:
+                params.reverse_mask = reverse_mask
+            params.mask_filter = mask_filter
+            if desp.split_k_serial and op_type == ConvOpType.kBackwardWeight:
+                splitk_tests = [1, 2, 4, 8, 16, 32, 64]
+                # splitk_tests = [1]
+            else:
+                splitk_tests = [1]
+            spk_speeds = []
+            for spk in splitk_tests:
+                this_times = []
+                for j in range(3):
+                    GemmMainUnitTest.stream_synchronize(stream)
+                    t = time.time()
+                    params.split_k_slices = spk
+                    ConvMainUnitTest.implicit_gemm2(params)
+                    GemmMainUnitTest.stream_synchronize(stream)
+                    this_times.append(time.time() - t)
+                times.append(np.mean(this_times[1:]))
+                spk_speeds.append(times[-1])
+
+                all_profile_res.append(BestConvAlgoByProfile(desp, splitk=spk))
+        if not all_profile_res:
+            raise ValueError("can't find suitable algorithm for", op_type)
+        min_time = 1000
+        min_idx = -1
+        for i, t in enumerate(times):
+            if t < min_time:
+                min_time = t
+                min_idx = i
+        res = all_profile_res[min_idx]
+        if not op_type == ConvOpType.kBackwardWeight:
+            # fwd and dgrad don't need
+            mask_width = -1
+        key = (inp.dtype, weight.dtype, output.dtype, channel_k, channel_c,
+               arch[0], arch[1], mask_width)
+        with self.lock:
+            if op_type == ConvOpType.kForward:
+                self.kc_forward_cache[key] = res
+            elif op_type == ConvOpType.kBackwardInput:
+                self.kc_dgrad_cache[key] = res
+            elif op_type == ConvOpType.kBackwardWeight:
+                self.kc_wgrad_cache[key] = res
+            else:
+                raise NotImplementedError
+        return res, min_time
+
+    def run_with_tuned_result(self,
+                              profile_res: BestConvAlgoByProfile,
+                              op_type: Union[ConvOpType, int],
+                              inp: tv.Tensor,
+                              weight: tv.Tensor,
+                              output: tv.Tensor,
+                              mask: tv.Tensor,
+                              mask_argsort: tv.Tensor,
+                              mask_output: tv.Tensor,
+                              indices: tv.Tensor,
+                              reverse_mask: bool,
+                              mask_filter: int = 0xffffffff,
+                              mask_width: int = -1,
+                              alpha: float = 1.0,
+                              beta: float = 0.0,
+                              stream: int = 0,
+                              workspace: tv.Tensor = tv.Tensor(),
+                              verbose: bool = False):
+        channel_k = output.dim(1)
+        channel_c = inp.dim(1)
+        # GemmMainUnitTest.stream_synchronize(stream)
+        algo_desp = profile_res.algo_desp
+        assert algo_desp is not None
+        split_k_slices = 1
+        if profile_res.splitk > 1:
+            split_k_slices = profile_res.splitk
+        if isinstance(op_type, int):
+            op_type_value = op_type
+        else:
+            op_type_value = op_type.value
+        params = ConvParams(NDIM_DONT_CARE, op_type_value)
+        params.conv_algo_desp = profile_res.algo_desp
+        params.input = inp
+        params.verbose = verbose
+        params.weight = weight.view([channel_k, -1, channel_c])
+        params.output = output
+        params.split_k_slices = split_k_slices
+        params.alpha = alpha
+        params.beta = beta
+        params.stream = stream
+        params.mask_argsort = mask_argsort
+        params.indices = indices
+        params.mask = mask
+        params.mask_filter = mask_filter
+        params.mask_width = mask_width
+        params.mask_filter = mask_filter
+        params.mask_output = mask_output
+        params.reverse_mask = reverse_mask
+        # torch.cuda.synchronize()
+        # t = time.time()
+
+        params.workspace = workspace
+        ConvMainUnitTest.implicit_gemm2(params)
+        # torch.cuda.synchronize()
+        # dura = time.time() - t
+        # print("F", algo_desp, dura)
+
+        # GemmMainUnitTest.stream_synchronize(stream)
+        return algo_desp
+
+    def stream_synchronize(self, stream: int):
+        return GemmMainUnitTest.stream_synchronize(stream)
+
 GEMM = SimpleGemm(ALL_ALGO_DESPS)
+CONV = SimpleConv(ALL_CONV_ALGO_DESPS)
 
 if __name__ == "__main__":
-    print(len(ALL_ALGO_DESPS))
-    print(ALL_ALGO_DESPS[0])
-
-    a = tv.zeros([64000, 32], dtype=tv.float16)
-    b = tv.zeros([32, 64], dtype=tv.float16)
-    c = tv.zeros([64000, 64], dtype=tv.float16)
-    a_inds = tv.zeros([64000], dtype=tv.int32)
-    c_inds = tv.zeros([64000], dtype=tv.int32)
-    t = time.time()
-    for i in range(100):
-        algo = GEMM.select(a,
-                           c,
-                           b,
-                           True,
-                           False,
-                           False, (7, 5),
-                           ShuffleStrideType.ShuffleAB,
-                           a_inds=a_inds,
-                           b_inds=c_inds)
-    print((time.time() - t) / 100)
-    print(algo)
+    print(len(ALL_CONV_ALGO_DESPS))
+    print(ALL_CONV_ALGO_DESPS[0])

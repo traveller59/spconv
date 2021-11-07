@@ -1,22 +1,24 @@
 # Copyright 2021 Yan Yan
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import numpy as np
 import torch
+from spconv.core import ConvAlgo
 from spconv.pytorch.constants import PYTORCH_VERSION
+from spconv.pytorch.ops import ThrustSortAllocator
 
 if PYTORCH_VERSION >= [1, 8, 0]:
     try:
@@ -27,21 +29,48 @@ if PYTORCH_VERSION >= [1, 8, 0]:
             from torch.fx.symbolic_trace import ProxyableClassMeta
         SpConvTensorMeta = ProxyableClassMeta
     except:
+
         class SpConvTensorMeta(type):
             pass
 else:
+
     class SpConvTensorMeta(type):
         pass
 
+
 class IndiceData(object):
     def __init__(self, out_indices, indices, indice_pairs, indice_pair_num,
-                 out_spatial_shape, is_subm: bool):
+                 out_spatial_shape, is_subm: bool, algo: ConvAlgo):
         self.out_indices = out_indices
         self.indices = indices
         self.indice_pairs = indice_pairs
         self.indice_pair_num = indice_pair_num
         self.out_spatial_shape = out_spatial_shape
         self.is_subm = is_subm
+        self.algo = algo
+
+
+class ImplicitGemmIndiceData(object):
+    def __init__(self, out_indices: torch.Tensor, indices: torch.Tensor, pair_fwd: torch.Tensor,
+                 pair_bwd: torch.Tensor,
+                 pair_mask_fwd_splits: List[torch.Tensor],
+                 pair_mask_bwd_splits: List[torch.Tensor],
+                 mask_argsort_fwd_splits: List[torch.Tensor],
+                 mask_argsort_bwd_splits: List[torch.Tensor],
+                 masks: List[np.ndarray], out_spatial_shape, is_subm: bool, algo: ConvAlgo):
+        self.out_indices = out_indices
+        self.indices = indices
+        self.pair_fwd = pair_fwd
+        self.pair_bwd = pair_bwd
+        self.pair_mask_fwd_splits = pair_mask_fwd_splits
+        self.pair_mask_bwd_splits = pair_mask_bwd_splits
+        self.mask_argsort_fwd_splits = mask_argsort_fwd_splits
+        self.mask_argsort_bwd_splits = mask_argsort_bwd_splits
+        self.masks = masks
+        self.out_spatial_shape = out_spatial_shape
+        self.is_subm = is_subm
+        self.algo = algo
+
 
 def scatter_nd(indices, updates, shape):
     """pytorch edition of tensorflow scatter_nd.
@@ -58,6 +87,7 @@ def scatter_nd(indices, updates, shape):
     ret[slices] = updates.view(*output_shape)
     return ret
 
+
 # ProxyableClassMeta is used for TensorRT conversion in future.
 class SparseConvTensor(metaclass=SpConvTensorMeta):
     def __init__(self,
@@ -65,10 +95,11 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
                  indices: torch.Tensor,
                  spatial_shape: List[int],
                  batch_size: int,
-                 grid: Optional[torch.Tensor]=None,
-                 voxel_num: Optional[torch.Tensor]=None,
+                 grid: Optional[torch.Tensor] = None,
+                 voxel_num: Optional[torch.Tensor] = None,
                  indice_dict: Optional[dict] = None,
-                 benchmark: bool=False):
+                 benchmark: bool = False,
+                 permanent_thrust_allocator: bool = False):
         """
         Args:
             features: [num_points, num_features] feature tensor
@@ -80,6 +111,12 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
             benchmark: whether to enable benchmark. if enabled, all sparse operators will be record to
                 SparseConvTensor.
         """
+        ndim = indices.shape[1] - 1
+        assert features.ndim == 2
+        assert indices.ndim == 2
+        assert len(spatial_shape) == ndim, "spatial shape must equal to ndim"
+        assert indices.dtype == torch.int32, "only support int32"
+        assert batch_size > 0
         self._features = features
         self.indices = indices
         self.spatial_shape = spatial_shape
@@ -90,17 +127,24 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
         if grid is None:
             grid = torch.Tensor()  # empty tensor
         self.grid = grid
-        self.voxel_num = voxel_num # for tensorrt
+        self.voxel_num = voxel_num  # for tensorrt
         self.benchmark = benchmark
         self.benchmark_record = {}
+        self.thrust_allocator: Optional[ThrustSortAllocator] = None 
+        if permanent_thrust_allocator:
+            self.thrust_allocator = ThrustSortAllocator(features.device)
 
     def replace_feature(self, feature):
-        """we need to replace x.features = F.relu(x) with x = x.replace_feature(F.relu(x.features))
+        """we need to replace x.features = F.relu(x.features) with x = x.replace_feature(F.relu(x.features))
         due to limit of torch.fx
         """
-        new_spt = SparseConvTensor(feature, self.indices, self.spatial_shape, self.batch_size, self.grid, self.voxel_num, self.indice_dict)
+        new_spt = SparseConvTensor(feature, self.indices, self.spatial_shape,
+                                   self.batch_size, self.grid, self.voxel_num,
+                                   self.indice_dict)
         new_spt.benchmark = self.benchmark
         new_spt.benchmark_record = self.benchmark_record
+        new_spt.thrust_allocator = self.thrust_allocator
+
         return new_spt
 
     @property
@@ -109,8 +153,9 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
 
     @features.setter
     def features(self, val):
-        msg = ("you can't set feature directly, use 'x = x.replace_feature(your_new_feature)'"
-                " to generate new SparseConvTensor instead.")
+        msg = (
+            "you can't set feature directly, use 'x = x.replace_feature(your_new_feature)'"
+            " to generate new SparseConvTensor instead.")
         raise ValueError(msg)
 
     @classmethod
@@ -129,14 +174,14 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
     def spatial_size(self):
         return np.prod(self.spatial_shape)
 
-    def find_indice_pair(self, key) -> Optional[IndiceData]:
+    def find_indice_pair(self, key) -> Optional[Union[IndiceData, ImplicitGemmIndiceData]]:
         if key is None:
             return None
         if key in self.indice_dict:
             return self.indice_dict[key]
         return None
 
-    def dense(self, channels_first: bool=True):
+    def dense(self, channels_first: bool = True):
         output_shape = [self.batch_size] + list(
             self.spatial_shape) + [self.features.shape[1]]
         res = scatter_nd(
@@ -159,6 +204,8 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
         """create a new spconv tensor with all member unchanged"""
         tensor = SparseConvTensor(self.features, self.indices,
                                   self.spatial_shape, self.batch_size,
-                                  self.grid, self.voxel_num, self.indice_dict, self.benchmark)
+                                  self.grid, self.voxel_num, self.indice_dict,
+                                  self.benchmark)
         tensor.benchmark_record = self.benchmark_record
+        tensor.thrust_allocator = self.thrust_allocator
         return tensor

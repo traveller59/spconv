@@ -19,12 +19,16 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch import nn
+from spconv.core import ConvAlgo
 
 import spconv.pytorch as spconv
 from spconv.test_utils import TestCase, generate_sparse_data, params_grid
 from spconv.constants import FILTER_HWIO
 # import sparseconvnet as scn
 
+# we must disable tf32 to increase reference precision.
+torch.backends.cuda.matmul.allow_tf32 = False
+torch.backends.cudnn.allow_tf32 = False
 
 class SparseConv3dTestTorch(nn.Module):
     def __init__(self,
@@ -37,8 +41,9 @@ class SparseConv3dTestTorch(nn.Module):
                  stride,
                  padding,
                  dilation,
-                 algo=spconv.ConvAlgo.Native):
+                 algo=spconv.ConvAlgo.MaskSplitImplicitGemm):
         super().__init__()
+        self.algo = algo
         layers = [
             spconv.SparseConv3d(in_channels,
                                 out_channels,
@@ -347,6 +352,7 @@ def scatter_nd(indices, updates, shape):
 class TestSpConv(TestCase):
     def testSpConv3d(self):
         np.random.seed(484)
+        torch.manual_seed(48848)
         devices = ["cuda:0"]
         shapes = [[19, 18, 17]]
         batchsizes = [1, 2]
@@ -357,17 +363,23 @@ class TestSpConv(TestCase):
         strides = [1, 2, 3]
         paddings = [0, 1, 2]
         dilations = [1, 2, 3]
-        # strides = [1]
-        # paddings = [0]
-        # dilations = [1]
+        algos = [ConvAlgo.Native, ConvAlgo.MaskImplicitGemm, ConvAlgo.MaskSplitImplicitGemm]
+        algos = [ConvAlgo.MaskSplitImplicitGemm]
 
-        for dev, shape, bs, IC, OC, k, s, p, d in params_grid(
+        for dev, shape, bs, IC, OC, k, s, p, d, al in params_grid(
                 devices, shapes, batchsizes, in_channels, out_channels, ksizes,
-                strides, paddings, dilations):
+                strides, paddings, dilations, algos):
             if all([s > 1, d > 1]):
                 continue  # don't support this.
+            print(k, s, p, d)
             device = torch.device(dev)
             num_points = [1000] * bs
+            dtype = torch.float32
+            net = SparseConv3dTestTorch(1, 3, shape, IC, OC, k, s, p,
+                                        d, algo=al).to(device).to(dtype)
+            net_ref = Conv3dTestTorch(1, 3, shape, IC, OC, k, s, p,
+                                      d).to(device).to(dtype)
+
             sparse_dict = generate_sparse_data(shape, num_points, IC)
 
             features = np.ascontiguousarray(sparse_dict["features"]).astype(
@@ -375,29 +387,31 @@ class TestSpConv(TestCase):
             indices = np.ascontiguousarray(
                 sparse_dict["indices"][:, [3, 0, 1, 2]]).astype(np.int32)
             features_dense = sparse_dict["features_dense"].astype(np.float32)
-            if FILTER_HWIO:
-                filters = np.random.uniform(0, 1, size=[k, k, k, IC,
-                                                        OC]).astype(np.float32)
-            else:
-                filters = np.random.uniform(0, 1, size=[k, k, k, OC,
-                                                        IC]).astype(np.float32)
-            dtype = torch.float16
             indices_t = torch.from_numpy(indices).int().to(device)
             features_t = torch.from_numpy(features).to(device).to(dtype)
             features_t.requires_grad = True
             features_dense_t = torch.from_numpy(features_dense).to(device).to(dtype)
             features_dense_t.requires_grad = True
-            net = SparseConv3dTestTorch(1, 3, shape, IC, OC, k, s, p,
-                                        d).to(device).to(dtype)
-            net_ref = Conv3dTestTorch(1, 3, shape, IC, OC, k, s, p,
-                                      d).to(device).to(dtype)
-            filters_t = torch.from_numpy(filters).to(device).to(dtype)
-            if FILTER_HWIO:
-                net_ref.net[0].weight.data[:] = filters_t.permute(4, 3, 0, 1,
-                                                                2).contiguous()
+            if net.algo == ConvAlgo.Native:
+                if FILTER_HWIO:
+                    filters = np.random.uniform(-1, 1, size=[k, k, k, IC,
+                                                            OC]).astype(np.float32)
+                else:
+                    filters = np.random.uniform(-1, 1, size=[k, k, k, OC,
+                                                            IC]).astype(np.float32)
+                filters_t = torch.from_numpy(filters).to(device).to(dtype)
+                if FILTER_HWIO:
+                    net_ref.net[0].weight.data[:] = filters_t.permute(4, 3, 0, 1,
+                                                                    2).contiguous()
+                else:
+                    net_ref.net[0].weight.data[:] = filters_t.permute(3, 4, 0, 1,
+                                                                    2).contiguous()
             else:
-                net_ref.net[0].weight.data[:] = filters_t.permute(3, 4, 0, 1,
-                                                                2).contiguous()
+                filters = np.random.uniform(-1, 1, size=[OC, k, k, k, IC]).astype(np.float32)
+                filters_t = torch.from_numpy(filters).to(device).to(dtype)
+                net_ref.net[0].weight.data[:] = filters_t.permute(0, 4, 1, 2,
+                                                                3).contiguous()
+
             net.net[0].weight.data[:] = filters_t
             out_ref = net_ref(features_dense_t)
             out = net(features_t, indices_t, bs).dense()
@@ -420,11 +434,14 @@ class TestSpConv(TestCase):
             for layer, layer_ref in zip(net.net, net_ref.net):
                 dw = layer.weight.grad.detach().cpu().numpy()
                 dw_ref = layer_ref.weight.grad.detach().cpu().numpy()
-                if FILTER_HWIO:
-
-                    dw = dw.transpose(4, 3, 0, 1, 2)
+                if net.algo == ConvAlgo.Native:
+                    if FILTER_HWIO:
+                        dw = dw.transpose(4, 3, 0, 1, 2)
+                    else:
+                        dw = dw.transpose(3, 4, 0, 1, 2)
                 else:
-                    dw = dw.transpose(3, 4, 0, 1, 2)
+                    # OHWI -> OIHW
+                    dw = dw.transpose(0, 4, 1, 2, 3)
 
                 self.assertAllClose(dw, dw_ref, atol=1e-4)
             self.assertAllClose(din_np, din_sparse_np, atol=1e-4)
@@ -592,10 +609,10 @@ class TestSpConv(TestCase):
         strides = [1, 2, 3]
         paddings = [0, 1]
         dilations = [1, 2, 3]
-        ksizes = [2]
-        strides = [2]
-        paddings = [0]
-        dilations = [1]
+        # ksizes = [2]
+        # strides = [2]
+        # paddings = [0]
+        # dilations = [1]
 
         for dev, shape, bs, IC, OC, k, s, p, d in params_grid(
                 devices, shapes, batchsizes, in_channels, out_channels, ksizes,
@@ -797,4 +814,4 @@ if __name__ == '__main__':
     # main(algo=spconv.ConvAlgo.SparseConvNet, dtype=torch.float32)
     # TestCase().assertAllClose(out_my, out_ref)
     # unittest.main()
-    TestSpConv().testSpConv3d()
+    TestSpConv().testSpMaxPool3d()

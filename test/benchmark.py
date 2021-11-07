@@ -18,7 +18,8 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch import nn
-from cumm import tensorview as tv 
+from cumm import tensorview as tv
+from spconv.core import ConvAlgo 
 
 import spconv.pytorch as spconv
 from spconv.utils import Point2VoxelCPU3d
@@ -41,6 +42,8 @@ def waymo_data(batch_size=1):
 class Net(nn.Module):
     def __init__(self, shape, algo):
         super().__init__()
+        pool_algo = algo 
+        # pool_algo = ConvAlgo.Native
         self.net = spconv.SparseSequential(
             spconv.SubMConv3d(3, 64, 3, bias=False, indice_key="c0",
                               algo=algo),
@@ -64,9 +67,9 @@ class Net(nn.Module):
                               algo=algo),
             # nn.BatchNorm1d(32),
             # nn.ReLU(),
-            spconv.SparseConv3d(64, 64, 2, 2, bias=False, indice_key="m0"),
+            # spconv.SparseConv3d(64, 64, 2, 2, bias=False, indice_key="m0"),
 
-            # spconv.SparseMaxPool3d(2, 2),
+            spconv.SparseMaxPool3d(2, 2, algo=pool_algo),
             spconv.SubMConv3d(64,
                               96,
                               3,
@@ -81,9 +84,8 @@ class Net(nn.Module):
                               algo=algo),
             # nn.BatchNorm1d(64),
             # nn.ReLU(),
-            spconv.SparseConv3d(96, 96, 2, 2, bias=False, indice_key="m1"),
-
-            # spconv.SparseMaxPool3d(2, 2),
+            # spconv.SparseConv3d(96, 96, 2, 2, bias=False, indice_key="m1"),
+            spconv.SparseMaxPool3d(2, 2, algo=pool_algo),
             spconv.SubMConv3d(96,
                               128,
                               3,
@@ -98,9 +100,9 @@ class Net(nn.Module):
                               algo=algo),
             # nn.BatchNorm1d(128),
             # nn.ReLU(),
-            spconv.SparseConv3d(128, 128, 2, 2, bias=False, indice_key="m2"),
+            # spconv.SparseConv3d(128, 128, 2, 2, bias=False, indice_key="m2"),
 
-            # spconv.SparseMaxPool3d(2, 2),
+            spconv.SparseMaxPool3d(2, 2, algo=pool_algo),
             spconv.SubMConv3d(128,
                               160,
                               3,
@@ -115,9 +117,9 @@ class Net(nn.Module):
                               algo=algo),
             # nn.BatchNorm1d(128),
             # nn.ReLU(),
-            spconv.SparseConv3d(160, 160, 2, 2, bias=False, indice_key="m3"),
+            # spconv.SparseConv3d(160, 160, 2, 2, bias=False, indice_key="m3"),
 
-            # spconv.SparseMaxPool3d(2, 2),
+            spconv.SparseMaxPool3d(2, 2, algo=pool_algo),
             spconv.SubMConv3d(160,
                               192,
                               3,
@@ -132,8 +134,8 @@ class Net(nn.Module):
                               algo=algo),
             # nn.BatchNorm1d(128),
             # nn.ReLU(),
-            # spconv.SparseMaxPool3d(2, 2, indice_key="m4"),
-            spconv.SparseConv3d(192, 192, 2, 2, bias=False, indice_key="m4"),
+            spconv.SparseMaxPool3d(2, 2, indice_key="m4", algo=pool_algo),
+            # spconv.SparseConv3d(192, 192, 2, 2, bias=False, indice_key="m4"),
 
             spconv.SubMConv3d(192,
                               224,
@@ -147,10 +149,10 @@ class Net(nn.Module):
                               bias=False,
                               indice_key="c5",
                               algo=algo),
-            nn.BatchNorm1d(224),
-            nn.ReLU(),
-            spconv.SparseConv3d(224, 224, 2, 2, bias=False, indice_key="m5"),
-            # spconv.SparseMaxPool3d(2, 2, indice_key="m5"),
+            # nn.BatchNorm1d(224),
+            # nn.ReLU(),
+            # spconv.SparseConv3d(224, 224, 2, 2, bias=False, indice_key="m5"),
+            spconv.SparseMaxPool3d(2, 2, indice_key="m5", algo=pool_algo),
             spconv.SubMConv3d(224,
                               256,
                               3,
@@ -164,14 +166,14 @@ class Net(nn.Module):
                               indice_key="c6",
                               algo=algo),
 
-            nn.BatchNorm1d(256),
-            nn.ReLU(),
+            # nn.BatchNorm1d(256),
+            # nn.ReLU(),
 
-            spconv.SparseInverseConv3d(256, 128, 2, indice_key="m5", bias=False),
-            nn.BatchNorm1d(128),
-            nn.ReLU(),
+            # spconv.SparseInverseConv3d(256, 128, 2, indice_key="m5", bias=False, algo=algo),
+            # # nn.BatchNorm1d(128),
+            # # nn.ReLU(),
 
-            spconv.SparseInverseConv3d(128, 64, 2, indice_key="m4", bias=False),
+            # spconv.SparseInverseConv3d(128, 64, 2, indice_key="m4", bias=False, algo=algo),
 
         )
         max_batch_size = 1
@@ -238,6 +240,27 @@ class Net2(nn.Module):
                                     self.grid)
         return self.net(x)
 
+import numpy as np 
+from cumm import tensorview as tv 
+from spconv.core_cc.csrc.sparse.all import SpconvOps
+import pickle 
+import torch
+
+from spconv.pytorch.cppcore import torch_tensor_to_tv 
+
+def sort_bench():
+    with open("/home/yy/asd.pkl", "rb") as f:
+        a_th = pickle.load(f)
+    mask_argsort = torch.empty((1, a_th.shape[1]),
+                                dtype=torch.int32,
+                                device=a_th.device)
+
+    a = a_th.cpu().numpy()[0]
+    a_tv = torch_tensor_to_tv(a_th)
+    mask_argsort_tv = torch_tensor_to_tv(mask_argsort)
+    for i in range(10):
+        a_tv_1 = a_tv.clone()
+        SpconvOps.sort_1d_by_key(a_tv_1[0], mask_argsort_tv[0])
 
 def main():
     import pickle 
@@ -252,45 +275,46 @@ def main():
     print(voxels.shape)
     # voxels = voxels[:100]
     # coors = coors[:100]
-    dtype = torch.float32
-
-    voxels_th = torch.from_numpy(voxels).cuda().to(dtype)
-    coors_th = torch.from_numpy(coors).cuda().int()
+    dtype = torch.float16
+    device = torch.device("cuda:0")
+    voxels_th = torch.from_numpy(voxels).to(device).to(dtype)
+    coors_th = torch.from_numpy(coors).to(device).int()
     voxels_th.requires_grad = True
-    algo = spconv.ConvAlgo.Native
-    net = Net(spatial_shape, algo).cuda().eval().to(dtype)
+    algo = spconv.ConvAlgo.MaskImplicitGemm
+    net = Net(spatial_shape, algo).to(device).eval().to(dtype).train()
     print(coors_th.shape)
     out = net(voxels_th, coors_th, 1)
     print(out.spatial_shape)
     print(voxels.mean(),  voxels.max(), voxels.min())
     dout = np.random.uniform(-0.2, 0.2,
                                 out.features.shape).astype(np.float32)
-    dout_t = torch.from_numpy(dout).cuda().to(dtype)
+    dout_t = torch.from_numpy(dout).to(device).to(dtype)
 
     print(out.spatial_shape, out.features.mean(),  out.features.max(),  out.features.min())
-    # times = []
-    # with torch.no_grad():
-    #     for i in range(20):
-    #         print("------------")
-    #         torch.cuda.synchronize()
-    #         t = time.time()
-    #         out_nograd = net(voxels_th, coors_th, 1)
-    #         torch.cuda.synchronize()
-    #         times.append(time.time() - t)
-    # print("spconv time", np.mean(times[10:]))
     times = []
+    with torch.no_grad():
+        for i in range(20):
+            print("------------")
+            torch.cuda.synchronize()
+            t = time.time()
+            out_nograd = net(voxels_th, coors_th, 1)
+            torch.cuda.synchronize()
+            # sort_bench()
+            times.append(time.time() - t)
+    print("spconv time", np.mean(times[10:]))
+    # times = []
 
-    for i in range(1):
-        out = net(voxels_th, coors_th, 1)
-        print("------------")
-        torch.cuda.synchronize()
-        t = time.time()
-        out.features.backward(dout_t)
-        torch.cuda.synchronize()
-        times.append(time.time() - t)
+    # for i in range(10):
+    #     out = net(voxels_th, coors_th, 1)
+    #     print("------------")
+    #     torch.cuda.synchronize()
+    #     t = time.time()
+    #     out.features.backward(dout_t)
+    #     torch.cuda.synchronize()
+    #     times.append(time.time() - t)
 
-    # # print((net.grid == -1).float().sum(), net.grid.numel())
-    # # print("spconv time", time.time() - t)
+    # print((net.grid == -1).float().sum(), net.grid.numel())
+    # print("spconv time", time.time() - t)
     # print("spconv bw time", np.mean(times[5:]))
 
 

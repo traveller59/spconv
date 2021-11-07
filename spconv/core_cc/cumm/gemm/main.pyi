@@ -18,6 +18,7 @@ class GemmAlgoDesp:
     element_per_access_a: int
     element_per_access_b: int
     element_per_access_c: int
+    access_per_vector: int
     def __init__(self) -> None: ...
     def __repr__(self) -> str: ...
     @property

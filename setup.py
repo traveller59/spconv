@@ -25,27 +25,34 @@ NAME = 'spconv'
 RELEASE_NAME = NAME
 deps = ["cumm"]
 cuda_ver = os.environ.get("CUMM_CUDA_VERSION", "")
-if not cuda_ver:
-    nvcc_version = subprocess.check_output(["nvcc", "--version"
-                                            ]).decode("utf-8").strip()
-    nvcc_version_str = nvcc_version.split("\n")[3]
-    version_str: str = re.findall(r"release (\d+.\d+)",
-                                    nvcc_version_str)[0]
-    cuda_ver = version_str
-cuda_ver = cuda_ver.replace(".", "") # 10.2 to 102
+# is_ci_build = cuda_ver != ""
+# if not cuda_ver:
+#     nvcc_version = subprocess.check_output(["nvcc", "--version"
+#                                             ]).decode("utf-8").strip()
+#     nvcc_version_str = nvcc_version.split("\n")[3]
+#     version_str: str = re.findall(r"release (\d+.\d+)",
+#                                     nvcc_version_str)[0]
+#     cuda_ver = version_str
 
-RELEASE_NAME += "-cu{}".format(cuda_ver)
-deps = ["cumm-cu{}".format(cuda_ver)]
+if cuda_ver:
+    cuda_ver = cuda_ver.replace(".", "") # 10.2 to 102
+
+    RELEASE_NAME += "-cu{}".format(cuda_ver)
+    deps = ["cumm-cu{}".format(cuda_ver)]
+else:
+    deps = ["cumm"]
+
+
 
 DESCRIPTION = 'spatial sparse convolution'
 URL = 'https://github.com/traveller59/spconv'
 EMAIL = 'yanyan.sub@outlook.com'
 AUTHOR = 'Yan Yan'
-REQUIRES_PYTHON = '>=3.6'
+REQUIRES_PYTHON = '>=3.7'
 VERSION = None
 
 # What packages are required for this module to be executed?
-REQUIRED = ["pccm>=0.2.14", "pybind11>=2.6.0", "fire", "numpy", *deps]
+REQUIRED = ["pccm>=0.2.19", "pybind11>=2.6.0", "fire", "numpy", *deps]
 
 # What packages are optional?
 EXTRAS = {
@@ -145,18 +152,27 @@ if disable_jit is not None and disable_jit == "1":
     }
     from cumm.gemm.main import GemmMainUnitTest
     from spconv.core import SHUFFLE_SIMT_PARAMS, SHUFFLE_VOLTA_PARAMS, SHUFFLE_TURING_PARAMS
-
+    from spconv.core import IMPLGEMM_SIMT_PARAMS, IMPLGEMM_VOLTA_PARAMS, IMPLGEMM_TURING_PARAMS
+    from cumm.conv.main import ConvMainUnitTest
+    from cumm.constants import CUMM_CPU_ONLY_BUILD
     from spconv.csrc.sparse.all import SpconvOps
     cu = GemmMainUnitTest(SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS)
+    convcu = ConvMainUnitTest(IMPLGEMM_SIMT_PARAMS + IMPLGEMM_VOLTA_PARAMS + IMPLGEMM_TURING_PARAMS)
+    convcu.namespace = "cumm.conv.main"
 
     cu.namespace = "cumm.gemm.main"
-    cuda_ver_number = int(cuda_ver)
-    if cuda_ver_number < 110:
-        std = "c++14" 
-    else:
-        std = "c++17"
+    std = "c++17"
+    if cuda_ver:
+        cuda_ver_number = int(cuda_ver)
+        if cuda_ver_number < 110:
+            std = "c++14" 
+        else:
+            std = "c++17"
+    cus = [cu, convcu, SpconvOps()]
+    if CUMM_CPU_ONLY_BUILD:
+        cus = [SpconvOps()]
     ext_modules: List[Extension] = [
-        PCCMExtension([cu, SpconvOps()],
+        PCCMExtension(cus,
                       "spconv/core_cc",
                       Path(__file__).resolve().parent / "spconv",
                       objects_folder="objects",

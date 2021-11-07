@@ -25,3 +25,5 @@ EDITABLE_INSTALLED = project_is_installed(PACKAGE_NAME) and project_is_editable(
 
 _filter_hwio_env = os.getenv("SPCONV_FILTER_HWIO", "0")
 FILTER_HWIO = _filter_hwio_env == "1"
+DISABLE_JIT = os.getenv("SPCONV_DISABLE_JIT", "0") == "1"
+NDIM_DONT_CARE = 3
