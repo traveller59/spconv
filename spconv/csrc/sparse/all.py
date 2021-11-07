@@ -98,12 +98,6 @@ class SpconvOps(pccm.Class):
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
         if CUMM_CPU_ONLY_BUILD:
             return code.make_invalid()
-
-        if CUMM_CPU_ONLY_BUILD:
-            code.raw(f"""
-            TV_THROW_RT_ERR("CPU ONLY build, don't support cuda algorithm.");
-            """)
-            return code
         code.raw(f"""
         int ndim = indices.dim(1) - 1;
         TV_ASSERT_RT_ERR(output_dims.size() == ndim && input_dims.size() == ndim &&
@@ -144,13 +138,6 @@ class SpconvOps(pccm.Class):
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
         if CUMM_CPU_ONLY_BUILD:
             return code.make_invalid()
-
-        if CUMM_CPU_ONLY_BUILD:
-            code.raw(f"""
-            TV_THROW_RT_ERR("CPU ONLY build, don't support cuda algorithm.");
-            """)
-            return code.ret("int")
-
         for ndim in self.ndims:
             code.raw(f"""
             if (ndim == {ndim}){{
@@ -174,12 +161,6 @@ class SpconvOps(pccm.Class):
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
         if CUMM_CPU_ONLY_BUILD:
             return code.make_invalid()
-
-        if CUMM_CPU_ONLY_BUILD:
-            code.raw(f"""
-            TV_THROW_RT_ERR("CPU ONLY build, don't support cuda algorithm.");
-            """)
-            return code.ret("int")
 
         code.raw(f"""
         int ndim = indices.dim(1) - 1;
@@ -226,11 +207,6 @@ class SpconvOps(pccm.Class):
         code.arg("transposed", f"bool", "false")
 
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
-        if CUMM_CPU_ONLY_BUILD:
-            code.raw(f"""
-            TV_THROW_RT_ERR("CPU ONLY build, don't support cuda algorithm.");
-            """)
-            return code
         code.raw(f"""
         int ndim = indices.dim(1) - 1;
         TV_ASSERT_RT_ERR(output_dims.size() == ndim && input_dims.size() == ndim &&
@@ -276,12 +252,6 @@ class SpconvOps(pccm.Class):
         code.arg("ksize, stride, padding, dilation", f"std::vector<int>")
         code.arg("transposed", f"bool", "false")
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
-        if CUMM_CPU_ONLY_BUILD:
-            code.raw(f"""
-            TV_THROW_RT_ERR("CPU ONLY build, don't support cuda algorithm.");
-            """)
-            return code.ret("int")
-
         code.raw(f"""
         int ndim = indices.dim(1) - 1;
         TV_ASSERT_RT_ERR(output_dims.size() == ndim && input_dims.size() == ndim &&
@@ -326,12 +296,6 @@ class SpconvOps(pccm.Class):
         code.arg("indice_pair_mask", "tv::Tensor", "tv::Tensor()", "cumm.tensorview.Tensor = Tensor()")
         code.arg("backward", "bool", "false")
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int = 0")
-        if CUMM_CPU_ONLY_BUILD:
-            code.raw(f"""
-            TV_THROW_RT_ERR("CPU ONLY build, don't support cuda algorithm.");
-            """)
-            return code.ret("int")
-
         code.raw(f"""
         int ndim = indices.dim(1) - 1;
         TV_ASSERT_RT_ERR(input_dims.size() == ndim &&
@@ -442,12 +406,6 @@ class SpconvOps(pccm.Class):
         code.arg("out_inds", "tv::Tensor")
         code.arg("in_inds", "tv::Tensor")
         code.arg("stream", "std::uintptr_t", "0", pyanno="int")
-        if CUMM_CPU_ONLY_BUILD:
-            code.raw(f"""
-            TV_THROW_RT_ERR("CPU ONLY build, don't support cuda algorithm.");
-            """)
-            return code
-
         code.add_dependency(IndiceMaxPool)
         code.raw(f"""
         return IndiceMaxPool::forward(out, inp, out_inds, in_inds, stream);
@@ -467,12 +425,6 @@ class SpconvOps(pccm.Class):
         code.arg("out_inds", "tv::Tensor")
         code.arg("in_inds", "tv::Tensor")
         code.arg("stream", "std::uintptr_t", "0", pyanno="int")
-        if CUMM_CPU_ONLY_BUILD:
-            code.raw(f"""
-            TV_THROW_RT_ERR("CPU ONLY build, don't support cuda algorithm.");
-            """)
-            return code
-
         code.add_dependency(IndiceMaxPool)
         code.raw(f"""
         return IndiceMaxPool::backward(out, inp, dout, dinp, out_inds, in_inds, stream);
@@ -489,12 +441,6 @@ class SpconvOps(pccm.Class):
         code.arg("inp", "tv::Tensor")
         code.arg("inds", "tv::Tensor")
         code.arg("stream", "std::uintptr_t", "0", pyanno="int")
-        if CUMM_CPU_ONLY_BUILD:
-            code.raw(f"""
-            TV_THROW_RT_ERR("CPU ONLY build, don't support cuda algorithm.");
-            """)
-            return code
-
         code.add_dependency(IndiceMaxPool)
         code.raw(f"""
         return IndiceMaxPool::forward_implicit_gemm(out, inp, inds, stream);
@@ -513,12 +459,6 @@ class SpconvOps(pccm.Class):
         code.arg("dinp", "tv::Tensor")
         code.arg("inds", "tv::Tensor")
         code.arg("stream", "std::uintptr_t", "0", pyanno="int")
-        if CUMM_CPU_ONLY_BUILD:
-            code.raw(f"""
-            TV_THROW_RT_ERR("CPU ONLY build, don't support cuda algorithm.");
-            """)
-            return code
-
         code.add_dependency(IndiceMaxPool)
         code.raw(f"""
         return IndiceMaxPool::backward_implicit_gemm(out, inp, dout, dinp, inds, stream);
@@ -603,12 +543,6 @@ class SpconvOps(pccm.Class):
         }}
 
         """
-
-        if CUMM_CPU_ONLY_BUILD:
-            code.raw(f"""
-            TV_THROW_RT_ERR("CPU ONLY build, don't support cuda algorithm.");
-            """)
-            return code.ret("tv::Tensor")
         code.add_dependency(ThrustLib, TensorViewKernel)
         code.add_param_class("cudakers", CudaCommonKernel())
         code.raw(f"""
@@ -654,11 +588,6 @@ class SpconvOps(pccm.Class):
             }}
         }}
         """
-        if CUMM_CPU_ONLY_BUILD:
-            code.raw(f"""
-            TV_THROW_RT_ERR("CPU ONLY build, don't support cuda algorithm.");
-            """)
-            return code.ret("tv::Tensor")
         code.add_dependency(ThrustLib, TensorViewKernel)
         code.add_param_class("cudakers", CudaCommonKernel())
         code.raw(f"""
@@ -710,11 +639,6 @@ class SpconvOps(pccm.Class):
             }}
         }}
         """
-        if CUMM_CPU_ONLY_BUILD:
-            code.raw(f"""
-            TV_THROW_RT_ERR("CPU ONLY build, don't support cuda algorithm.");
-            """)
-            return code.ret("tv::Tensor")
         code.add_dependency(CustomThrustLib, TensorViewKernel)
         code.add_param_class("cudakers", CudaCommonKernel())
         code.raw(f"""
@@ -770,11 +694,6 @@ class SpconvOps(pccm.Class):
             }}
         }}
         """
-        if CUMM_CPU_ONLY_BUILD:
-            code.raw(f"""
-            TV_THROW_RT_ERR("CPU ONLY build, don't support cuda algorithm.");
-            """)
-            return code.ret("tv::Tensor")
         code.add_dependency(CustomThrustLib, TensorViewKernel)
         code.add_param_class("cudakers", CudaCommonKernel())
         code.raw(f"""
@@ -964,6 +883,8 @@ class SpconvOps(pccm.Class):
         code.arg("empty_mean", "bool", "false")
         code.arg("clear_voxels", "bool", "true")
         code.arg("stream_int", f"std::uintptr_t", "0")
+        if CUMM_CPU_ONLY_BUILD:
+            return code.make_invalid()
 
         code.raw(f"""
         int ndim = vsize.size();
