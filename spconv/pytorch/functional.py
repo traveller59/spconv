@@ -145,7 +145,7 @@ class SparseImplicitGemmFunction(Function):
                                                         mask_width=mask_width,
                                                         is_subm=is_subm)
         None_9 = [None] * 10
-        return input_bp, filters_bp, *None_9
+        return (input_bp, filters_bp, *None_9)
 
 class SubMConvFunction(Function):
     @staticmethod

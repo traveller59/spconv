@@ -23,17 +23,24 @@ jobs:
         id: changes
         with:
           filters: |
-            nobuild:
-              - 'README.md'
-              - 'docs/**'
-              - 'example/**'
-              - 'spconv/pytorch/**'
+            needbuild:
+              - 'setup.py'
+              - 'spconv/csrc/**'
+              - 'spconv/algo.py'
+              - 'spconv/core.py'
+              - 'pyproject.toml'
       - name: Install CUDA
         env:
           CUDA_VERSION: ${{ matrix.cuda-version }}
           PYTHON_VERSION: ${{ matrix.python-version }}
           cuda: ${{ matrix.cuda-version }}
-        if: (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) && (env.CUDA_VERSION != '') ) || (env.PYTHON_VERSION == '3.10')
+        if: |
+          (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) ) || 
+          (
+            (steps.changes.outputs.needbuild == 'true') && 
+            (env.PYTHON_VERSION == '3.10') && 
+            (env.CUDA_VERSION != '')
+          )
         shell: powershell
         run: .\tools\install_windows_cuda.ps1
       - name: Set up Python ${{ matrix.python-version }}
@@ -51,7 +58,13 @@ jobs:
         env:
           CUDA_VERSION: ${{ matrix.cuda-version }}
           PYTHON_VERSION: ${{ matrix.python-version }}
-        if: (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags'))) || (env.PYTHON_VERSION == '3.10')
+        if: |
+          (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) ) || 
+          (
+            (steps.changes.outputs.needbuild == 'true') && 
+            (env.PYTHON_VERSION == '3.10') && 
+            (env.CUDA_VERSION != '')
+          )
         run: |
           $Env:CUMM_CUDA_VERSION = "${{ matrix.cuda-version }}"
           $Env:CUMM_CUDA_ARCH_LIST = "all"
@@ -83,11 +96,13 @@ jobs:
         id: changes
         with:
           filters: |
-            nobuild:
-              - 'README.md'
-              - 'docs/**'
-              - 'example/**'
-              - 'spconv/pytorch/**'
+            needbuild:
+              - 'setup.py'
+              - 'spconv/csrc/**'
+              - 'spconv/algo.py'
+              - 'spconv/core.py'
+              - 'pyproject.toml'
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v2
         with:
@@ -105,7 +120,13 @@ jobs:
           PYTHON_VERSION: ${{ matrix.python-version }}
           DOCKER_IMAGE: scrin/manylinux2014-cuda:cu${{ matrix.cuda-version }}-devel-1.0.0
           PLAT: manylinux2014_x86_64
-        if:  (env.CUDA_VERSION != '') && ((github.event_name == 'push' && (startsWith(github.ref, 'refs/tags'))) || ((env.PYTHON_VERSION == '3.10')))
+        if: |
+          (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) ) || 
+          (
+            (steps.changes.outputs.needbuild == 'true') && 
+            (env.PYTHON_VERSION == '3.10') && 
+            (env.CUDA_VERSION != '')
+          )
         run: |
           chmod +x tools/build-wheels.sh
           docker run --rm -e PLAT=$PLAT -e CUMM_CUDA_VERSION=${{ matrix.cuda-version }} -e SPCONV_PYTHON_LIST=${{env.PYTHON_VERSION}} -v `pwd`:/io $DOCKER_IMAGE bash -c "source /etc/bashrc && /io/tools/build-wheels.sh"
@@ -116,7 +137,13 @@ jobs:
           PYTHON_VERSION: ${{ matrix.python-version }}
           DOCKER_IMAGE: scrin/manylinux2014-cuda:cu114-devel-1.0.0
           PLAT: manylinux2014_x86_64
-        if: (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) && (env.CUDA_VERSION == '')) || ((env.PYTHON_VERSION == '3.10') && (env.CUDA_VERSION == ''))
+        if: |
+          (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) ) || 
+          (
+            (steps.changes.outputs.needbuild == 'true') && 
+            (env.PYTHON_VERSION == '3.10') && 
+            (env.CUDA_VERSION == '')
+          )
         run: |
           chmod +x tools/build-wheels.sh
           docker run --rm -e PLAT=$PLAT -e CUMM_CUDA_VERSION=${{ matrix.cuda-version }} -e SPCONV_PYTHON_LIST=${{env.PYTHON_VERSION}} -v `pwd`:/io $DOCKER_IMAGE bash -c "source /etc/bashrc && /io/tools/build-wheels.sh"
