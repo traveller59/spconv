@@ -26,6 +26,7 @@ from spconv import pytorch as spconv
 from spconv.core import ConvAlgo
 import spconv.pytorch.functional as Fsp
 from spconv.pytorch import ops
+from spconv.cppconstants import CPU_ONLY_BUILD
 from spconv.pytorch.core import IndiceData, SparseConvTensor, ImplicitGemmIndiceData
 from spconv.pytorch.modules import SparseModule
 from spconv.constants import FILTER_HWIO
@@ -117,7 +118,7 @@ class SparseConvolution(SparseModule):
         self.subm = subm
         self.indice_key = indice_key
         if algo is None:
-            if kv <= 32:
+            if kv <= 32 and not CPU_ONLY_BUILD:
                 if kv < 8:
                     algo = ConvAlgo.MaskImplicitGemm
                 else:
@@ -126,7 +127,8 @@ class SparseConvolution(SparseModule):
                 algo = ConvAlgo.Native
         if kv > 32:
             assert algo == ConvAlgo.Native, "implicit gemm don't support kv >= 32 for now"
-
+        if CPU_ONLY_BUILD:
+            assert algo == ConvAlgo.Native, "cpu only build only support native algorithm"
         self.algo = algo
         # self.algo = ConvAlgo.Native
         if self.algo == ConvAlgo.Native:

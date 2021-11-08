@@ -14,9 +14,13 @@
  limitations under the License.
 -->
 
-# SpConv: Spatially Sparse Convolution Library
+[pypi-download]: https://img.shields.io/pypi/dm/spconv-cu114
+[pypi-url]: https://pypi.org/project/spconv-cu114/
+[pypi-image]: https://badge.fury.io/py/spconv-cu114.svg
 
-[![Build Status](https://github.com/traveller59/spconv/workflows/build/badge.svg)](https://github.com/traveller59/spconv/actions?query=workflow%3Abuild)
+# SpConv: Spatially Sparse Convolution Library
+[![Build Status](https://github.com/traveller59/spconv/workflows/build/badge.svg)](https://github.com/traveller59/spconv/actions?query=workflow%3Abuild) [![PyPI Version][pypi-image]][pypi-url] [![pypi monthly download][pypi-download]][pypi-url]
+
 
 ```spconv``` is a project that provide heavily-optimized sparse convolution implementation with tensor core support.
 
@@ -28,7 +32,7 @@ Spconv 1.x users **NEED READ [THIS](docs/SPCONV_2_BREAKING_CHANGEs.md)** before 
 
 ## Spconv 2.1 vs Spconv 1.x
 
-* spconv now can be installed by **pip**. see install section in readme for more details.
+* spconv now can be installed by **pip**. see install section in readme for more details. Users don't need to build manually anymore!
 * Microsoft Windows support (only windows 10 has been tested).
 * fp32 (not tf32) training/inference speed is increased (+50~80%)
 * fp16 training/inference speed is greatly increased when your layer support tensor core (channel size must be multiple of 8).
@@ -87,6 +91,7 @@ CUDA 11.1 will be removed in spconv 2.2 because pytorch 1.10 don't provide prebu
 
 **NOTE** It's safe to have different **minor** cuda version between system and conda (pytorch) **in Linux**. for example, you can use spconv-cu114 with anaconda version of pytorch cuda 11.1 in a OS with CUDA 11.2 installed.
 
+**NOTE** In Linux, you can install spconv-cuxxx without install CUDA to system! only suitable NVIDIA driver is required. for CUDA 11, we need driver >= 450.82.
 
 ### Build from source for development (JIT, recommend)
 
@@ -147,7 +152,7 @@ You need to rebuild ```cumm``` first if you are build along a CUDA version that 
 
 ## Note
 
-The work is done when the author is an employee at Tusimple.
+The work is done when the author is an employee at [Tusimple](https://www.tusimple.com/).
 
 ## LICENSE
 

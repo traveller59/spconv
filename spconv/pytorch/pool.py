@@ -28,6 +28,7 @@ import spconv.pytorch.functional as Fsp
 from spconv.pytorch import ops
 from spconv.pytorch.core import IndiceData, ImplicitGemmIndiceData
 from spconv.pytorch.modules import SparseModule
+from spconv.cppconstants import CPU_ONLY_BUILD
 
 
 class SparseMaxPool(SparseModule):
@@ -63,7 +64,7 @@ class SparseMaxPool(SparseModule):
         if algo is None:
             # keep in mind that this algorithm is set for Inverse Sparse Conv
             # maxpool itself don't need mask.
-            if kv <= 32:
+            if kv <= 32 and not CPU_ONLY_BUILD:
                 if kv < 8:
                     algo = ConvAlgo.MaskImplicitGemm
                 else:
@@ -72,6 +73,8 @@ class SparseMaxPool(SparseModule):
                 algo = ConvAlgo.Native
         if kv > 32:
             assert algo == ConvAlgo.Native, "implicit gemm don't support kv >= 32 for now"
+        if CPU_ONLY_BUILD:
+            assert algo == ConvAlgo.Native, "cpu only build only support native algorithm"
 
         self.algo = algo
 

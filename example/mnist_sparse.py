@@ -65,7 +65,7 @@ class Net(nn.Module):
 def train(args, model, device, train_loader, optimizer, epoch):
     model.train()
     scaler = torch.cuda.amp.grad_scaler.GradScaler()
-    amp_ctx = identity_ctx()
+    amp_ctx = contextlib.nullcontext()
     if args.fp16:
         amp_ctx = torch.cuda.amp.autocast()
     for batch_idx, (data, target) in enumerate(train_loader):
@@ -105,7 +105,7 @@ def test(args, model, device, test_loader):
     model.eval()
     test_loss = 0
     correct = 0
-    amp_ctx = identity_ctx()
+    amp_ctx = contextlib.nullcontext()
     if args.fp16:
         amp_ctx = torch.cuda.amp.autocast()
 
