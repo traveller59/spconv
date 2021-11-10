@@ -26,6 +26,8 @@
 
 [Spconv 1.x code](https://github.com/traveller59/spconv/tree/v1.2.1). We won't provide any support for spconv 1.x since it's deprecated. use spconv 2.x if possible. <!--remove this message in spconv 2.2-->
 
+**WARNING** spconv < 2.1.4 users need to upgrade your version to 2.1.4, it fix a serious bug in SparseInverseConvXd.
+
 ## Breaking changes in Spconv 2.x
 
 Spconv 1.x users **NEED READ [THIS](docs/SPCONV_2_BREAKING_CHANGEs.md)** before using spconv 2.x.

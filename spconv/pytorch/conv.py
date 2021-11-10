@@ -266,7 +266,7 @@ class SparseConvolution(SparseModule):
                 outids = datas.indices
                 indice_pairs = datas.indice_pairs
                 indice_pair_num = datas.indice_pair_num
-                out_spatial_shape = datas.out_spatial_shape
+                out_spatial_shape = datas.spatial_shape
                 assert indice_pair_num.shape[0] == np.prod(
                     self.kernel_size
                 ), "inverse conv must have same kernel size as its couple conv"
@@ -295,6 +295,7 @@ class SparseConvolution(SparseModule):
                                              indice_pairs,
                                              indice_pair_num,
                                              spatial_shape,
+                                             out_spatial_shape,
                                              is_subm=self.subm,
                                              algo=algo)
                     if self.indice_key is not None:
@@ -338,7 +339,7 @@ class SparseConvolution(SparseModule):
                 mask_argsort_fwd_splits = datas.mask_argsort_bwd_splits
                 mask_argsort_bwd_splits = datas.mask_argsort_fwd_splits
                 masks = datas.masks
-
+                out_spatial_shape = datas.spatial_shape
             else:
                 if self.indice_key is not None and datas is not None:
                     outids = datas.out_indices
@@ -385,6 +386,7 @@ class SparseConvolution(SparseModule):
                             mask_argsort_bwd_splits=mask_argsort_bwd_splits,
                             masks=masks,
                             is_subm=self.subm,
+                            spatial_shape=spatial_shape,
                             out_spatial_shape=out_spatial_shape,
                             algo=algo)
                         msg = f"your indice key {self.indice_key} already exists in this sparse tensor."
