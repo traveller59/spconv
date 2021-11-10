@@ -346,6 +346,9 @@ class SparseConvolution(SparseModule):
                     mask_argsort_bwd_splits = datas.mask_argsort_fwd_splits
                     masks = datas.masks
                     out_spatial_shape = datas.spatial_shape
+                    assert pair_fwd.shape[0] == np.prod(
+                        self.kernel_size
+                    ), "inverse conv must have same kernel size as its couple conv"
 
                 else:
                     if self.indice_key is not None and datas is not None:
