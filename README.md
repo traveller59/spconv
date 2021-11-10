@@ -13,16 +13,36 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 -->
+[pypi-ver-cpu]: https://img.shields.io/pypi/v/spconv
+[pypi-ver-114]: https://img.shields.io/pypi/v/spconv-cu114
+[pypi-ver-111]: https://img.shields.io/pypi/v/spconv-cu111
+[pypi-ver-113]: https://img.shields.io/pypi/v/spconv-cu113
+[pypi-ver-102]: https://img.shields.io/pypi/v/spconv-cu102
 
-[pypi-download]: https://img.shields.io/pypi/dm/spconv-cu114
-[pypi-url]: https://pypi.org/project/spconv-cu114/
-[pypi-image]: https://badge.fury.io/py/spconv-cu114.svg
+[pypi-url-111]: https://pypi.org/project/spconv-cu111/
+[pypi-download-111]: https://img.shields.io/pypi/dm/spconv-cu111
+[pypi-url-113]: https://pypi.org/project/spconv-cu113/
+[pypi-download-113]: https://img.shields.io/pypi/dm/spconv-cu113
+[pypi-url-102]: https://pypi.org/project/spconv-cu102/
+[pypi-download-102]: https://img.shields.io/pypi/dm/spconv-cu102
+[pypi-url-114]: https://pypi.org/project/spconv-cu114/
+[pypi-download-114]: https://img.shields.io/pypi/dm/spconv-cu114
+[pypi-url-cpu]: https://pypi.org/project/spconv/
+[pypi-download-cpu]: https://img.shields.io/pypi/dm/spconv
 
 # SpConv: Spatially Sparse Convolution Library
-[![Build Status](https://github.com/traveller59/spconv/workflows/build/badge.svg)](https://github.com/traveller59/spconv/actions?query=workflow%3Abuild) [![PyPI Version][pypi-image]][pypi-url] [![pypi monthly download][pypi-download]][pypi-url]
+[![Build Status](https://github.com/traveller59/spconv/workflows/build/badge.svg)](https://github.com/traveller59/spconv/actions?query=workflow%3Abuild) 
+
+|                | PyPi Version  | Downloads  |
+| -------------- |:---------------------:| ---------------------:| 
+| CPU (Linux Only) | [![PyPI Version][pypi-ver-cpu]][pypi-url-cpu] | [![pypi monthly download][pypi-download-cpu]][pypi-url-cpu] | 
+| CUDA 10.2 | [![PyPI Version][pypi-ver-102]][pypi-url-102] | [![pypi monthly download][pypi-download-102]][pypi-url-102] | 
+| CUDA 11.1 | [![PyPI Version][pypi-ver-111]][pypi-url-111] | [![pypi monthly download][pypi-download-111]][pypi-url-111]| 
+| CUDA 11.3 (Linux Only) | [![PyPI Version][pypi-ver-113]][pypi-url-113] |[![pypi monthly download][pypi-download-113]][pypi-url-113]| 
+| CUDA 11.4 | [![PyPI Version][pypi-ver-114]][pypi-url-114] | [![pypi monthly download][pypi-download-114]][pypi-url-114]| 
 
 
-```spconv``` is a project that provide heavily-optimized sparse convolution implementation with tensor core support.
+```spconv``` is a project that provide heavily-optimized sparse convolution implementation with tensor core support. check [benchmark](docs/BENCHMARK.md) to see how fast spconv 2.x runs.
 
 [Spconv 1.x code](https://github.com/traveller59/spconv/tree/v1.2.1). We won't provide any support for spconv 1.x since it's deprecated. use spconv 2.x if possible. <!--remove this message in spconv 2.2-->
 
@@ -99,7 +119,10 @@ The c++ code will be built automatically when you change c++ code in project.
 
 For NVIDIA Embedded Platforms, you need to specify cuda arch before build: ```export CUMM_CUDA_ARCH_LIST="7.2"``` for xavier.
 
+You need to remove ```cumm``` in ```requires``` section in pyproject.toml after install editable ```cumm``` and before install spconv due to pyproject limit (can't find editable installed ```cumm```).
+
 #### Linux
+
 0. uninstall spconv and cumm installed by pip
 1. install build-essential, install CUDA
 2. ```git clone https://github.com/FindDefinition/cumm```, ```cd ./cumm```, ```pip install -e .```

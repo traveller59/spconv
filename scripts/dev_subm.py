@@ -19,20 +19,21 @@ from cumm.conv.bases import NCHW, NHWC, ConvIterAlgo, ConvOpType
 from cumm.conv.main import ConvMainUnitTest, gen_gemm_kernels
 from cumm.conv.params import ConvProblem
 from cumm.gemm import kernel
-import os 
+import os
 from spconv.core_cc.csrc.sparse.all import SpconvOps
 from cumm.gemm.codeops import div_up
 from spconv.constants import PACKAGE_ROOT
 from spconv.core import ConvAlgo
 
-from spconv.pytorch import ops 
+from spconv.pytorch import ops
 from spconv.algo import CONV, BestConvAlgoByProfile
 from spconv.pytorch.cppcore import torch_tensor_to_tv
+
 
 def reduce_mask_count(mask: np.ndarray, width: int):
     mask_length_32 = (div_up(mask.shape[0], width)) * width
     if mask.shape[0] < mask_length_32:
-        mask_pad = np.zeros((mask_length_32,), dtype=mask.dtype)
+        mask_pad = np.zeros((mask_length_32, ), dtype=mask.dtype)
         mask_pad[:mask.shape[0]] = mask
         mask = mask_pad
     mask = mask.reshape(-1, width)
@@ -40,15 +41,17 @@ def reduce_mask_count(mask: np.ndarray, width: int):
     maskr_tv = tv.from_numpy(maskr)
     return SpconvOps.count_bits(maskr_tv).numpy().sum() * width
 
+
 def reduce_mask_count_x(mask: np.ndarray, width: int):
     mask_length_32 = (div_up(mask.shape[0], width)) * width
     if mask.shape[0] < mask_length_32:
-        mask_pad = np.zeros((mask_length_32,), dtype=mask.dtype)
+        mask_pad = np.zeros((mask_length_32, ), dtype=mask.dtype)
         mask_pad[:mask.shape[0]] = mask
         mask = mask_pad
     mask = mask.reshape(-1, width)
     maskr = np.bitwise_or.reduce(mask, axis=1)
     return maskr
+
 
 def dev_subm_inds_v2(subm: bool = False, run_conv: bool = True):
     limit_input_n = 16384
@@ -88,8 +91,9 @@ def dev_subm_inds_v2(subm: bool = False, run_conv: bool = True):
         stride = [1] * ndim
         dilation = [1] * ndim
         out_padding = [0] * ndim
-    out_inds, pair_ref, indice_num_per_loc = ops.get_indice_pairs(indices_th, 1, spatial_shape, ConvAlgo.Native, 
-            ksize, stride, padding, dilation, out_padding, subm)
+    out_inds, pair_ref, indice_num_per_loc = ops.get_indice_pairs(
+        indices_th, 1, spatial_shape, ConvAlgo.Native, ksize, stride, padding,
+        dilation, out_padding, subm)
     indice_num_per_loc_np = indice_num_per_loc.cpu().numpy()
     indice_pairs_np = pair_ref.cpu().numpy()
     algo = ConvAlgo.MaskSplitImplicitGemm
@@ -98,8 +102,9 @@ def dev_subm_inds_v2(subm: bool = False, run_conv: bool = True):
     else:
         num_split = 2
     for i in range(5):
-        res = ops.get_indice_pairs_implicit_gemm(indices_th, 1, spatial_shape, algo, 
-            ksize, stride, padding, dilation, out_padding, subm)
+        res = ops.get_indice_pairs_implicit_gemm(indices_th, 1, spatial_shape,
+                                                 algo, ksize, stride, padding,
+                                                 dilation, out_padding, subm)
     out_inds = res[0]
     num_inds_per_loc = res[1]
     pair_fwd = res[2]
@@ -115,23 +120,38 @@ def dev_subm_inds_v2(subm: bool = False, run_conv: bool = True):
     mask_argsort_fwd_splits = res[6]
     mask_argsort_bwd_splits = res[7]
     masks = res[8]
-    pair_mask_fwd_splits_tv = [ops.torch_tensor_to_tv(t, dtype=tv.uint32) for t in pair_mask_fwd_splits]
-    valid_location_bitcount = [SpconvOps.count_bits(t) for t in pair_mask_fwd_splits_tv]
-    valid_location_count = sum([t.cpu().numpy().sum() for t in valid_location_bitcount])
+    pair_mask_fwd_splits_tv = [
+        ops.torch_tensor_to_tv(t, dtype=tv.uint32)
+        for t in pair_mask_fwd_splits
+    ]
+    valid_location_bitcount = [
+        SpconvOps.count_bits(t) for t in pair_mask_fwd_splits_tv
+    ]
+    valid_location_count = sum(
+        [t.cpu().numpy().sum() for t in valid_location_bitcount])
     reduce_length = 32
-    split_mask_valid_count = sum([reduce_mask_count(t.cpu().numpy(), reduce_length) for t in pair_mask_fwd_splits_tv])
+    split_mask_valid_count = sum([
+        reduce_mask_count(t.cpu().numpy(), reduce_length)
+        for t in pair_mask_fwd_splits_tv
+    ])
     if subm:
-        print("SUBM", valid_location_count, split_mask_valid_count, pair_fwd.numel())
+        print("SUBM", valid_location_count, split_mask_valid_count,
+              pair_fwd.numel())
     else:
-        print("REGULAR", valid_location_count, split_mask_valid_count, pair_fwd.numel())
-    # return 
+        print("REGULAR", valid_location_count, split_mask_valid_count,
+              pair_fwd.numel())
+    # return
 
     if run_conv:
         C = 64
         K = 64
         desps = CONV.desps
-        mask_output_fwd = torch.zeros([2, div_up(out_inds.shape[0], 32)], dtype=torch.int32, device=indices_th.device)
-        mask_output_bwd = torch.zeros([2, div_up(indices.dim(0), 32)], dtype=torch.int32, device=indices_th.device)
+        mask_output_fwd = torch.zeros([2, div_up(out_inds.shape[0], 32)],
+                                      dtype=torch.int32,
+                                      device=indices_th.device)
+        mask_output_bwd = torch.zeros([2, div_up(indices.dim(0), 32)],
+                                      dtype=torch.int32,
+                                      device=indices_th.device)
 
         for desp in desps:
             if desp.algo != GemmAlgo.Simt.value:
@@ -140,17 +160,22 @@ def dev_subm_inds_v2(subm: bool = False, run_conv: bool = True):
             #     continue
             # if desp.tile_shape !
             if desp.dtype_a == dtypes.int8.tv_dtype:
-                inp = np.random.randint(-1, 1, size=[voxels_np.shape[0], C]).astype(np.int8)
-                weight = np.random.randint(-1, 1, size=[K, *ksize, C]).astype(np.int8)
-                output = np.random.randint(-1, 1, size=[out_inds.shape[0], K]).astype(
-                    dtypes.get_npdtype_from_tvdtype(desp.dtype_output))
+                inp = np.random.randint(-1, 1, size=[voxels_np.shape[0],
+                                                     C]).astype(np.int8)
+                weight = np.random.randint(-1, 1, size=[K, *ksize,
+                                                        C]).astype(np.int8)
+                output = np.random.randint(-1, 1, size=[
+                    out_inds.shape[0], K
+                ]).astype(dtypes.get_npdtype_from_tvdtype(desp.dtype_output))
             else:
-                inp = np.random.uniform(-1, 1, size=[voxels_np.shape[0], C]).astype(
-                    dtypes.get_npdtype_from_tvdtype(desp.dtype_input))
+                inp = np.random.uniform(-1, 1, size=[
+                    voxels_np.shape[0], C
+                ]).astype(dtypes.get_npdtype_from_tvdtype(desp.dtype_input))
                 weight = np.random.uniform(-1, 1, size=[K, *ksize, C]).astype(
                     dtypes.get_npdtype_from_tvdtype(desp.dtype_weight))
-                output = np.random.uniform(-1, 1, size=[out_inds.shape[0], K]).astype(
-                    dtypes.get_npdtype_from_tvdtype(desp.dtype_output))
+                output = np.random.uniform(-1, 1, size=[
+                    out_inds.shape[0], K
+                ]).astype(dtypes.get_npdtype_from_tvdtype(desp.dtype_output))
             weight_ref = weight.transpose(1, 2, 3, 0, 4)
             weight_ref = np.ascontiguousarray(weight_ref).reshape(-1, K, C)
             if desp.op_type == ConvOpType.kBackwardInput.value:
@@ -211,19 +236,19 @@ def dev_subm_inds_v2(subm: bool = False, run_conv: bool = True):
                     )
             else:
                 if desp.op_type == ConvOpType.kForward.value:
-                    indice_pairs = pair_fwd # inp -> out
+                    indice_pairs = pair_fwd  # inp -> out
                     mask_ops = pair_mask_fwd_splits
                     mask_argsorts = mask_argsort_fwd_splits
                     mask_output = mask_output_fwd
                 elif desp.op_type == ConvOpType.kBackwardInput.value:
-                    indice_pairs = pair_bwd # out -> inp
+                    indice_pairs = pair_bwd  # out -> inp
                     mask_ops = pair_mask_bwd_splits
                     mask_argsorts = mask_argsort_bwd_splits
                     mask_output = mask_output_bwd
 
                     print([bin(x.item()) for x in masks])
                 else:
-                    indice_pairs = pair_fwd # inp -> out
+                    indice_pairs = pair_fwd  # inp -> out
                     mask_ops = pair_mask_fwd_splits
                     mask_argsorts = mask_argsort_fwd_splits
                     mask_output = mask_output_fwd
@@ -255,7 +280,7 @@ def dev_subm_inds_v2(subm: bool = False, run_conv: bool = True):
                     )
 
             torch.cuda.synchronize()
-            duration = time.time() - t 
+            duration = time.time() - t
             if desp.op_type == ConvOpType.kForward.value:
                 output_ref = np.zeros_like(output, dtype=np.float32)
                 # ref algorithm
@@ -270,7 +295,9 @@ def dev_subm_inds_v2(subm: bool = False, run_conv: bool = True):
                     c_inds = indice_pairs_np[1][filter_offset][:nhot]
                     # print(a_inds_cpu[:10])
                     a = inp[a_inds]
-                    cc = a.astype(np.float32) @ weight_ref[filter_offset].T.astype(np.float32)
+                    cc = a.astype(
+                        np.float32) @ weight_ref[filter_offset].T.astype(
+                            np.float32)
                     output_ref[c_inds] += cc
 
                 output_cpu = output_tv.cpu().numpy().astype(np.float32)
@@ -294,12 +321,18 @@ def dev_subm_inds_v2(subm: bool = False, run_conv: bool = True):
                     # print(a_inds_cpu[:10])
                     a = output[a_inds]
                     # NK @ KC
-                    cc = a.astype(np.float32) @ weight_ref[filter_offset].astype(np.float32)
+                    cc = a.astype(
+                        np.float32) @ weight_ref[filter_offset].astype(
+                            np.float32)
                     dinput_ref[c_inds] += cc
                 din_cpu = inp_tv.cpu().numpy()
-                print("ERROR", np.linalg.norm(din_cpu.reshape(-1) - dinput_ref.reshape(-1)))
+                print(
+                    "ERROR",
+                    np.linalg.norm(
+                        din_cpu.reshape(-1) - dinput_ref.reshape(-1)))
             else:
-                dw_ref = np.zeros_like(weight_ref, dtype=np.float32) # KV, K, C
+                dw_ref = np.zeros_like(weight_ref,
+                                       dtype=np.float32)  # KV, K, C
                 for filter_offset in range(kv):
                     if subm and filter_offset > kv // 2:
                         nhot = indice_num_per_loc_np[kv - 1 - filter_offset]
@@ -310,16 +343,20 @@ def dev_subm_inds_v2(subm: bool = False, run_conv: bool = True):
                     o_inds = indice_pairs_np[1][filter_offset][:nhot]
                     i_inds = indice_pairs_np[0][filter_offset][:nhot]
                     # print(a_inds_cpu[:10])
-                    out_gather = output[o_inds] # [N, K]
-                    inp_gather = inp[i_inds] # [N, C]
+                    out_gather = output[o_inds]  # [N, K]
+                    inp_gather = inp[i_inds]  # [N, C]
                     # KN @ NC
-                    dw_res = out_gather.astype(np.float32).T @ inp_gather.astype(np.float32)
+                    dw_res = out_gather.astype(
+                        np.float32).T @ inp_gather.astype(np.float32)
                     dw_ref[filter_offset] = dw_res
                 # print(indice_pairs_np_test[0])
                 dw_ref_kcrs = dw_ref.transpose(1, 0, 2)
                 dw_cpu = weight_tv.cpu().numpy().reshape(K, np.prod(ksize), C)
 
-                print("ERROR", np.linalg.norm(dw_cpu.reshape(-1) - dw_ref_kcrs.reshape(-1)))
+                print(
+                    "ERROR",
+                    np.linalg.norm(
+                        dw_cpu.reshape(-1) - dw_ref_kcrs.reshape(-1)))
 
 
 if __name__ == "__main__":

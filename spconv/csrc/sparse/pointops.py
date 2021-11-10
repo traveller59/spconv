@@ -1,11 +1,11 @@
 # Copyright 2021 Yan Yan
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,27 +15,27 @@
 import contextlib
 from cumm.gemm.core.metaarray import MetaArray, seq
 from cumm import dtypes
-import pccm 
+import pccm
 from cumm.gemm.layout import TensorGeneric, to_stride
 from cumm.common import TensorView, TensorViewHashKernel
 from cumm.gemm import codeops
-from typing import List 
+from typing import List
 from cumm.conv.params import ConvProblem
-import numpy as np 
+import numpy as np
+
 
 class Point2VoxelCommon(pccm.ParameterizedClass):
     def __init__(self, dtype: dtypes.DType, ndim: int, zyx: bool = True):
         super().__init__()
         self.add_dependency(TensorView)
-        self.dtype = dtype 
-        self.ndim = ndim 
+        self.dtype = dtype
+        self.ndim = ndim
         self.zyx = zyx
         ret_str = f"std::array<int, {self.ndim}>"
         retf_str = f"std::array<float, {self.ndim}>"
         retf2_str = f"std::array<float, {self.ndim * 2}>"
         self.calc_meta_ret = f"std::tuple<{retf_str}, {ret_str}, {ret_str}, {retf2_str}>"
 
-    @pccm.pybind.mark
     @pccm.static_function
     def calc_meta_data(self):
         code = pccm.FunctionCode()
@@ -80,7 +80,8 @@ class Point2VoxelCommon(pccm.ParameterizedClass):
         retf_str = f"std::array<float, {self.ndim}>"
         retf2_str = f"std::array<float, {self.ndim * 2}>"
 
-        return code.ret(f"std::tuple<{retf_str}, {ret_str}, {ret_str}, {retf2_str}>")
+        return code.ret(
+            f"std::tuple<{retf_str}, {ret_str}, {ret_str}, {retf2_str}>")
 
     @pccm.static_function
     def array2tvarray(self):
@@ -112,16 +113,21 @@ class Point2VoxelCommon(pccm.ParameterizedClass):
         """)
         return code.ret("std::array<T, N>")
 
+
 class Point2VoxelKernel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
     """this class don't support multi-thread. 
     create p2v for every thread.
     """
-    def __init__(self, dtype: dtypes.DType, ndim: int, layout: TensorGeneric, zyx: bool = True):
+    def __init__(self,
+                 dtype: dtypes.DType,
+                 ndim: int,
+                 layout: TensorGeneric,
+                 zyx: bool = True):
         super().__init__()
         self.add_dependency(TensorView, TensorViewHashKernel)
         self.add_param_class("layout_ns", layout, "Layout")
-        self.dtype = dtype 
-        self.ndim = ndim 
+        self.dtype = dtype
+        self.ndim = ndim
         self.zyx = zyx
 
     @pccm.cuda.cuda_global_function
@@ -142,7 +148,7 @@ class Point2VoxelKernel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         point_xyz = f"{self.ndim - 1} - j"
         if not self.zyx:
             point_xyz = f"j"
-        # if zyx, the coors_range and grid_bound is zyx too, 
+        # if zyx, the coors_range and grid_bound is zyx too,
         # generated indices is zyx.
         code.raw(f"""
         for (int i : tv::KernelLoopX<int>(num_points)){{
@@ -166,7 +172,7 @@ class Point2VoxelKernel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
             }}
         }}
         """)
-        return code 
+        return code
 
     @pccm.cuda.cuda_global_function
     def assign_table(self):
@@ -190,7 +196,7 @@ class Point2VoxelKernel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
             }}
         }}
         """)
-        return code 
+        return code
 
     @pccm.cuda.cuda_global_function
     def generate_voxel(self):
@@ -231,7 +237,7 @@ class Point2VoxelKernel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
             }}
         }}
         """)
-        return code 
+        return code
 
     @pccm.cuda.cuda_global_function
     def voxel_empty_fill_mean(self):
@@ -263,7 +269,7 @@ class Point2VoxelKernel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
             }}
         }}
         """)
-        return code 
+        return code
 
     @pccm.cuda.cuda_global_function
     def limit_num_per_voxel_value(self):
@@ -276,7 +282,8 @@ class Point2VoxelKernel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
             num_per_voxel[i] = count;
         }}
         """)
-        return code 
+        return code
+
 
 class Point2Voxel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
     def __init__(self, dtype: dtypes.DType, ndim: int, zyx: bool = True):
@@ -286,14 +293,23 @@ class Point2Voxel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         self.add_param_class("p2v_c", self.p2v_c, "Point2VoxelCommon")
         layout = TensorGeneric(ndim, True)
         self.add_param_class("layout_ns", layout, "Layout")
-        self.dtype = dtype 
-        self.ndim = ndim 
+        self.dtype = dtype
+        self.ndim = ndim
         self.zyx = zyx
-        cuda_funcs = [self.point_to_voxel_hash, self.point_to_voxel_hash_static]
-        self.add_impl_only_param_class(cuda_funcs, "kernel", Point2VoxelKernel(dtype, ndim, layout, zyx))
+        cuda_funcs = [
+            self.point_to_voxel_hash, self.point_to_voxel_hash_static
+        ]
+        self.add_impl_only_param_class(
+            cuda_funcs, "kernel", Point2VoxelKernel(dtype, ndim, layout, zyx))
 
-        self.add_pybind_member("hashdata", "tv::Tensor", readwrite=False, pyanno="cumm.tensorview.Tensor")
-        self.add_pybind_member("point_indice_data", "tv::Tensor", readwrite=False, pyanno="cumm.tensorview.Tensor")
+        self.add_pybind_member("hashdata",
+                               "tv::Tensor",
+                               readwrite=False,
+                               pyanno="cumm.tensorview.Tensor")
+        self.add_pybind_member("point_indice_data",
+                               "tv::Tensor",
+                               readwrite=False,
+                               pyanno="cumm.tensorview.Tensor")
 
         self.add_pybind_member("voxels", "tv::Tensor", readwrite=False)
         self.add_pybind_member("indices", "tv::Tensor", readwrite=False)
@@ -357,7 +373,7 @@ class Point2Voxel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         hashdata = tv::zeros({{1}}, tv::custom128, 0);
         point_indice_data = tv::zeros({{1}}, tv::int64, 0);
         """)
-        return code 
+        return code
 
     @pccm.pybind.mark
     @pccm.cuda.member_function
@@ -439,13 +455,13 @@ class Point2Voxel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         """)
         return code.ret("std::tuple<tv::Tensor, tv::Tensor, tv::Tensor>")
 
-
     @pccm.pybind.mark
     @pccm.cuda.static_function
     def point_to_voxel_hash_static(self):
         code = pccm.FunctionCode()
         code.arg("points", "tv::Tensor")
-        code.arg("voxels, indices, num_per_voxel, hashdata, point_indice_data", "tv::Tensor")
+        code.arg("voxels, indices, num_per_voxel, hashdata, point_indice_data",
+                 "tv::Tensor")
         code.arg("vsize", f"std::array<float, {self.ndim}>")
         code.arg("grid_size, grid_stride", f"std::array<int, {self.ndim}>")
         code.arg("coors_range", f"std::array<float, {self.ndim * 2}>")
@@ -527,13 +543,16 @@ class Point2VoxelCPU(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         self.add_dependency(TensorView)
         layout = TensorGeneric(ndim, True)
         self.add_param_class("layout_ns", layout, "Layout")
-        self.dtype = dtype 
-        self.ndim = ndim 
+        self.dtype = dtype
+        self.ndim = ndim
         self.zyx = zyx
         self.p2v_c = Point2VoxelCommon(dtype, ndim, zyx)
         self.add_param_class("p2v_c", self.p2v_c, "Point2VoxelCommon")
 
-        self.add_pybind_member("densehashdata", "tv::Tensor", readwrite=False, pyanno="cumm.tensorview.Tensor")
+        self.add_pybind_member("densehashdata",
+                               "tv::Tensor",
+                               readwrite=False,
+                               pyanno="cumm.tensorview.Tensor")
 
         self.add_pybind_member("voxels", "tv::Tensor", readwrite=False)
         self.add_pybind_member("indices", "tv::Tensor", readwrite=False)
@@ -567,7 +586,6 @@ class Point2VoxelCPU(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         return Point2VoxelCommon::calc_meta_data(vsize_xyz, coors_range_xyz);
         """)
         return code.ret(self.p2v_c.calc_meta_ret)
-
 
     @pccm.pybind.mark
     @pccm.constructor
@@ -613,7 +631,7 @@ class Point2VoxelCPU(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
             densehashdata_ptr[i] = -1;
         }}
         """)
-        return code 
+        return code
 
     def point_to_voxel_static_template(self, mean: bool = False):
         code = pccm.FunctionCode()

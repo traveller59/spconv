@@ -24,12 +24,13 @@ from torch.nn.parameter import Parameter
 
 from spconv import pytorch as spconv
 from spconv.core import ConvAlgo
-import spconv.pytorch.functional as Fsp
+from spconv.pytorch import functional as Fsp
 from spconv.pytorch import ops
 from spconv.cppconstants import CPU_ONLY_BUILD
 from spconv.pytorch.core import IndiceData, SparseConvTensor, ImplicitGemmIndiceData
 from spconv.pytorch.modules import SparseModule
 from spconv.constants import FILTER_HWIO
+from spconv.utils import nullcontext
 
 
 def _calculate_fan_in_and_fan_out_hwio(tensor, algo: ConvAlgo):
@@ -205,6 +206,7 @@ class SparseConvolution(SparseModule):
                     self.dilation)
         else:
             out_spatial_shape = spatial_shape
+        # print(self._sparse_unique_name, spatial_shape, out_spatial_shape)
         # input.update_grid(out_spatial_shape)
         # t = time.time()
         out_tensor = input.shadow_copy()
@@ -247,158 +249,165 @@ class SparseConvolution(SparseModule):
             out_tensor = out_tensor.replace_feature(features)
             return out_tensor
         indice_dict = input.indice_dict.copy()
-        
+
         algo = self.algo
-        if self.indice_key is not None :
+        if self.indice_key is not None:
             datas = input.find_indice_pair(self.indice_key)
             if datas is not None:
                 msg = "due to limitation of pytorch, you must provide same algo to layers share same indice key."
                 assert algo == datas.algo, msg
                 # algo = datas.algo
-        if algo == ConvAlgo.Native:
-            datas = input.find_indice_pair(self.indice_key)
-            if datas is not None:
-                assert isinstance(datas, IndiceData)
-            if self.inverse:
-                assert datas is not None and self.indice_key is not None
-                assert datas.is_subm is False, "inverse conv can only be used with standard conv and pool ops."
+        profile_ctx = nullcontext()
+        if input._timer is not None and self._sparse_unique_name:
+            profile_ctx = input._timer.namespace(self._sparse_unique_name)
+        with profile_ctx:
+            if algo == ConvAlgo.Native:
+                datas = input.find_indice_pair(self.indice_key)
+                if datas is not None:
+                    assert isinstance(datas, IndiceData)
+                if self.inverse:
+                    assert datas is not None and self.indice_key is not None
+                    assert datas.is_subm is False, "inverse conv can only be used with standard conv and pool ops."
 
-                outids = datas.indices
-                indice_pairs = datas.indice_pairs
-                indice_pair_num = datas.indice_pair_num
-                out_spatial_shape = datas.out_spatial_shape
-                assert indice_pair_num.shape[0] == np.prod(
-                    self.kernel_size
-                ), "inverse conv must have same kernel size as its couple conv"
-            else:
-                if self.indice_key is not None and datas is not None:
-                    outids = datas.out_indices
+                    outids = datas.indices
                     indice_pairs = datas.indice_pairs
                     indice_pair_num = datas.indice_pair_num
+                    out_spatial_shape = datas.out_spatial_shape
+                    assert indice_pair_num.shape[0] == np.prod(
+                        self.kernel_size
+                    ), "inverse conv must have same kernel size as its couple conv"
                 else:
-                    if input.benchmark:
-                        torch.cuda.synchronize()
-                        t = time.time()
-                    outids, indice_pairs, indice_pair_num = ops.get_indice_pairs(
-                        indices, batch_size, spatial_shape, algo,
-                        self.kernel_size, self.stride, self.padding,
-                        self.dilation, self.output_padding, self.subm,
-                        self.transposed)
-                    if input.benchmark:
-                        torch.cuda.synchronize()
-                        interval = time.time() - t
-                        out_tensor.benchmark_record[
-                            self.name]["indice_gen_time"].append(interval)
+                    if self.indice_key is not None and datas is not None:
+                        outids = datas.out_indices
+                        indice_pairs = datas.indice_pairs
+                        indice_pair_num = datas.indice_pair_num
+                    else:
+                        if input.benchmark:
+                            torch.cuda.synchronize()
+                            t = time.time()
+                        outids, indice_pairs, indice_pair_num = ops.get_indice_pairs(
+                            indices, batch_size, spatial_shape, algo,
+                            self.kernel_size, self.stride, self.padding,
+                            self.dilation, self.output_padding, self.subm,
+                            self.transposed)
+                        if input.benchmark:
+                            torch.cuda.synchronize()
+                            interval = time.time() - t
+                            out_tensor.benchmark_record[
+                                self.name]["indice_gen_time"].append(interval)
 
-                    indice_data = IndiceData(outids,
-                                             indices,
-                                             indice_pairs,
-                                             indice_pair_num,
-                                             spatial_shape,
-                                             is_subm=self.subm,
-                                             algo=algo)
-                    if self.indice_key is not None:
-                        msg = f"your indice key {self.indice_key} already exists in this sparse tensor."
-                        assert self.indice_key not in indice_dict, msg
-                        indice_dict[self.indice_key] = indice_data
-            if input.benchmark:
-                torch.cuda.synchronize()
-                t = time.time()
-            indice_pairs_calc = indice_pairs
-            if indice_pairs.device != features.device:
-                indice_pairs_calc = indice_pairs.to(features.device)
-            if self.subm:
-                out_features = Fsp.indice_subm_conv(features, self.weight,
-                                                    indice_pairs_calc,
-                                                    indice_pair_num,
-                                                    outids.shape[0], algo)
-            else:
-                if self.inverse:
-                    out_features = Fsp.indice_inverse_conv(
+                        indice_data = IndiceData(outids,
+                                                 indices,
+                                                 indice_pairs,
+                                                 indice_pair_num,
+                                                 spatial_shape,
+                                                 is_subm=self.subm,
+                                                 algo=algo)
+                        if self.indice_key is not None:
+                            msg = f"your indice key {self.indice_key} already exists in this sparse tensor."
+                            assert self.indice_key not in indice_dict, msg
+                            indice_dict[self.indice_key] = indice_data
+                if input.benchmark:
+                    torch.cuda.synchronize()
+                    t = time.time()
+                indice_pairs_calc = indice_pairs
+                if indice_pairs.device != features.device:
+                    indice_pairs_calc = indice_pairs.to(features.device)
+                if self.subm:
+                    out_features = Fsp.indice_subm_conv(
                         features, self.weight, indice_pairs_calc,
-                        indice_pair_num, outids.shape[0], algo)
+                        indice_pair_num, outids.shape[0], algo, input._timer)
                 else:
-                    out_features = Fsp.indice_conv(features, self.weight,
-                                                   indice_pairs_calc,
-                                                   indice_pair_num,
-                                                   outids.shape[0], algo)
-
-        else:
-            datas = input.find_indice_pair(self.indice_key)
-            if datas is not None:
-                assert isinstance(datas, ImplicitGemmIndiceData)
-            if self.inverse:
-                assert datas is not None and self.indice_key is not None
-                assert datas.is_subm is False, "inverse conv can only be used with standard conv and pool ops."
-                outids = datas.indices
-                pair_fwd = datas.pair_bwd
-                pair_bwd = datas.pair_fwd
-                pair_mask_fwd_splits = datas.pair_mask_bwd_splits
-                pair_mask_bwd_splits = datas.pair_mask_fwd_splits
-                mask_argsort_fwd_splits = datas.mask_argsort_bwd_splits
-                mask_argsort_bwd_splits = datas.mask_argsort_fwd_splits
-                masks = datas.masks
+                    if self.inverse:
+                        out_features = Fsp.indice_inverse_conv(
+                            features, self.weight, indice_pairs_calc,
+                            indice_pair_num, outids.shape[0], algo)
+                    else:
+                        out_features = Fsp.indice_conv(features, self.weight,
+                                                       indice_pairs_calc,
+                                                       indice_pair_num,
+                                                       outids.shape[0], algo,
+                                                       input._timer)
 
             else:
-                if self.indice_key is not None and datas is not None:
-                    outids = datas.out_indices
-                    pair_fwd = datas.pair_fwd
-                    pair_bwd = datas.pair_bwd
-                    pair_mask_fwd_splits = datas.pair_mask_fwd_splits
-                    pair_mask_bwd_splits = datas.pair_mask_bwd_splits
-                    mask_argsort_fwd_splits = datas.mask_argsort_fwd_splits
-                    mask_argsort_bwd_splits = datas.mask_argsort_bwd_splits
+                datas = input.find_indice_pair(self.indice_key)
+                if datas is not None:
+                    assert isinstance(datas, ImplicitGemmIndiceData)
+                if self.inverse:
+                    assert datas is not None and self.indice_key is not None
+                    assert datas.is_subm is False, "inverse conv can only be used with standard conv and pool ops."
+                    outids = datas.indices
+                    pair_fwd = datas.pair_bwd
+                    pair_bwd = datas.pair_fwd
+                    pair_mask_fwd_splits = datas.pair_mask_bwd_splits
+                    pair_mask_bwd_splits = datas.pair_mask_fwd_splits
+                    mask_argsort_fwd_splits = datas.mask_argsort_bwd_splits
+                    mask_argsort_bwd_splits = datas.mask_argsort_fwd_splits
                     masks = datas.masks
+
                 else:
-                    res = ops.get_indice_pairs_implicit_gemm(
-                        indices,
-                        batch_size,
-                        spatial_shape,
-                        algo,
-                        ksize=self.kernel_size,
-                        stride=self.stride,
-                        padding=self.padding,
-                        dilation=self.dilation,
-                        out_padding=self.output_padding,
-                        subm=self.subm,
-                        transpose=self.transposed,
-                        is_train=self.training,
-                        alloc=input.thrust_allocator)
-                    outids = res[0]
-                    num_inds_per_loc = res[1]
-                    pair_fwd = res[2]
-                    pair_bwd = res[3]
-                    pair_mask_fwd_splits = res[4]
-                    pair_mask_bwd_splits = res[5]
-                    mask_argsort_fwd_splits = res[6]
-                    mask_argsort_bwd_splits = res[7]
-                    masks = res[8]
-                    if self.indice_key is not None:
-                        indice_data = ImplicitGemmIndiceData(
-                            outids,
-                            indices,
-                            pair_fwd,
-                            pair_bwd,
-                            pair_mask_fwd_splits=pair_mask_fwd_splits,
-                            pair_mask_bwd_splits=pair_mask_bwd_splits,
-                            mask_argsort_fwd_splits=mask_argsort_fwd_splits,
-                            mask_argsort_bwd_splits=mask_argsort_bwd_splits,
-                            masks=masks,
-                            is_subm=self.subm,
-                            out_spatial_shape=out_spatial_shape,
-                            algo=algo)
-                        msg = f"your indice key {self.indice_key} already exists in this sparse tensor."
-                        assert self.indice_key not in indice_dict, msg
-                        indice_dict[self.indice_key] = indice_data
-            if input.benchmark:
-                torch.cuda.synchronize()
-                t = time.time()
-            num_activate_out = outids.shape[0]
-            out_features = Fsp.implicit_gemm(
-                features, self.weight, pair_fwd, pair_bwd,
-                pair_mask_fwd_splits, pair_mask_bwd_splits,
-                mask_argsort_fwd_splits, mask_argsort_bwd_splits,
-                num_activate_out, masks, self.training, self.subm)
+                    if self.indice_key is not None and datas is not None:
+                        outids = datas.out_indices
+                        pair_fwd = datas.pair_fwd
+                        pair_bwd = datas.pair_bwd
+                        pair_mask_fwd_splits = datas.pair_mask_fwd_splits
+                        pair_mask_bwd_splits = datas.pair_mask_bwd_splits
+                        mask_argsort_fwd_splits = datas.mask_argsort_fwd_splits
+                        mask_argsort_bwd_splits = datas.mask_argsort_bwd_splits
+                        masks = datas.masks
+                    else:
+                        with input._timer.namespace("gen_pairs"):
+                            res = ops.get_indice_pairs_implicit_gemm(
+                                indices,
+                                batch_size,
+                                spatial_shape,
+                                algo,
+                                ksize=self.kernel_size,
+                                stride=self.stride,
+                                padding=self.padding,
+                                dilation=self.dilation,
+                                out_padding=self.output_padding,
+                                subm=self.subm,
+                                transpose=self.transposed,
+                                is_train=self.training,
+                                alloc=input.thrust_allocator,
+                                timer=input._timer)
+                        outids = res[0]
+                        num_inds_per_loc = res[1]
+                        pair_fwd = res[2]
+                        pair_bwd = res[3]
+                        pair_mask_fwd_splits = res[4]
+                        pair_mask_bwd_splits = res[5]
+                        mask_argsort_fwd_splits = res[6]
+                        mask_argsort_bwd_splits = res[7]
+                        masks = res[8]
+                        if self.indice_key is not None:
+                            indice_data = ImplicitGemmIndiceData(
+                                outids,
+                                indices,
+                                pair_fwd,
+                                pair_bwd,
+                                pair_mask_fwd_splits=pair_mask_fwd_splits,
+                                pair_mask_bwd_splits=pair_mask_bwd_splits,
+                                mask_argsort_fwd_splits=mask_argsort_fwd_splits,
+                                mask_argsort_bwd_splits=mask_argsort_bwd_splits,
+                                masks=masks,
+                                is_subm=self.subm,
+                                out_spatial_shape=out_spatial_shape,
+                                algo=algo)
+                            msg = f"your indice key {self.indice_key} already exists in this sparse tensor."
+                            assert self.indice_key not in indice_dict, msg
+                            indice_dict[self.indice_key] = indice_data
+                if input.benchmark:
+                    torch.cuda.synchronize()
+                    t = time.time()
+                num_activate_out = outids.shape[0]
+                out_features = Fsp.implicit_gemm(
+                    features, self.weight, pair_fwd, pair_bwd,
+                    pair_mask_fwd_splits, pair_mask_bwd_splits,
+                    mask_argsort_fwd_splits, mask_argsort_bwd_splits,
+                    num_activate_out, masks, self.training, self.subm,
+                    input._timer)
         if self.bias is not None:
             out_features += self.bias
         if input.benchmark:

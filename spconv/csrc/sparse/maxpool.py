@@ -1,11 +1,11 @@
 # Copyright 2021 Yan Yan
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,15 +16,18 @@ import contextlib
 from cumm.conv.bases import ConvEnum
 from cumm.gemm.core.metaarray import MetaArray, seq
 from cumm import dtypes
-import pccm 
+import pccm
 from cumm.gemm.layout import TensorGeneric, to_stride
 from cumm.common import TensorView, TensorViewHashKernel, TensorViewKernel, ThrustLib, GemmBasic
 from cumm.gemm import codeops
-from typing import List 
+from typing import List
 from cumm.conv.params import ConvProblem
 from cumm.gemm.mask_iters import MaskTileIterator, MaskTileIteratorParams
-import numpy as np 
+import numpy as np
 from cumm.gemm import (thread_map)
+from spconv.csrc.sparse.cpu_core import OMPLib
+from cumm.constants import CUMM_CPU_ONLY_BUILD
+
 
 class IndiceMaxPool(pccm.Class):
     # TODO optimize this function
@@ -32,13 +35,13 @@ class IndiceMaxPool(pccm.Class):
         super().__init__()
         self.add_include("limits")
         self.add_dependency(TensorViewKernel, TensorView, GemmBasic)
-    
+
     @pccm.cuda.cuda_global_function
     def forward_kernel(self):
         code = pccm.FunctionCode()
         code.targ("T")
 
-        code.arg("out_features", f"T*") 
+        code.arg("out_features", f"T*")
         code.arg("in_features", f"const T*")
         code.arg("out_indices", "const int*")
         code.arg("in_indices", "const int*")
@@ -67,7 +70,7 @@ class IndiceMaxPool(pccm.Class):
         code = pccm.FunctionCode()
         code.targ("T")
 
-        code.arg("out_features", f"T*") 
+        code.arg("out_features", f"T*")
         code.arg("in_features", f"const T*")
         code.arg("indices", "const int*")
         code.arg("num_features", "int")
@@ -104,9 +107,9 @@ class IndiceMaxPool(pccm.Class):
     def backward_kernel(self):
         code = pccm.FunctionCode()
         code.targ("T")
-        code.arg("out_features", f"const T*") 
+        code.arg("out_features", f"const T*")
         code.arg("in_features", f"const T*")
-        code.arg("dout_features", f"const T*") 
+        code.arg("dout_features", f"const T*")
         code.arg("din_features", f"T*")
         code.arg("out_indices", "const int*")
         code.arg("in_indices", "const int*")
@@ -137,9 +140,9 @@ class IndiceMaxPool(pccm.Class):
         code = pccm.FunctionCode()
         code.targ("T")
 
-        code.arg("out_features", f"const T*") 
+        code.arg("out_features", f"const T*")
         code.arg("in_features", f"const T*")
-        code.arg("dout_features", f"const T*") 
+        code.arg("dout_features", f"const T*")
         code.arg("din_features", f"T*")
         code.arg("indices_bwd", "const int*")
         code.arg("num_features", "int")
@@ -351,6 +354,9 @@ class IndiceMaxPoolCPU(pccm.Class):
     def __init__(self):
         super().__init__()
         self.add_dependency(TensorView)
+        if CUMM_CPU_ONLY_BUILD:
+            self.add_dependency(OMPLib)
+        self.add_include("tensorview/parallel/all.h")
 
     @pccm.static_function
     def forward(self):
@@ -371,20 +377,21 @@ class IndiceMaxPoolCPU(pccm.Class):
 
             auto in_indices = in_inds.data_ptr<const int>();
             auto out_indices = out_inds.data_ptr<const int>();
-
-            for (int i = 0; i < nhot; ++i) {{
-                int in_idx = in_indices[i];
-                int out_idx = out_indices[i];
-                auto in_ptr = in_features + in_idx * num_features;
-                auto out_ptr = out_features + out_idx * num_features;
-                for (int j = 0; j < num_features; ++j) {{
-                    auto in = in_ptr[j];
-                    auto out = out_ptr[j];
-                    if (in > out){{
-                        out_ptr[j] = in;
+            tv::kernel_1d(out.device(), nhot, [&](int begin, int end, int step){{
+                for (int i = begin; i < end; i += step) {{
+                    int in_idx = in_indices[i];
+                    int out_idx = out_indices[i];
+                    auto in_ptr = in_features + in_idx * num_features;
+                    auto out_ptr = out_features + out_idx * num_features;
+                    for (int j = 0; j < num_features; ++j) {{
+                        auto in = in_ptr[j];
+                        auto out = out_ptr[j];
+                        if (in > out){{
+                            out_ptr[j] = in;
+                        }}
                     }}
                 }}
-            }}
+            }});
         }});
         """)
         return code
@@ -412,22 +419,24 @@ class IndiceMaxPoolCPU(pccm.Class):
 
             auto in_indices = in_inds.data_ptr<const int>();
             auto out_indices = out_inds.data_ptr<const int>();
-
-            for (int i = 0; i < nhot; ++i) {{
-                int in_idx_offset = in_indices[i] * num_features;
-                int out_idx_offset = out_indices[i] * num_features;
-                auto in_ptr = in_features + in_idx_offset;
-                auto out_ptr = out_features + out_idx_offset;
-                auto din_ptr = din_features + in_idx_offset;
-                auto dout_ptr = dout_features + out_idx_offset;
-                for (int j = 0; j < num_features; ++j) {{
-                    auto in = in_ptr[j];
-                    auto out = out_ptr[j];
-                    if (in == out){{
-                        din_ptr[j] = din_ptr[j] + dout_ptr[j];
+            tv::kernel_1d(out.device(), nhot, [&](int begin, int end, int step){{
+                for (int i = begin; i < end; i += step) {{
+                    int in_idx_offset = in_indices[i] * num_features;
+                    int out_idx_offset = out_indices[i] * num_features;
+                    auto in_ptr = in_features + in_idx_offset;
+                    auto out_ptr = out_features + out_idx_offset;
+                    auto din_ptr = din_features + in_idx_offset;
+                    auto dout_ptr = dout_features + out_idx_offset;
+                    for (int j = 0; j < num_features; ++j) {{
+                        auto in = in_ptr[j];
+                        auto out = out_ptr[j];
+                        if (in == out){{
+                            din_ptr[j] = din_ptr[j] + dout_ptr[j];
+                        }}
                     }}
                 }}
-            }}
+            }});
+
         }});
         """)
         return code

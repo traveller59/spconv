@@ -2,6 +2,7 @@ from typing import overload, Any, Callable, Dict, List, Optional, Set, Tuple, Ty
 from pccm.stubs import EnumValue, EnumClassValue
 from ...cumm.gemm.main import GemmAlgoDesp
 from cumm.tensorview import Tensor
+from cumm.tensorview import CUDAKernelTimer
 class ConvAlgoDesp(GemmAlgoDesp):
     ndim: int
     op_type: int
@@ -86,17 +87,19 @@ class ConvParams:
     mask_filter: int
     reverse_mask: bool
     verbose: bool
+    timer: CUDAKernelTimer
     workspace: Tensor =  Tensor()
     mask: Tensor =  Tensor()
     mask_argsort: Tensor =  Tensor()
     indices: Tensor =  Tensor()
     mask_output: Tensor =  Tensor()
     stream: int
-    def __init__(self, ndim: int, op_type: int) -> None: 
+    def __init__(self, ndim: int, op_type: int, timer: CUDAKernelTimer =  CUDAKernelTimer(False)) -> None: 
         """
         Args:
             ndim: 
             op_type: 
+            timer: 
         """
         ...
 class ConvMainUnitTest:

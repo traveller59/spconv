@@ -82,24 +82,25 @@ class PointToVoxel(object):
 
                 if self.point_indice_data.shape[0] < pc.shape[0]:
                     self.point_indice_data = torch.empty([pc.shape[0]],
-                                                            dtype=torch.int64,
-                                                            device=self.device)
+                                                         dtype=torch.int64,
+                                                         device=self.device)
                 pc_tv = torch_tensor_to_tv(pc)
                 stream = get_current_stream()
                 voxels_tv = torch_tensor_to_tv(self.voxels)
                 indices_tv = torch_tensor_to_tv(self.indices)
                 num_per_voxel_tv = torch_tensor_to_tv(self.num_per_voxel)
-                hashdata_tv = torch_tensor_to_tv(self.hashdata,
-                                                dtype=tv.custom128,
-                                                shape=[self.hashdata.shape[0]])
-                point_indice_data_tv = torch_tensor_to_tv(self.point_indice_data)
+                hashdata_tv = torch_tensor_to_tv(
+                    self.hashdata,
+                    dtype=tv.custom128,
+                    shape=[self.hashdata.shape[0]])
+                point_indice_data_tv = torch_tensor_to_tv(
+                    self.point_indice_data)
 
-                res = SpconvOps.point2voxel_cuda(pc_tv, voxels_tv, indices_tv,
-                                                num_per_voxel_tv, hashdata_tv,
-                                                point_indice_data_tv, self.vsize,
-                                                self.grid_size, self.grid_stride,
-                                                self.coors_range, empty_mean,
-                                                clear_voxels, stream)
+                res = SpconvOps.point2voxel_cuda(
+                    pc_tv, voxels_tv, indices_tv, num_per_voxel_tv,
+                    hashdata_tv, point_indice_data_tv, self.vsize,
+                    self.grid_size, self.grid_stride, self.coors_range,
+                    empty_mean, clear_voxels, stream)
                 num_voxels = res[0].shape[0]
             else:
                 pc_tv = torch_tensor_to_tv(pc)
@@ -111,8 +112,9 @@ class PointToVoxel(object):
                 res = SpconvOps.point2voxel_cpu(pc_tv, voxels_tv, indices_tv,
                                                 num_per_voxel_tv, hashdata_tv,
                                                 self.vsize, self.grid_size,
-                                                self.grid_stride, self.coors_range,
-                                                empty_mean, clear_voxels)
+                                                self.grid_stride,
+                                                self.coors_range, empty_mean,
+                                                clear_voxels)
                 num_voxels = res[0].shape[0]
 
             return (self.voxels[:num_voxels], self.indices[:num_voxels],

@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.1.5] - 2021-11-10
+### Added
+- Add cuda profile tool
+- Add python 36 support
+### Changed
+- Format all code
+### Removed
+- remove a unnecessary device sync and slightly improve performance.
+
 ## [2.1.0] - 2021-10-31
 ### Addad
 * add implicit gemm algorithm for all kind of convolution with kernel volume <= 32. this algorithm is very fast with float16.

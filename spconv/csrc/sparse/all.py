@@ -1,11 +1,11 @@
 # Copyright 2021 Yan Yan
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,12 +17,13 @@ from cumm.conv.bases import ConvOpType, NHWC
 from cumm.conv.params import ConvProblem
 from cumm import dtypes
 from cumm.constants import CUMM_CPU_ONLY_BUILD
-import pccm 
+import pccm
 from ccimport import compat
 from .pointops import Point2Voxel, Point2VoxelCPU
 from .indices import SparseConvIndicesKernel, CudaCommonKernel, SparseConvIndicesCPU
 from .maxpool import IndiceMaxPool, IndiceMaxPoolCPU
 from .gather import GatherCPU
+
 
 class CustomThrustLib(pccm.Class):
     def __init__(self):
@@ -32,12 +33,15 @@ class CustomThrustLib(pccm.Class):
         if compat.InLinux:
             self.build_meta.add_cflags("nvcc", "-Xcompiler", "-fno-gnu-unique")
 
+
 class ThrustCustomAllocatorV2(pccm.Class, pccm.pybind.PybindClassMixin):
     def __init__(self):
         super().__init__()
         self.add_dependency(TensorView)
         self.add_include("functional", "memory")
-        self.add_pybind_member("alloc_func", "std::function<std::uintptr_t(std::size_t)>", pyanno="Callable[[int], int]")
+        self.add_pybind_member("alloc_func",
+                               "std::function<std::uintptr_t(std::size_t)>",
+                               pyanno="Callable[[int], int]")
         self.add_typedef("value_type", "char")
 
     @pccm.member_function
@@ -54,14 +58,15 @@ class ThrustCustomAllocatorV2(pccm.Class, pccm.pybind.PybindClassMixin):
             TV_THROW_RT_ERR("set alloc function first.");
         }}
         """)
-        return code 
+        return code
 
     @pccm.member_function
     def deallocate(self):
         code = pccm.FunctionCode()
         code.arg("ptr", "char *")
         code.arg("num_bytes", "size_t")
-        return code 
+        return code
+
 
 class SpconvOps(pccm.Class):
     def __init__(self):
@@ -69,28 +74,38 @@ class SpconvOps(pccm.Class):
         self.add_dependency(ThrustCustomAllocatorV2)
         self.ndims = [1, 2, 3, 4]
         for ndim in self.ndims:
-            p2v = Point2Voxel(dtypes.float32,  ndim)
+            p2v = Point2Voxel(dtypes.float32, ndim)
             p2v_cpu = Point2VoxelCPU(dtypes.float32, ndim)
-            self.add_param_class(f"ops_cpu{ndim}d", p2v_cpu, f"Point2Voxel{ndim}DCPU")
+            self.add_param_class(f"ops_cpu{ndim}d", p2v_cpu,
+                                 f"Point2Voxel{ndim}DCPU")
 
             problem = ConvProblem(ndim, ConvOpType.kForward, NHWC, NHWC, NHWC)
             indices = SparseConvIndicesKernel(problem, dtypes.int32)
             indices_cpu = SparseConvIndicesCPU(problem, dtypes.int32)
-            self.add_param_class(f"ops_cpu{ndim}d", indices_cpu, f"SpconvIndicesCPU{ndim}D")
+            self.add_param_class(f"ops_cpu{ndim}d", indices_cpu,
+                                 f"SpconvIndicesCPU{ndim}D")
             # self.add_param_class("ops", indices, "SpconvIndices")
             if not CUMM_CPU_ONLY_BUILD:
                 self.add_param_class(f"ops{ndim}d", p2v, f"Point2Voxel{ndim}D")
-                cuda_funcs = [self.generate_subm_conv_inds, 
-                    self.generate_conv_inds_stage1, self.generate_conv_inds_stage1_5, self.generate_conv_inds_stage2, self.sort_1d_by_key,
-                    self.generate_conv_inds_mask_stage1, self.generate_conv_inds_mask_stage2]
-                self.add_impl_only_param_class(cuda_funcs, f"ops{ndim}d", indices, f"SpconvIndices{ndim}D")
+                cuda_funcs = [
+                    self.generate_subm_conv_inds,
+                    self.generate_conv_inds_stage1,
+                    self.generate_conv_inds_stage1_5,
+                    self.generate_conv_inds_stage2, self.sort_1d_by_key,
+                    self.generate_conv_inds_mask_stage1,
+                    self.generate_conv_inds_mask_stage2
+                ]
+                self.add_impl_only_param_class(cuda_funcs, f"ops{ndim}d",
+                                               indices,
+                                               f"SpconvIndices{ndim}D")
 
     @pccm.pybind.mark
     @pccm.cuda.static_function
     def generate_conv_inds_stage1(self):
         code = pccm.FunctionCode()
         code.arg("indices", "tv::Tensor")
-        code.arg("indice_pairs, indice_pairs_uniq, indice_num_per_loc", "tv::Tensor")
+        code.arg("indice_pairs, indice_pairs_uniq, indice_num_per_loc",
+                 "tv::Tensor")
         code.arg("batch_size", "int")
         code.arg("output_dims, input_dims", f"std::vector<int>")
         code.arg("ksize, stride, padding, dilation", f"std::vector<int>")
@@ -127,7 +142,7 @@ class SpconvOps(pccm.Class):
             """)
         code.raw(f"""TV_THROW_RT_ERR("unknown ndim", ndim);""")
 
-        return code# .ret("int")
+        return code  # .ret("int")
 
     @pccm.pybind.mark
     @pccm.cuda.static_function
@@ -201,7 +216,8 @@ class SpconvOps(pccm.Class):
             return code.make_invalid()
 
         code.arg("indices", "tv::Tensor")
-        code.arg("indice_pairs_bwd, indice_pairs_uniq, indice_num_per_loc", "tv::Tensor")
+        code.arg("indice_pairs_bwd, indice_pairs_uniq, indice_num_per_loc",
+                 "tv::Tensor")
         code.arg("batch_size", "int")
         code.arg("output_dims, input_dims", f"std::vector<int>")
         code.arg("ksize, stride, padding, dilation", f"std::vector<int>")
@@ -236,7 +252,7 @@ class SpconvOps(pccm.Class):
             """)
         code.raw(f"""TV_THROW_RT_ERR("unknown ndim", ndim);""")
 
-        return code# .ret("int")
+        return code  # .ret("int")
 
     @pccm.pybind.mark
     @pccm.cuda.static_function
@@ -245,7 +261,9 @@ class SpconvOps(pccm.Class):
         if CUMM_CPU_ONLY_BUILD:
             return code.make_invalid()
         code.arg("indices, hashdata", "tv::Tensor")
-        code.arg("indice_pairs_fwd, indice_pairs_bwd, indice_pairs_uniq, out_inds", "tv::Tensor")
+        code.arg(
+            "indice_pairs_fwd, indice_pairs_bwd, indice_pairs_uniq, out_inds",
+            "tv::Tensor")
         code.arg("mask_fwd, mask_bwd", "tv::Tensor")
         code.arg("num_out_act", "int")
         code.arg("batch_size", "int")
@@ -294,7 +312,8 @@ class SpconvOps(pccm.Class):
         code.arg("batch_size", "int")
         code.arg("input_dims", f"std::vector<int>")
         code.arg("ksize, dilation", f"std::vector<int>")
-        code.arg("indice_pair_mask", "tv::Tensor", "tv::Tensor()", "cumm.tensorview.Tensor = Tensor()")
+        code.arg("indice_pair_mask", "tv::Tensor", "tv::Tensor()",
+                 "cumm.tensorview.Tensor = Tensor()")
         code.arg("backward", "bool", "false")
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int = 0")
         code.raw(f"""
@@ -529,7 +548,10 @@ class SpconvOps(pccm.Class):
         if CUMM_CPU_ONLY_BUILD:
             return code.make_invalid()
         code.arg("data", "tv::Tensor")
-        code.arg("indices", "tv::Tensor", "tv::Tensor()", pyanno="cumm.tensorview.Tensor = Tensor()")
+        code.arg("indices",
+                 "tv::Tensor",
+                 "tv::Tensor()",
+                 pyanno="cumm.tensorview.Tensor = Tensor()")
         code.arg("stream", "std::uintptr_t", "0", pyanno="int")
         code.code_after_include = f"""
         template <typename T> struct SmallOrEqualTo {{
@@ -575,7 +597,10 @@ class SpconvOps(pccm.Class):
         code.arg("data", "tv::Tensor")
         code.arg("alloc_func", "std::function<std::uintptr_t(std::size_t)>")
 
-        code.arg("indices", "tv::Tensor", "tv::Tensor()", pyanno="cumm.tensorview.Tensor = Tensor()")
+        code.arg("indices",
+                 "tv::Tensor",
+                 "tv::Tensor()",
+                 pyanno="cumm.tensorview.Tensor = Tensor()")
         code.arg("stream", "std::uintptr_t", "0", pyanno="int")
         code.code_after_include = f"""
         template <typename T> struct SmallOrEqualTo {{
@@ -613,7 +638,6 @@ class SpconvOps(pccm.Class):
         """)
         return code.ret("tv::Tensor")
 
-
     @pccm.pybind.mark
     @pccm.cuda.static_function
     def sort_1d_by_key_split(self):
@@ -623,7 +647,10 @@ class SpconvOps(pccm.Class):
         code.arg("data", "tv::Tensor")
         code.arg("mask", "tv::Tensor")
 
-        code.arg("indices", "tv::Tensor", "tv::Tensor()", pyanno="cumm.tensorview.Tensor = Tensor()")
+        code.arg("indices",
+                 "tv::Tensor",
+                 "tv::Tensor()",
+                 pyanno="cumm.tensorview.Tensor = Tensor()")
         code.arg("stream", "std::uintptr_t", "0", pyanno="int")
         code.arg("mask_output", "bool", "false")
 
@@ -678,7 +705,10 @@ class SpconvOps(pccm.Class):
 
         code.arg("mask", "tv::Tensor")
 
-        code.arg("indices", "tv::Tensor", "tv::Tensor()", pyanno="cumm.tensorview.Tensor = Tensor()")
+        code.arg("indices",
+                 "tv::Tensor",
+                 "tv::Tensor()",
+                 pyanno="cumm.tensorview.Tensor = Tensor()")
         code.arg("stream", "std::uintptr_t", "0", pyanno="int")
         code.arg("mask_output", "bool", "false")
 
@@ -821,9 +851,10 @@ class SpconvOps(pccm.Class):
             }}
             """)
         code.raw(f"""TV_THROW_RT_ERR("unknown ndim", ndim);""")
-        return code.ret("std::tuple<std::vector<float>, std::vector<int>, std::vector<int>, std::vector<float>>")
-    
-    
+        return code.ret(
+            "std::tuple<std::vector<float>, std::vector<int>, std::vector<int>, std::vector<float>>"
+        )
+
     @pccm.pybind.mark
     @pccm.static_function
     def point2voxel_cpu(self):
@@ -876,7 +907,8 @@ class SpconvOps(pccm.Class):
     def point2voxel_cuda(self):
         code = pccm.FunctionCode()
         code.arg("points", "tv::Tensor")
-        code.arg("voxels, indices, num_per_voxel, hashdata, point_indice_data", "tv::Tensor")
+        code.arg("voxels, indices, num_per_voxel, hashdata, point_indice_data",
+                 "tv::Tensor")
         code.arg("vsize", f"std::vector<float>")
         code.arg("grid_size, grid_stride", f"std::vector<int>")
         code.arg("coors_range", f"std::vector<float>")

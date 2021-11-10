@@ -24,11 +24,12 @@ from typing import List, Optional, Tuple, Union
 
 from spconv import pytorch as spconv
 from spconv.core import ConvAlgo
-import spconv.pytorch.functional as Fsp
+from spconv.pytorch import functional as Fsp
 from spconv.pytorch import ops
 from spconv.pytorch.core import IndiceData, ImplicitGemmIndiceData
 from spconv.pytorch.modules import SparseModule
 from spconv.cppconstants import CPU_ONLY_BUILD
+from spconv.utils import nullcontext
 
 
 class SparseMaxPool(SparseModule):
@@ -126,79 +127,87 @@ class SparseMaxPool(SparseModule):
         if input.benchmark:
             torch.cuda.synchronize()
             t = time.time()
-        out_padding = [0] * self.ndim 
+        out_padding = [0] * self.ndim
         indice_dict = input.indice_dict.copy()
-        if self.algo == ConvAlgo.Native:
-            outids, indice_pairs, indice_pairs_num = ops.get_indice_pairs(
-                indices, batch_size, spatial_shape, ConvAlgo.Native,
-                self.kernel_size, self.stride, self.padding, self.dilation, out_padding,
-                False)
-            if input.benchmark:
-                torch.cuda.synchronize()
-                interval = time.time() - t
-                out_tensor.benchmark_record[
-                    self.name]["indice_gen_time"].append(interval)
-                t = time.time()
+        profile_ctx = nullcontext()
+        if input._timer is not None and self._sparse_unique_name:
+            profile_ctx = input._timer.namespace(self._sparse_unique_name)
+        with profile_ctx:
+            if self.algo == ConvAlgo.Native:
+                outids, indice_pairs, indice_pairs_num = ops.get_indice_pairs(
+                    indices, batch_size, spatial_shape, ConvAlgo.Native,
+                    self.kernel_size, self.stride, self.padding, self.dilation,
+                    out_padding, False)
+                if input.benchmark:
+                    torch.cuda.synchronize()
+                    interval = time.time() - t
+                    out_tensor.benchmark_record[
+                        self.name]["indice_gen_time"].append(interval)
+                    t = time.time()
 
-            if self.indice_key is not None:
-                datas = input.find_indice_pair(self.indice_key)
-                if datas is None:
-                    indice_data = IndiceData(outids,
-                                             indices,
-                                             indice_pairs,
-                                             indice_pairs_num,
-                                             spatial_shape,
-                                             is_subm=False,
-                                             algo=self.algo)
+                if self.indice_key is not None:
+                    datas = input.find_indice_pair(self.indice_key)
+                    if datas is None:
+                        indice_data = IndiceData(outids,
+                                                 indices,
+                                                 indice_pairs,
+                                                 indice_pairs_num,
+                                                 spatial_shape,
+                                                 is_subm=False,
+                                                 algo=self.algo)
+                        indice_dict[self.indice_key] = indice_data
+                    else:
+                        raise ValueError(
+                            f"indice key {self.indice_key} exists")
+
+                out_features = Fsp.indice_maxpool(features,
+                                                  indice_pairs.to(device),
+                                                  indice_pairs_num.to(device),
+                                                  outids.shape[0])
+            else:
+                with input._timer.namespace("gen_pairs"):
+                    res = ops.get_indice_pairs_implicit_gemm(
+                        indices,
+                        batch_size,
+                        spatial_shape,
+                        self.algo,
+                        ksize=self.kernel_size,
+                        stride=self.stride,
+                        padding=self.padding,
+                        dilation=self.dilation,
+                        out_padding=out_padding,
+                        subm=self.subm,
+                        is_train=self.training,
+                        alloc=input.thrust_allocator,
+                        timer=input._timer)
+                outids = res[0]
+                num_inds_per_loc = res[1]
+                pair_fwd = res[2]
+                pair_bwd = res[3]
+                pair_mask_fwd_splits = res[4]
+                pair_mask_bwd_splits = res[5]
+                mask_argsort_fwd_splits = res[6]
+                mask_argsort_bwd_splits = res[7]
+                masks = res[8]
+                if self.indice_key is not None:
+                    indice_data = ImplicitGemmIndiceData(
+                        outids,
+                        indices,
+                        pair_fwd,
+                        pair_bwd,
+                        pair_mask_fwd_splits=pair_mask_fwd_splits,
+                        pair_mask_bwd_splits=pair_mask_bwd_splits,
+                        mask_argsort_fwd_splits=mask_argsort_fwd_splits,
+                        mask_argsort_bwd_splits=mask_argsort_bwd_splits,
+                        masks=masks,
+                        is_subm=self.subm,
+                        out_spatial_shape=out_spatial_shape,
+                        algo=self.algo)
+                    msg = f"your indice key {self.indice_key} already exists in this sparse tensor."
+                    assert self.indice_key not in indice_dict, msg
                     indice_dict[self.indice_key] = indice_data
-                else:
-                    raise ValueError(f"indice key {self.indice_key} exists")
-
-            out_features = Fsp.indice_maxpool(features,
-                                              indice_pairs.to(device),
-                                              indice_pairs_num.to(device),
-                                              outids.shape[0])
-        else:
-            res = ops.get_indice_pairs_implicit_gemm(indices,
-                                                     batch_size,
-                                                     spatial_shape,
-                                                     self.algo,
-                                                     ksize=self.kernel_size,
-                                                     stride=self.stride,
-                                                     padding=self.padding,
-                                                     dilation=self.dilation,
-                                                     out_padding=out_padding,
-                                                     subm=self.subm,
-                                                     is_train=self.training,
-                                                     alloc=input.thrust_allocator)
-            outids = res[0]
-            num_inds_per_loc = res[1]
-            pair_fwd = res[2]
-            pair_bwd = res[3]
-            pair_mask_fwd_splits = res[4]
-            pair_mask_bwd_splits = res[5]
-            mask_argsort_fwd_splits = res[6]
-            mask_argsort_bwd_splits = res[7]
-            masks = res[8]
-            if self.indice_key is not None:
-                indice_data = ImplicitGemmIndiceData(
-                    outids,
-                    indices,
-                    pair_fwd,
-                    pair_bwd,
-                    pair_mask_fwd_splits=pair_mask_fwd_splits,
-                    pair_mask_bwd_splits=pair_mask_bwd_splits,
-                    mask_argsort_fwd_splits=mask_argsort_fwd_splits,
-                    mask_argsort_bwd_splits=mask_argsort_bwd_splits,
-                    masks=masks,
-                    is_subm=self.subm,
-                    out_spatial_shape=out_spatial_shape,
-                    algo=self.algo)
-                msg = f"your indice key {self.indice_key} already exists in this sparse tensor."
-                assert self.indice_key not in indice_dict, msg
-                indice_dict[self.indice_key] = indice_data
-            out_features = Fsp.indice_maxpool_implicit_gemm(
-                features, pair_fwd, pair_bwd, outids.shape[0])
+                out_features = Fsp.indice_maxpool_implicit_gemm(
+                    features, pair_fwd, pair_bwd, outids.shape[0])
 
         if input.benchmark:
             torch.cuda.synchronize()

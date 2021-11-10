@@ -15,8 +15,9 @@
 import torch
 from torch import nn
 from torch.autograd import Function
-
-import spconv.pytorch.ops as ops
+from typing import Optional
+from spconv.tools import CUDAKernelTimer
+from spconv.pytorch import ops
 import torch.cuda.amp as amp
 from torch.autograd.function import once_differentiable
 import numpy as np
@@ -27,23 +28,32 @@ from typing import List
 class SparseConvFunction(Function):
     @staticmethod
     @amp.custom_fwd(cast_inputs=torch.float16)
-    def forward(ctx, features, filters, indice_pairs, indice_pair_num,
-                num_activate_out, algo):
+    def forward(ctx,
+                features,
+                filters,
+                indice_pairs,
+                indice_pair_num,
+                num_activate_out,
+                algo,
+                timer: CUDAKernelTimer = CUDAKernelTimer(False)):
         ctx.save_for_backward(indice_pairs, indice_pair_num, features, filters)
         ctx.algo = algo
+        ctx.timer = timer
         return ops.indice_conv(features,
                                filters,
                                indice_pairs,
                                indice_pair_num,
                                num_activate_out,
                                False,
-                               algo=algo)
+                               algo=algo,
+                               timer=timer)
 
     @staticmethod
     @once_differentiable
     @amp.custom_bwd
     def backward(ctx, grad_output):
         indice_pairs, indice_pair_num, features, filters = ctx.saved_tensors
+        timer = ctx.timer
 
         input_bp, filters_bp = ops.indice_conv_backward(features,
                                                         filters,
@@ -51,18 +61,27 @@ class SparseConvFunction(Function):
                                                         indice_pairs,
                                                         indice_pair_num,
                                                         False,
-                                                        algo=ctx.algo)
+                                                        algo=ctx.algo,
+                                                        timer=timer)
 
-        return input_bp, filters_bp, None, None, None, None
+        return input_bp, filters_bp, None, None, None, None, None
 
 
 class SparseInverseConvFunction(Function):
     @staticmethod
     @amp.custom_fwd(cast_inputs=torch.float16)
-    def forward(ctx, features, filters, indice_pairs, indice_pair_num,
-                num_activate_out, algo):
+    def forward(ctx,
+                features,
+                filters,
+                indice_pairs,
+                indice_pair_num,
+                num_activate_out,
+                algo,
+                timer: CUDAKernelTimer = CUDAKernelTimer(False)):
         ctx.save_for_backward(indice_pairs, indice_pair_num, features, filters)
         ctx.algo = algo
+        ctx.timer = timer
+
         return ops.indice_conv(features,
                                filters,
                                indice_pairs,
@@ -70,13 +89,16 @@ class SparseInverseConvFunction(Function):
                                num_activate_out,
                                True,
                                False,
-                               algo=algo)
+                               algo=algo,
+                               timer=timer)
 
     @staticmethod
     @once_differentiable
     @amp.custom_bwd
     def backward(ctx, grad_output):
         indice_pairs, indice_pair_num, features, filters = ctx.saved_tensors
+        timer = ctx.timer
+
         input_bp, filters_bp = ops.indice_conv_backward(features,
                                                         filters,
                                                         grad_output,
@@ -84,29 +106,40 @@ class SparseInverseConvFunction(Function):
                                                         indice_pair_num,
                                                         True,
                                                         False,
-                                                        algo=ctx.algo)
+                                                        algo=ctx.algo,
+                                                        timer=timer)
 
-        return input_bp, filters_bp, None, None, None, None
+        return input_bp, filters_bp, None, None, None, None, None
 
 
 class SparseImplicitGemmFunction(Function):
     @staticmethod
     @amp.custom_fwd(cast_inputs=torch.float16)
-    def forward(ctx, features: torch.Tensor, filters: torch.Tensor,
-                pair_fwd: torch.Tensor, pair_bwd: torch.Tensor,
+    def forward(ctx,
+                features: torch.Tensor,
+                filters: torch.Tensor,
+                pair_fwd: torch.Tensor,
+                pair_bwd: torch.Tensor,
                 pair_mask_fwd_splits: List[torch.Tensor],
                 pair_mask_bwd_splits: List[torch.Tensor],
                 mask_argsort_fwd_splits: List[torch.Tensor],
                 mask_argsort_bwd_splits: List[torch.Tensor],
-                num_activate_out: int, masks: List[np.ndarray], is_train: bool,
-                is_subm: bool):
+                num_activate_out: int,
+                masks: List[np.ndarray],
+                is_train: bool,
+                is_subm: bool,
+                timer: CUDAKernelTimer = CUDAKernelTimer(False)):
 
-        out, mask_out, mask_width = ops.implicit_gemm(
-            features, filters, pair_fwd, pair_mask_fwd_splits,
-            mask_argsort_fwd_splits, num_activate_out, masks, is_train, is_subm)
+        out, mask_out, mask_width = ops.implicit_gemm(features, filters,
+                                                      pair_fwd,
+                                                      pair_mask_fwd_splits,
+                                                      mask_argsort_fwd_splits,
+                                                      num_activate_out, masks,
+                                                      is_train, is_subm, timer)
         ctx.save_for_backward(features, filters, pair_fwd, pair_bwd)
         ctx.mask_width = mask_width
         ctx.mask_out = mask_out
+        ctx.timer = timer
         ctx.pair_mask_fwd_splits = pair_mask_fwd_splits
         ctx.mask_argsort_fwd_splits = mask_argsort_fwd_splits
         ctx.pair_mask_bwd_splits = pair_mask_bwd_splits
@@ -130,30 +163,40 @@ class SparseImplicitGemmFunction(Function):
         # num_activate_out = ctx.num_activate_out
         masks = ctx.masks
         is_subm = ctx.is_subm
-
-        input_bp, filters_bp = ops.implicit_gemm_backward(features,
-                                                        filters,
-                                                        grad_output,
-                                                        pair_fwd,
-                                                        pair_bwd,
-                                                        pair_mask_fwd_splits,
-                                                        pair_mask_bwd_splits,
-                                                        mask_argsort_fwd_splits,
-                                                        mask_argsort_bwd_splits,
-                                                        mask_output_fwd=mask_out,
-                                                        masks=masks,
-                                                        mask_width=mask_width,
-                                                        is_subm=is_subm)
-        None_9 = [None] * 10
+        timer = ctx.timer
+        input_bp, filters_bp = ops.implicit_gemm_backward(
+            features,
+            filters,
+            grad_output,
+            pair_fwd,
+            pair_bwd,
+            pair_mask_fwd_splits,
+            pair_mask_bwd_splits,
+            mask_argsort_fwd_splits,
+            mask_argsort_bwd_splits,
+            mask_output_fwd=mask_out,
+            masks=masks,
+            mask_width=mask_width,
+            is_subm=is_subm,
+            timer=timer)
+        None_9 = [None] * 11
         return (input_bp, filters_bp, *None_9)
+
 
 class SubMConvFunction(Function):
     @staticmethod
     @amp.custom_fwd(cast_inputs=torch.float16)
-    def forward(ctx, features, filters, indice_pairs, indice_pair_num,
-                num_activate_out, algo):
+    def forward(ctx,
+                features,
+                filters,
+                indice_pairs,
+                indice_pair_num,
+                num_activate_out,
+                algo,
+                timer: CUDAKernelTimer = CUDAKernelTimer(False)):
         ctx.save_for_backward(indice_pairs, indice_pair_num, features, filters)
         ctx.algo = algo
+        ctx.timer = timer
         return ops.indice_conv(features,
                                filters,
                                indice_pairs,
@@ -161,13 +204,16 @@ class SubMConvFunction(Function):
                                num_activate_out,
                                False,
                                True,
-                               algo=algo)
+                               algo=algo,
+                               timer=timer)
 
     @staticmethod
     @once_differentiable
     @amp.custom_bwd
     def backward(ctx, grad_output):
         indice_pairs, indice_pair_num, features, filters = ctx.saved_tensors
+        timer = ctx.timer
+
         input_bp, filters_bp = ops.indice_conv_backward(features,
                                                         filters,
                                                         grad_output,
@@ -175,9 +221,10 @@ class SubMConvFunction(Function):
                                                         indice_pair_num,
                                                         False,
                                                         True,
-                                                        algo=ctx.algo)
+                                                        algo=ctx.algo,
+                                                        timer=timer)
 
-        return input_bp, filters_bp, None, None, None, None
+        return input_bp, filters_bp, None, None, None, None, None
 
 
 class SparseMaxPoolFunction(Function):
@@ -199,12 +246,14 @@ class SparseMaxPoolFunction(Function):
                                                indice_pairs, indice_pair_num)
         return input_bp, None, None, None
 
+
 class SparseMaxPoolImplicitGemmFunction(Function):
     @staticmethod
     @amp.custom_fwd(cast_inputs=torch.float16)
-    def forward(ctx, features: torch.Tensor, indice_pairs_fwd: torch.Tensor, indice_pairs_bwd: torch.Tensor,
-                   num_activate_out: int):
-        out = ops.indice_maxpool_implicit_gemm(features, indice_pairs_fwd, num_activate_out)
+    def forward(ctx, features: torch.Tensor, indice_pairs_fwd: torch.Tensor,
+                indice_pairs_bwd: torch.Tensor, num_activate_out: int):
+        out = ops.indice_maxpool_implicit_gemm(features, indice_pairs_fwd,
+                                               num_activate_out)
         ctx.save_for_backward(indice_pairs_bwd, features, out)
         return out
 
@@ -213,9 +262,10 @@ class SparseMaxPoolImplicitGemmFunction(Function):
     @amp.custom_bwd
     def backward(ctx, grad_output):
         indice_pairs_bwd, features, out = ctx.saved_tensors
-        input_bp = ops.indice_maxpool_implicit_gemm_backward(features, out, grad_output,
-                                               indice_pairs_bwd)
+        input_bp = ops.indice_maxpool_implicit_gemm_backward(
+            features, out, grad_output, indice_pairs_bwd)
         return input_bp, None, None, None
+
 
 indice_conv = SparseConvFunction.apply
 implicit_gemm = SparseImplicitGemmFunction.apply

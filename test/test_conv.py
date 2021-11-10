@@ -1,11 +1,11 @@
 # Copyright 2021 Yan Yan
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -29,6 +29,7 @@ from spconv.constants import FILTER_HWIO
 # we must disable tf32 to increase reference precision.
 torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
+
 
 class SparseConv3dTestTorch(nn.Module):
     def __init__(self,
@@ -363,7 +364,10 @@ class TestSpConv(TestCase):
         strides = [1, 2, 3]
         paddings = [0, 1, 2]
         dilations = [1, 2, 3]
-        algos = [ConvAlgo.Native, ConvAlgo.MaskImplicitGemm, ConvAlgo.MaskSplitImplicitGemm]
+        algos = [
+            ConvAlgo.Native, ConvAlgo.MaskImplicitGemm,
+            ConvAlgo.MaskSplitImplicitGemm
+        ]
         algos = [ConvAlgo.MaskSplitImplicitGemm]
 
         for dev, shape, bs, IC, OC, k, s, p, d, al in params_grid(
@@ -375,8 +379,16 @@ class TestSpConv(TestCase):
             device = torch.device(dev)
             num_points = [1000] * bs
             dtype = torch.float32
-            net = SparseConv3dTestTorch(1, 3, shape, IC, OC, k, s, p,
-                                        d, algo=al).to(device).to(dtype)
+            net = SparseConv3dTestTorch(1,
+                                        3,
+                                        shape,
+                                        IC,
+                                        OC,
+                                        k,
+                                        s,
+                                        p,
+                                        d,
+                                        algo=al).to(device).to(dtype)
             net_ref = Conv3dTestTorch(1, 3, shape, IC, OC, k, s, p,
                                       d).to(device).to(dtype)
 
@@ -390,27 +402,32 @@ class TestSpConv(TestCase):
             indices_t = torch.from_numpy(indices).int().to(device)
             features_t = torch.from_numpy(features).to(device).to(dtype)
             features_t.requires_grad = True
-            features_dense_t = torch.from_numpy(features_dense).to(device).to(dtype)
+            features_dense_t = torch.from_numpy(features_dense).to(device).to(
+                dtype)
             features_dense_t.requires_grad = True
             if net.algo == ConvAlgo.Native:
                 if FILTER_HWIO:
-                    filters = np.random.uniform(-1, 1, size=[k, k, k, IC,
-                                                            OC]).astype(np.float32)
+                    filters = np.random.uniform(-1, 1,
+                                                size=[k, k, k, IC,
+                                                      OC]).astype(np.float32)
                 else:
-                    filters = np.random.uniform(-1, 1, size=[k, k, k, OC,
-                                                            IC]).astype(np.float32)
+                    filters = np.random.uniform(-1, 1,
+                                                size=[k, k, k, OC,
+                                                      IC]).astype(np.float32)
                 filters_t = torch.from_numpy(filters).to(device).to(dtype)
                 if FILTER_HWIO:
-                    net_ref.net[0].weight.data[:] = filters_t.permute(4, 3, 0, 1,
-                                                                    2).contiguous()
+                    net_ref.net[0].weight.data[:] = filters_t.permute(
+                        4, 3, 0, 1, 2).contiguous()
                 else:
-                    net_ref.net[0].weight.data[:] = filters_t.permute(3, 4, 0, 1,
-                                                                    2).contiguous()
+                    net_ref.net[0].weight.data[:] = filters_t.permute(
+                        3, 4, 0, 1, 2).contiguous()
             else:
-                filters = np.random.uniform(-1, 1, size=[OC, k, k, k, IC]).astype(np.float32)
+                filters = np.random.uniform(-1, 1,
+                                            size=[OC, k, k, k,
+                                                  IC]).astype(np.float32)
                 filters_t = torch.from_numpy(filters).to(device).to(dtype)
-                net_ref.net[0].weight.data[:] = filters_t.permute(0, 4, 1, 2,
-                                                                3).contiguous()
+                net_ref.net[0].weight.data[:] = filters_t.permute(
+                    0, 4, 1, 2, 3).contiguous()
 
             net.net[0].weight.data[:] = filters_t
             out_ref = net_ref(features_dense_t)
@@ -445,7 +462,6 @@ class TestSpConv(TestCase):
 
                 self.assertAllClose(dw, dw_ref, atol=1e-4)
             self.assertAllClose(din_np, din_sparse_np, atol=1e-4)
-
 
     def testSpDeConv3d(self):
         np.random.seed(484)
@@ -499,11 +515,11 @@ class TestSpConv(TestCase):
             filters_t = torch.from_numpy(filters).to(device)
             print(net_ref.net[0].weight.shape)
             if FILTER_HWIO:
-                net_ref.net[0].weight.data[:] = filters_t.permute(3, 4, 0, 1,
-                                                                2).contiguous()
+                net_ref.net[0].weight.data[:] = filters_t.permute(
+                    3, 4, 0, 1, 2).contiguous()
             else:
-                net_ref.net[0].weight.data[:] = filters_t.permute(4, 3, 0, 1,
-                                                                2).contiguous()
+                net_ref.net[0].weight.data[:] = filters_t.permute(
+                    4, 3, 0, 1, 2).contiguous()
             net.net[0].weight.data[:] = filters_t
             out_ref = net_ref(features_dense_t)
             out = net(features_t, indices_t, bs).dense()
@@ -531,7 +547,6 @@ class TestSpConv(TestCase):
                 else:
                     dw = dw.transpose(4, 3, 0, 1, 2)
                 self.assertAllClose(dw, dw_ref, atol=1e-4)
-
 
     def testSpCpConv3d(self):
         np.random.seed(484)

@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
-try:
-    remove_plus = torch.__version__.find("+")
-    remove_dotdev = torch.__version__.find(".dev")
+import pccm
+from ccimport import compat
+from cumm.common import TensorView
 
-    PYTORCH_VERSION = torch.__version__
-    if remove_plus != -1:
-        PYTORCH_VERSION = torch.__version__[:remove_plus]
-    if remove_dotdev != -1:
-        PYTORCH_VERSION = torch.__version__[:remove_dotdev]
 
-    PYTORCH_VERSION = list(map(int, PYTORCH_VERSION.split(".")))
-except:
-    # for unknown errors, just set a version
-    PYTORCH_VERSION = [1, 8, 0]
+class OMPLib(pccm.Class):
+    def __init__(self):
+        super().__init__()
+        self.add_dependency(TensorView)
+        self.add_include("tensorview/parallel/all.h")
+        if compat.InWindows:
+            self.build_meta.add_cflags("cl", "/openmp")
+        else:
+            self.build_meta.add_cflags("g++", "-fopenmp")
+            self.build_meta.add_cflags("clang++", "-fopenmp")

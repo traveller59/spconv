@@ -1,11 +1,11 @@
 # Copyright 2021 Yan Yan
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,13 +16,14 @@ import contextlib
 from cumm.conv.bases import ConvEnum
 from cumm.gemm.core.metaarray import MetaArray, seq
 from cumm import dtypes
-import pccm 
+import pccm
 from cumm.gemm.layout import TensorGeneric, to_stride
 from cumm.common import TensorView, TensorViewHashKernel, TensorViewKernel, ThrustLib
 from cumm.gemm import codeops
-from typing import List 
+from typing import List
 from cumm.conv.params import ConvProblem
-import numpy as np 
+import numpy as np
+
 
 class CudaCommonKernel(pccm.ParameterizedClass):
     # we need to use PClass instead of Class
@@ -31,8 +32,8 @@ class CudaCommonKernel(pccm.ParameterizedClass):
     def arange_kernel(self):
         code = pccm.FunctionCode()
         code.targ("T")
-        code.arg("data", f"T*") 
-        code.arg("size", f"int") 
+        code.arg("data", f"T*")
+        code.arg("size", f"int")
         code.raw(f"""
         for (int i : tv::KernelLoopX<int>(size)) {{
             data[i] = T(i);
@@ -44,9 +45,9 @@ class CudaCommonKernel(pccm.ParameterizedClass):
     def fill_kernel(self):
         code = pccm.FunctionCode()
         code.targ("T")
-        code.arg("data", f"T*") 
+        code.arg("data", f"T*")
         code.arg("val", f"T")
-        code.arg("size", f"int") 
+        code.arg("size", f"int")
         code.raw(f"""
         for (int i : tv::KernelLoopX<int>(size)) {{
             data[i] = T(val);
@@ -66,7 +67,7 @@ class ConvOutLocIter(pccm.ParameterizedClass):
         self.add_param_class("lociter", layout_npq, "LayoutNPQ")
         self.add_param_class("lociter_rs", layout_rs, "LayoutRS")
 
-        self.ndim = problem.ndim 
+        self.ndim = problem.ndim
         self.add_member("problem_", f"ConvProblem")
         self.add_member("count_", f"tv::array<int, {self.ndim}>")
         self.add_member("layout_npq", f"LayoutNPQ")
@@ -82,13 +83,15 @@ class ConvOutLocIter(pccm.ParameterizedClass):
         pqs = codeops.unpack("problem.output_dims", range(self.ndim))
         rss = codeops.unpack("problem.ksize", range(self.ndim))
 
-        code.ctor_init("layout_npq", f"LayoutNPQ::from_shape({{problem.N, {pqs}}})")
+        code.ctor_init("layout_npq",
+                       f"LayoutNPQ::from_shape({{problem.N, {pqs}}})")
         code.ctor_init("layout_rs", f"LayoutRS::from_shape({{{rss}}})")
-        
-        return code 
 
-    @pccm.member_function(header_only=True, attrs=["TV_HOST_DEVICE_INLINE"],
-                               name="operator++")
+        return code
+
+    @pccm.member_function(header_only=True,
+                          attrs=["TV_HOST_DEVICE_INLINE"],
+                          name="operator++")
     def increment(self):
         code = pccm.FunctionCode()
         for i in range(self.ndim - 1, -1, -1):
@@ -110,8 +113,9 @@ class ConvOutLocIter(pccm.ParameterizedClass):
         """)
         return code
 
-    @pccm.member_function(header_only=True, attrs=["TV_HOST_DEVICE_INLINE"],
-                               const=True)
+    @pccm.member_function(header_only=True,
+                          attrs=["TV_HOST_DEVICE_INLINE"],
+                          const=True)
     def nhw_to_npq(self):
         code = pccm.FunctionCode()
         code.arg("nhw_offset", "const int*")
@@ -128,8 +132,9 @@ class ConvOutLocIter(pccm.ParameterizedClass):
         """)
         return code.ret(f"tv::array<int, {self.ndim + 1}>")
 
-    @pccm.member_function(header_only=True, attrs=["TV_HOST_DEVICE_INLINE"],
-                               const=True)
+    @pccm.member_function(header_only=True,
+                          attrs=["TV_HOST_DEVICE_INLINE"],
+                          const=True)
     def npq_to_nhw(self):
         code = pccm.FunctionCode()
         code.arg("npq_offset", "const int*")
@@ -144,9 +149,9 @@ class ConvOutLocIter(pccm.ParameterizedClass):
         """)
         return code.ret(f"tv::array<int, {self.ndim + 1}>")
 
-
-    @pccm.member_function(header_only=True, attrs=["TV_HOST_DEVICE_INLINE"],
-                               const=True)
+    @pccm.member_function(header_only=True,
+                          attrs=["TV_HOST_DEVICE_INLINE"],
+                          const=True)
     def query_npq(self):
         code = pccm.FunctionCode()
         code.arg("nhw_offset", "const int*")
@@ -156,22 +161,27 @@ class ConvOutLocIter(pccm.ParameterizedClass):
         auto npq_no_stride = nhw_to_npq<true>(nhw_offset);
         npq_offset[0] = npq_no_stride[0];
         """)
-        hw_valid = [] # type: List[str]
-        stride_valid = [] # type: List[str]
+        hw_valid = []  # type: List[str]
+        stride_valid = []  # type: List[str]
         for i in range(self.ndim):
-            code.raw(f"npq_offset[{i + 1}] = npq_no_stride[{i + 1}] / problem_.stride[{i}];")
-            hw_valid.append((f"npq_offset[{i + 1}] >= 0 && "
-                            f"npq_offset[{i + 1}] < problem_.output_dims[{i}]"))
-            stride_valid.append(f"!(npq_no_stride[{i + 1}] % problem_.stride[{i}])")
+            code.raw(
+                f"npq_offset[{i + 1}] = npq_no_stride[{i + 1}] / problem_.stride[{i}];"
+            )
+            hw_valid.append(
+                (f"npq_offset[{i + 1}] >= 0 && "
+                 f"npq_offset[{i + 1}] < problem_.output_dims[{i}]"))
+            stride_valid.append(
+                f"!(npq_no_stride[{i + 1}] % problem_.stride[{i}])")
         code.raw(f"""
         return npq_no_stride[0] < problem_.N && 
             {' && '.join(hw_valid)} &&
             {' && '.join(stride_valid)};
         """)
-        return code 
+        return code
 
-    @pccm.member_function(header_only=True, attrs=["TV_HOST_DEVICE_INLINE"],
-                               const=True)
+    @pccm.member_function(header_only=True,
+                          attrs=["TV_HOST_DEVICE_INLINE"],
+                          const=True)
     def query_npq_no_stride(self):
         code = pccm.FunctionCode()
         code.arg("nhw_offset", "const int*")
@@ -180,18 +190,20 @@ class ConvOutLocIter(pccm.ParameterizedClass):
         code.raw(f"""
         npq_offset = nhw_to_npq<true>(nhw_offset);
         """)
-        hw_valid = [] # type: List[str]
+        hw_valid = []  # type: List[str]
         for i in range(self.ndim):
-            hw_valid.append((f"npq_offset[{i + 1}] >= 0 && "
-                            f"npq_offset[{i + 1}] < problem_.output_dims[{i}]"))
+            hw_valid.append(
+                (f"npq_offset[{i + 1}] >= 0 && "
+                 f"npq_offset[{i + 1}] < problem_.output_dims[{i}]"))
         code.raw(f"""
         return npq_offset[0] < problem_.N && 
             {' && '.join(hw_valid)};
         """)
-        return code 
+        return code
 
-    @pccm.member_function(header_only=True, attrs=["TV_HOST_DEVICE_INLINE"],
-                               const=True)
+    @pccm.member_function(header_only=True,
+                          attrs=["TV_HOST_DEVICE_INLINE"],
+                          const=True)
     def query_nhw(self):
         code = pccm.FunctionCode()
         code.arg("npq_offset", "const int*")
@@ -200,18 +212,20 @@ class ConvOutLocIter(pccm.ParameterizedClass):
         code.raw(f"""
         nhw_offset = npq_to_nhw(npq_offset);
         """)
-        hw_valid = [] # type: List[str]
+        hw_valid = []  # type: List[str]
         for i in range(self.ndim):
-            hw_valid.append((f"nhw_offset[{i + 1}] >= 0 && "
-                            f"nhw_offset[{i + 1}] < problem_.input_dims[{i}]"))
+            hw_valid.append(
+                (f"nhw_offset[{i + 1}] >= 0 && "
+                 f"nhw_offset[{i + 1}] < problem_.input_dims[{i}]"))
         code.raw(f"""
         return nhw_offset[0] < problem_.N && 
             {' && '.join(hw_valid)};
         """)
-        return code 
+        return code
 
-    @pccm.member_function(header_only=True, attrs=["TV_HOST_DEVICE_INLINE"],
-                               const=True)
+    @pccm.member_function(header_only=True,
+                          attrs=["TV_HOST_DEVICE_INLINE"],
+                          const=True)
     def query_nhw_out(self):
         code = pccm.FunctionCode()
         code.arg("npq_offset", "const int*")
@@ -220,41 +234,45 @@ class ConvOutLocIter(pccm.ParameterizedClass):
         code.raw(f"""
         nhw_offset = npq_to_nhw(npq_offset);
         """)
-        hw_valid = [] # type: List[str]
+        hw_valid = []  # type: List[str]
         for i in range(self.ndim):
-            hw_valid.append((f"nhw_offset[{i + 1}] >= 0 && "
-                            f"nhw_offset[{i + 1}] < problem_.output_dims[{i}]"))
+            hw_valid.append(
+                (f"nhw_offset[{i + 1}] >= 0 && "
+                 f"nhw_offset[{i + 1}] < problem_.output_dims[{i}]"))
         code.raw(f"""
         return nhw_offset[0] < problem_.N && 
             {' && '.join(hw_valid)};
         """)
-        return code 
+        return code
+
 
 class SparseConvIndicesKernel(pccm.ParameterizedClass):
     def __init__(self, problem: ConvProblem, dtype_indices: dtypes.DType):
         super().__init__()
-        self.add_dependency(TensorView, TensorViewKernel, TensorViewHashKernel, ThrustLib)
+        self.add_dependency(TensorView, TensorViewKernel, TensorViewHashKernel,
+                            ThrustLib)
         self.loc_iter = ConvOutLocIter(problem)
         self.add_param_class("spinds", self.loc_iter, "ConvLocIter")
-        self.add_param_class("spinds", problem, "ConvProblem")        
-        self.add_param_class("cudakers", CudaCommonKernel())        
+        self.add_param_class("spinds", problem, "ConvProblem")
+        self.add_param_class("cudakers", CudaCommonKernel())
 
-        self.ndim = problem.ndim 
+        self.ndim = problem.ndim
         self.dtype_indices = dtype_indices
         self.dtype_indices_uniq = dtype_indices
 
         assert dtype_indices == dtypes.int32 or dtype_indices == dtypes.int64
 
-
     @pccm.cuda.cuda_global_function
     def calc_conv_indices_stage1(self):
         code = pccm.FunctionCode()
-        code.arg("loc_iter", f"ConvLocIter") # [N, ndim + 1]
+        code.arg("loc_iter", f"ConvLocIter")  # [N, ndim + 1]
 
-        code.arg("indices_in", f"const int*") # [N, ndim + 1]
-        code.arg("indice_pairs", f"{self.dtype_indices}*") # [2, kernelProd, MaxSize]
-        code.arg("indice_pairs_for_uniq", f"{self.dtype_indices}*") # [2, kernelProd, MaxSize]
-        code.arg("indice_num_per_loc", f"int*") # [kernelProd]
+        code.arg("indices_in", f"const int*")  # [N, ndim + 1]
+        code.arg("indice_pairs",
+                 f"{self.dtype_indices}*")  # [2, kernelProd, MaxSize]
+        code.arg("indice_pairs_for_uniq",
+                 f"{self.dtype_indices}*")  # [2, kernelProd, MaxSize]
+        code.arg("indice_num_per_loc", f"int*")  # [kernelProd]
 
         code.arg("num_indices_in", "int")
         code.arg("indices_pair_size", "int")
@@ -288,17 +306,18 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         """)
         return code
 
-
     @pccm.cuda.cuda_global_function
     def build_conv_hash_table(self):
         code = pccm.FunctionCode()
         code.targ("TTable")
 
-        code.arg("table", f"TTable") # [N, ndim + 1]
-        code.arg("indices_out", f"int*") # [N, ndim + 1]
-        code.arg("indice_pairs_for_uniq", f"const {self.dtype_indices}*") # [2, kernelProd, MaxSize]
+        code.arg("table", f"TTable")  # [N, ndim + 1]
+        code.arg("indices_out", f"int*")  # [N, ndim + 1]
+        code.arg("indice_pairs_for_uniq",
+                 f"const {self.dtype_indices}*")  # [2, kernelProd, MaxSize]
 
-        code.arg("layout_npq", f"spinds::LayoutNPQ") # [2, kernelProd, MaxSize]
+        code.arg("layout_npq",
+                 f"spinds::LayoutNPQ")  # [2, kernelProd, MaxSize]
 
         code.arg("num_indices", "int")
 
@@ -315,8 +334,8 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
     def calc_conv_indices_stage2(self):
         code = pccm.FunctionCode()
         code.targ("TTable")
-        code.arg("table", f"TTable") # [N, ndim + 1]
-        code.arg("indice_pairs_out_part", f"int*") # [2, kernelProd, MaxSize]
+        code.arg("table", f"TTable")  # [N, ndim + 1]
+        code.arg("indice_pairs_out_part", f"int*")  # [2, kernelProd, MaxSize]
         code.arg("num_indices_in", "int")
         code.arg("indices_pair_size", "int")
         # TODO use block instead of filter_offset?
@@ -338,12 +357,14 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
     @pccm.cuda.cuda_global_function
     def calc_conv_indices_stage1_mask(self):
         code = pccm.FunctionCode()
-        code.arg("loc_iter", f"ConvLocIter") # [N, ndim + 1]
+        code.arg("loc_iter", f"ConvLocIter")  # [N, ndim + 1]
 
-        code.arg("indices_in", f"const int*") # [N, ndim + 1]
-        code.arg("indice_pairs_bwd", f"{self.dtype_indices}*") # [2, kernelProd, MaxSize]
-        code.arg("indice_pairs_for_uniq", f"{self.dtype_indices}*") # [2, kernelProd, MaxSize]
-        code.arg("indice_num_per_loc", f"int*") # [kernelProd]
+        code.arg("indices_in", f"const int*")  # [N, ndim + 1]
+        code.arg("indice_pairs_bwd",
+                 f"{self.dtype_indices}*")  # [2, kernelProd, MaxSize]
+        code.arg("indice_pairs_for_uniq",
+                 f"{self.dtype_indices}*")  # [2, kernelProd, MaxSize]
+        code.arg("indice_num_per_loc", f"int*")  # [kernelProd]
 
         code.arg("num_indices_in", "int")
 
@@ -381,11 +402,13 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
     def calc_conv_indices_stage2_mask(self):
         code = pccm.FunctionCode()
         code.targ("TTable")
-        code.arg("table", f"TTable") # [N, ndim + 1]
-        code.arg("indice_pairs_fwd", f"int*") # [kernelProd, MaxSize], inp -> out
-        code.arg("indice_pairs_bwd", f"int*") # [kernelProd, MaxSize], out -> inp
-        code.arg("mask_fwd", f"uint32_t*") # [kernelProd]
-        code.arg("mask_bwd", f"uint32_t*") # [kernelProd]
+        code.arg("table", f"TTable")  # [N, ndim + 1]
+        code.arg("indice_pairs_fwd",
+                 f"int*")  # [kernelProd, MaxSize], inp -> out
+        code.arg("indice_pairs_bwd",
+                 f"int*")  # [kernelProd, MaxSize], out -> inp
+        code.arg("mask_fwd", f"uint32_t*")  # [kernelProd]
+        code.arg("mask_bwd", f"uint32_t*")  # [kernelProd]
 
         code.arg("num_indices_in", "int")
         code.arg("num_indices_out", "int")
@@ -418,8 +441,9 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
     @pccm.cuda.cuda_global_function
     def calc_conv_indices_stage2_mask_output(self):
         code = pccm.FunctionCode()
-        code.arg("indice_pairs_bwd", f"int*") # [kernelProd, MaxSize], out -> inp
-        code.arg("mask_bwd", f"uint32_t*") # [kernelProd]
+        code.arg("indice_pairs_bwd",
+                 f"int*")  # [kernelProd, MaxSize], out -> inp
+        code.arg("mask_bwd", f"uint32_t*")  # [kernelProd]
 
         code.arg("num_indices_in", "int")
         code.arg("kv", "int")
@@ -441,10 +465,12 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
     def calc_conv_indices_stage2_inference_mask(self):
         code = pccm.FunctionCode()
         code.targ("TTable")
-        code.arg("table", f"TTable") # [N, ndim + 1]
-        code.arg("indice_pairs_fwd", f"int*") # [kernelProd, MaxSize], inp -> out
-        code.arg("indice_pairs_bwd", f"int*") # [kernelProd, MaxSize], out -> inp
-        code.arg("mask_fwd", f"uint32_t*") # [kernelProd]
+        code.arg("table", f"TTable")  # [N, ndim + 1]
+        code.arg("indice_pairs_fwd",
+                 f"int*")  # [kernelProd, MaxSize], inp -> out
+        code.arg("indice_pairs_bwd",
+                 f"int*")  # [kernelProd, MaxSize], out -> inp
+        code.arg("mask_fwd", f"uint32_t*")  # [kernelProd]
         code.arg("num_indices_in", "int")
         code.arg("num_indices_out", "int")
 
@@ -469,16 +495,15 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         """)
         return code
 
-
     @pccm.cuda.cuda_global_function
     def build_subm_conv_hash_table(self):
         code = pccm.FunctionCode()
         code.targ("TTable")
 
-        code.arg("table", f"TTable") # [N, ndim + 1]
-        code.arg("indices_in", f"const int*") # [N, ndim + 1]
+        code.arg("table", f"TTable")  # [N, ndim + 1]
+        code.arg("indices_in", f"const int*")  # [N, ndim + 1]
 
-        code.arg("layout_npq", f"spinds::LayoutNPQ") 
+        code.arg("layout_npq", f"spinds::LayoutNPQ")
 
         code.arg("num_indices", "int")
 
@@ -493,8 +518,8 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
     @pccm.cuda.cuda_global_function
     def clean_indices_uniq(self):
         code = pccm.FunctionCode()
-        code.arg("indice_pairs_for_uniq", f"{self.dtype_indices}*") 
-        code.arg("size", f"{self.dtype_indices}") 
+        code.arg("indice_pairs_for_uniq", f"{self.dtype_indices}*")
+        code.arg("size", f"{self.dtype_indices}")
         code.raw(f"""
         for ({self.dtype_indices} i : tv::KernelLoopX<{self.dtype_indices}>(size)) {{
             indice_pairs_for_uniq[i] = std::numeric_limits<{self.dtype_indices}>::max();
@@ -506,12 +531,13 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
     def calc_subm_conv_indices(self):
         code = pccm.FunctionCode()
         code.targ("TTable")
-        code.arg("loc_iter", f"ConvLocIter") # [N, ndim + 1]
-        code.arg("table", f"TTable") # [N, ndim + 1]
+        code.arg("loc_iter", f"ConvLocIter")  # [N, ndim + 1]
+        code.arg("table", f"TTable")  # [N, ndim + 1]
 
-        code.arg("indices_in", f"const int*") # [N, ndim + 1]
-        code.arg("indice_pairs", f"{self.dtype_indices}*") # [2, kernelProd, MaxSize]
-        code.arg("indice_num_per_loc", f"int*") # [kernelProd]
+        code.arg("indices_in", f"const int*")  # [N, ndim + 1]
+        code.arg("indice_pairs",
+                 f"{self.dtype_indices}*")  # [2, kernelProd, MaxSize]
+        code.arg("indice_num_per_loc", f"int*")  # [kernelProd]
 
         code.arg("num_indices_in", "int")
         code.arg("indices_pair_size", "int")
@@ -552,12 +578,13 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
     def calc_subm_conv_indices_mask(self):
         code = pccm.FunctionCode()
         code.targ("TTable")
-        code.arg("loc_iter", f"ConvLocIter") # [N, ndim + 1]
-        code.arg("table", f"TTable") # [N, ndim + 1]
+        code.arg("loc_iter", f"ConvLocIter")  # [N, ndim + 1]
+        code.arg("table", f"TTable")  # [N, ndim + 1]
 
-        code.arg("indices_in", f"const int*") # [N, ndim + 1]
-        code.arg("indice_pairs", f"{self.dtype_indices}*") # [2, kernelProd, MaxSize]
-        code.arg("mask", f"uint32_t*") # [kernelProd]
+        code.arg("indices_in", f"const int*")  # [N, ndim + 1]
+        code.arg("indice_pairs",
+                 f"{self.dtype_indices}*")  # [2, kernelProd, MaxSize]
+        code.arg("mask", f"uint32_t*")  # [kernelProd]
 
         code.arg("num_indices", "int")
         code.arg("indices_pair_size", "int")
@@ -609,13 +636,14 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
     def calc_subm_conv_indices_split_mask(self):
         code = pccm.FunctionCode()
         code.targ("TTable")
-        code.arg("loc_iter", f"ConvLocIter") # [N, ndim + 1]
-        code.arg("table", f"TTable") # [N, ndim + 1]
+        code.arg("loc_iter", f"ConvLocIter")  # [N, ndim + 1]
+        code.arg("table", f"TTable")  # [N, ndim + 1]
 
-        code.arg("indices_in", f"const int*") # [N, ndim + 1]
-        code.arg("indice_pairs", f"{self.dtype_indices}*") # [2, kernelProd, MaxSize]
-        code.arg("mask1", f"uint32_t*") # [kernelProd]
-        code.arg("mask2", f"uint32_t*") # [kernelProd]
+        code.arg("indices_in", f"const int*")  # [N, ndim + 1]
+        code.arg("indice_pairs",
+                 f"{self.dtype_indices}*")  # [2, kernelProd, MaxSize]
+        code.arg("mask1", f"uint32_t*")  # [kernelProd]
+        code.arg("mask2", f"uint32_t*")  # [kernelProd]
 
         code.arg("num_indices", "int")
         code.arg("indices_pair_size", "int")
@@ -665,10 +693,12 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
     def generate_conv_inds_stage1(self):
         code = pccm.FunctionCode()
         code.arg("indices", "tv::Tensor")
-        code.arg("indice_pairs, indice_pairs_uniq, indice_num_per_loc", "tv::Tensor")
+        code.arg("indice_pairs, indice_pairs_uniq, indice_num_per_loc",
+                 "tv::Tensor")
         code.arg("batch_size", "int")
         code.arg("output_dims, input_dims", f"tv::array<int, {self.ndim}>")
-        code.arg("ksize, stride, padding, dilation", f"tv::array<int, {self.ndim}>")
+        code.arg("ksize, stride, padding, dilation",
+                 f"tv::array<int, {self.ndim}>")
         code.arg("transposed", f"bool", "false")
 
         code.arg("stream_int", f"std::uintptr_t", "0")
@@ -706,9 +736,7 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         // auto num_out_act = new_end - ptr_tr - 1;
         // return num_out_act;
         """)
-        return code# .ret("int")
-
-
+        return code  # .ret("int")
 
     @pccm.cuda.static_function
     def generate_conv_inds_stage1_5(self):
@@ -726,7 +754,6 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         """)
         return code.ret("int")
 
-
     @pccm.cuda.static_function
     def generate_conv_inds_stage2(self):
         code = pccm.FunctionCode()
@@ -735,7 +762,8 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         code.arg("num_out_act", "int")
         code.arg("batch_size", "int")
         code.arg("output_dims, input_dims", f"tv::array<int, {self.ndim}>")
-        code.arg("ksize, stride, padding, dilation", f"tv::array<int, {self.ndim}>")
+        code.arg("ksize, stride, padding, dilation",
+                 f"tv::array<int, {self.ndim}>")
         code.arg("transposed", f"bool", "false")
         code.arg("stream_int", f"std::uintptr_t", "0")
         code.raw(f"""
@@ -783,10 +811,12 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
     def generate_conv_inds_mask_stage1(self):
         code = pccm.FunctionCode()
         code.arg("indices", "tv::Tensor")
-        code.arg("indice_pairs_bwd, indice_pairs_uniq, indice_num_per_loc", "tv::Tensor")
+        code.arg("indice_pairs_bwd, indice_pairs_uniq, indice_num_per_loc",
+                 "tv::Tensor")
         code.arg("batch_size", "int")
         code.arg("output_dims, input_dims", f"tv::array<int, {self.ndim}>")
-        code.arg("ksize, stride, padding, dilation", f"tv::array<int, {self.ndim}>")
+        code.arg("ksize, stride, padding, dilation",
+                 f"tv::array<int, {self.ndim}>")
         code.arg("transposed", f"bool", "false")
 
         code.arg("stream_int", f"std::uintptr_t", "0")
@@ -817,21 +847,23 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
             indice_pairs_bwd.data_ptr<{self.dtype_indices}>(), 
             indice_pairs_uniq.data_ptr<{self.dtype_indices}>(), indice_num_per_loc.data_ptr<int>(), indices.dim(0),
             kv, transposed);
-        auto timer = tv::CudaContextTimer<>();
         """)
-        return code# .ret("int")
+        return code  # .ret("int")
 
     @pccm.cuda.static_function
     def generate_conv_inds_stage2_mask(self):
         code = pccm.FunctionCode()
         code.arg("indices, hashdata", "tv::Tensor")
-        code.arg("indice_pairs_fwd, indice_pairs_bwd, indice_pairs_uniq, out_inds", "tv::Tensor")
+        code.arg(
+            "indice_pairs_fwd, indice_pairs_bwd, indice_pairs_uniq, out_inds",
+            "tv::Tensor")
         code.arg("mask_fwd, mask_bwd", "tv::Tensor")
 
         code.arg("num_out_act", "int")
         code.arg("batch_size", "int")
         code.arg("output_dims, input_dims", f"tv::array<int, {self.ndim}>")
-        code.arg("ksize, stride, padding, dilation", f"tv::array<int, {self.ndim}>")
+        code.arg("ksize, stride, padding, dilation",
+                 f"tv::array<int, {self.ndim}>")
         code.arg("transposed", f"bool", "false")
         code.arg("stream_int", f"std::uintptr_t", "0")
         code.raw(f"""
@@ -903,7 +935,6 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         """)
         return code.ret("int")
 
-
     @pccm.cuda.static_function
     def generate_subm_conv_inds(self):
         code = pccm.FunctionCode()
@@ -912,7 +943,8 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         code.arg("batch_size", "int")
         code.arg("input_dims", f"tv::array<int, {self.ndim}>")
         code.arg("ksize, dilation", f"tv::array<int, {self.ndim}>")
-        code.arg("indice_pair_mask", "tv::Tensor", "tv::Tensor()", "cumm.tensorview.Tensor = Tensor()")
+        code.arg("indice_pair_mask", "tv::Tensor", "tv::Tensor()",
+                 "cumm.tensorview.Tensor = Tensor()")
         code.arg("backward", "bool", "false")
         code.arg("stream_int", f"std::uintptr_t", "0")
 
@@ -993,6 +1025,7 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
 
         return code.ret("int")
 
+
 class SparseConvIndicesCPU(pccm.ParameterizedClass):
     def __init__(self, problem: ConvProblem, dtype_indices: dtypes.DType):
         super().__init__()
@@ -1000,9 +1033,9 @@ class SparseConvIndicesCPU(pccm.ParameterizedClass):
         self.add_include("unordered_map")
         self.loc_iter = ConvOutLocIter(problem)
         self.add_param_class("spinds", self.loc_iter, "ConvLocIter")
-        self.add_param_class("spinds", problem, "ConvProblem")        
+        self.add_param_class("spinds", problem, "ConvProblem")
 
-        self.ndim = problem.ndim 
+        self.ndim = problem.ndim
         self.dtype_indices = dtype_indices
         self.dtype_indices_uniq = dtype_indices
 
@@ -1016,7 +1049,7 @@ class SparseConvIndicesCPU(pccm.ParameterizedClass):
         code.arg("batch_size", "int")
         code.arg("input_dims", f"tv::array<int, {self.ndim}>")
         code.arg("ksize, dilation", f"tv::array<int, {self.ndim}>")
-    
+
         code.raw(f"""
         tv::array<int, {self.ndim}> stride, padding;
         for (int i = 0; i < {self.ndim}; ++i){{
@@ -1079,7 +1112,8 @@ class SparseConvIndicesCPU(pccm.ParameterizedClass):
         code.arg("indice_pairs, out_inds, indice_num_per_loc", "tv::Tensor")
         code.arg("batch_size", "int")
         code.arg("output_dims, input_dims", f"tv::array<int, {self.ndim}>")
-        code.arg("ksize, stride, padding, dilation", f"tv::array<int, {self.ndim}>")
+        code.arg("ksize, stride, padding, dilation",
+                 f"tv::array<int, {self.ndim}>")
         code.arg("transposed", f"bool", "false")
         code.raw(f"""
         int kv = tv::arrayops::prod(ksize);

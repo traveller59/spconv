@@ -1,6 +1,7 @@
 from typing import overload, Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 from pccm.stubs import EnumValue, EnumClassValue
 from cumm.tensorview import Tensor
+from cumm.tensorview import CUDAKernelTimer
 class GemmAlgoDesp:
     dtype_a: int
     dtype_b: int
@@ -102,7 +103,13 @@ class GemmParams:
     alpha: float
     beta: float
     stream: int
-    def __init__(self) -> None: ...
+    timer: CUDAKernelTimer
+    def __init__(self, timer: CUDAKernelTimer =  CUDAKernelTimer(False)) -> None: 
+        """
+        Args:
+            timer: 
+        """
+        ...
     def check_valid(self) -> None: ...
     @property
     def a(self) -> Tensor: ...

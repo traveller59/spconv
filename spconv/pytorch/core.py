@@ -19,6 +19,7 @@ import torch
 from spconv.core import ConvAlgo
 from spconv.pytorch.constants import PYTORCH_VERSION
 from spconv.pytorch.ops import ThrustSortAllocator
+from spconv.tools import CUDAKernelTimer
 
 if PYTORCH_VERSION >= [1, 8, 0]:
     try:
@@ -51,13 +52,14 @@ class IndiceData(object):
 
 
 class ImplicitGemmIndiceData(object):
-    def __init__(self, out_indices: torch.Tensor, indices: torch.Tensor, pair_fwd: torch.Tensor,
-                 pair_bwd: torch.Tensor,
+    def __init__(self, out_indices: torch.Tensor, indices: torch.Tensor,
+                 pair_fwd: torch.Tensor, pair_bwd: torch.Tensor,
                  pair_mask_fwd_splits: List[torch.Tensor],
                  pair_mask_bwd_splits: List[torch.Tensor],
                  mask_argsort_fwd_splits: List[torch.Tensor],
                  mask_argsort_bwd_splits: List[torch.Tensor],
-                 masks: List[np.ndarray], out_spatial_shape, is_subm: bool, algo: ConvAlgo):
+                 masks: List[np.ndarray], out_spatial_shape, is_subm: bool,
+                 algo: ConvAlgo):
         self.out_indices = out_indices
         self.indices = indices
         self.pair_fwd = pair_fwd
@@ -99,7 +101,8 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
                  voxel_num: Optional[torch.Tensor] = None,
                  indice_dict: Optional[dict] = None,
                  benchmark: bool = False,
-                 permanent_thrust_allocator: bool = False):
+                 permanent_thrust_allocator: bool = False,
+                 enable_timer: bool = False):
         """
         Args:
             features: [num_points, num_features] feature tensor
@@ -130,9 +133,10 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
         self.voxel_num = voxel_num  # for tensorrt
         self.benchmark = benchmark
         self.benchmark_record = {}
-        self.thrust_allocator: Optional[ThrustSortAllocator] = None 
+        self.thrust_allocator: Optional[ThrustSortAllocator] = None
         if permanent_thrust_allocator:
             self.thrust_allocator = ThrustSortAllocator(features.device)
+        self._timer = CUDAKernelTimer(enable_timer)
 
     def replace_feature(self, feature):
         """we need to replace x.features = F.relu(x.features) with x = x.replace_feature(F.relu(x.features))
@@ -144,7 +148,7 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
         new_spt.benchmark = self.benchmark
         new_spt.benchmark_record = self.benchmark_record
         new_spt.thrust_allocator = self.thrust_allocator
-
+        new_spt._timer = self._timer
         return new_spt
 
     @property
@@ -174,7 +178,8 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
     def spatial_size(self):
         return np.prod(self.spatial_shape)
 
-    def find_indice_pair(self, key) -> Optional[Union[IndiceData, ImplicitGemmIndiceData]]:
+    def find_indice_pair(
+            self, key) -> Optional[Union[IndiceData, ImplicitGemmIndiceData]]:
         if key is None:
             return None
         if key in self.indice_dict:
@@ -208,4 +213,5 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
                                   self.benchmark)
         tensor.benchmark_record = self.benchmark_record
         tensor.thrust_allocator = self.thrust_allocator
+        tensor._timer = self._timer
         return tensor

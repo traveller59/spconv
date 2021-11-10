@@ -24,9 +24,10 @@ from spconv.constants import NDIM_DONT_CARE
 from typing import Optional
 import time
 from threading import Lock
-import torch 
+import contextlib
 import numpy as np
 from spconv.core import ConvAlgo, AlgoHint
+from spconv.tools import CUDAKernelTimer
 
 ALL_ALGO_DESPS = GemmMainUnitTest.get_all_algo_desp()
 ALL_CONV_ALGO_DESPS = ConvMainUnitTest.get_all_conv_algo_desp()
@@ -403,7 +404,8 @@ class SimpleGemm:
         alpha: float = 1.0,
         beta: float = 0.0,
         gather_data: tv.Tensor = tv.Tensor(),
-        workspace: tv.Tensor = tv.Tensor()):
+        workspace: tv.Tensor = tv.Tensor(),
+        timer: CUDAKernelTimer = CUDAKernelTimer(False)):
         m, n, k = GemmMainUnitTest.extract_mnk(a.shape, b.shape, trans_a,
                                                trans_b, trans_c,
                                                shuffle_type.value,
@@ -446,6 +448,9 @@ class SimpleGemm:
         #                    stream=stream)
         #     GemmMainUnitTest.stream_synchronize(stream)
         #     gather = time.time() - tt
+        if timer.enable:
+            assert timer._timer is not None
+            params.timer = timer._timer
 
         GemmMainUnitTest.matmul2(params)
         # GemmMainUnitTest.stream_synchronize(stream)
@@ -678,7 +683,8 @@ class SimpleConv:
                               beta: float = 0.0,
                               stream: int = 0,
                               workspace: tv.Tensor = tv.Tensor(),
-                              verbose: bool = False):
+                              verbose: bool = False,
+                              timer: CUDAKernelTimer = CUDAKernelTimer(False)):
         channel_k = output.dim(1)
         channel_c = inp.dim(1)
         # GemmMainUnitTest.stream_synchronize(stream)
@@ -709,9 +715,11 @@ class SimpleConv:
         params.mask_filter = mask_filter
         params.mask_output = mask_output
         params.reverse_mask = reverse_mask
+        if timer.enable:
+            assert timer._timer is not None
+            params.timer = timer._timer
         # torch.cuda.synchronize()
         # t = time.time()
-
         params.workspace = workspace
         ConvMainUnitTest.implicit_gemm2(params)
         # torch.cuda.synchronize()
@@ -723,6 +731,7 @@ class SimpleConv:
 
     def stream_synchronize(self, stream: int):
         return GemmMainUnitTest.stream_synchronize(stream)
+
 
 GEMM = SimpleGemm(ALL_ALGO_DESPS)
 CONV = SimpleConv(ALL_CONV_ALGO_DESPS)

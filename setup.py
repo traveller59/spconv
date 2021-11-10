@@ -38,9 +38,9 @@ if cuda_ver:
     cuda_ver = cuda_ver.replace(".", "") # 10.2 to 102
 
     RELEASE_NAME += "-cu{}".format(cuda_ver)
-    deps = ["cumm-cu{}".format(cuda_ver)]
+    deps = ["cumm-cu{}>=0.2.2".format(cuda_ver)]
 else:
-    deps = ["cumm"]
+    deps = ["cumm>=0.2.2"]
 
 
 
@@ -48,11 +48,11 @@ DESCRIPTION = 'spatial sparse convolution'
 URL = 'https://github.com/traveller59/spconv'
 EMAIL = 'yanyan.sub@outlook.com'
 AUTHOR = 'Yan Yan'
-REQUIRES_PYTHON = '>=3.7'
+REQUIRES_PYTHON = '>=3.6'
 VERSION = None
 
 # What packages are required for this module to be executed?
-REQUIRED = ["pccm>=0.2.19", "pybind11>=2.6.0", "fire", "numpy", *deps]
+REQUIRED = ["pccm>=0.2.21", "pybind11>=2.6.0", "fire", "numpy", *deps]
 
 # What packages are optional?
 EXTRAS = {

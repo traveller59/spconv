@@ -1,5 +1,6 @@
-import torch 
-import time 
+import torch
+import time
+
 
 def main():
 

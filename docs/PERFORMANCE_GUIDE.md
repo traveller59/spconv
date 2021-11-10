@@ -25,12 +25,7 @@
 * make sure your channel size is multiple of 8 when using fp16. multiple of 32 is better.
 * spconv 2.x in Windows 10 is 1.5x~2x slower than Linux. use Linux if possible.
 
-Network Benchmark without batchnorm (F32/F16) in RTX 3080 Laptop GPU
-
-| F32/F16 | Spconv 1.x | Native| Implicit Gemm | Implicit Gemm Split Mask  |
-| -------------- |:---------------------:|---------------------:|---------------------:| ---------------------:|
-| Forward | 43ms     | 29ms/23ms    | 30ms/15ms      | 30ms/19ms      |
-| Backward | 80ms    | 47ms/32ms    | 56ms/15ms      | 45ms/14ms      |
+See [benchmark](BENCHMARK.md) for more performance details of different algorithms.
 
 ## Algorithm Overview
 
@@ -57,4 +52,4 @@ In my test, ```Implicit Gemm``` is almost 2x faster than ```Native```.
 
 TODO
 
-In my test, ```Implicit Gemm Split Mask``` is slightly faster than ```Implicit Gemm```, but the indice generation is greatly slower, so currently we use ```Implicit Gemm``` by default.
+In my test, ```Implicit Gemm Split Mask``` is slightly faster than ```Implicit Gemm```, but the indice generation is slower, so currently we use ```Implicit Gemm``` by default.

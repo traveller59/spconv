@@ -19,10 +19,31 @@ class Point2Voxel:
             max_num_points_per_voxel: 
         """
         ...
-    def point_to_voxel_hash(self, points: Tensor, clear_voxels: bool = True) -> Tuple[Tensor, Tensor, Tensor]: 
+    def point_to_voxel_hash(self, points: Tensor, clear_voxels: bool = True, empty_mean: bool = False, stream_int: int = 0) -> Tuple[Tensor, Tensor, Tensor]: 
         """
         Args:
             points: 
             clear_voxels: 
+            empty_mean: 
+            stream_int: 
+        """
+        ...
+    @staticmethod
+    def point_to_voxel_hash_static(points: Tensor, voxels: Tensor, indices: Tensor, num_per_voxel: Tensor, hashdata: Tensor, point_indice_data: Tensor, vsize: List[float], grid_size: List[int], grid_stride: List[int], coors_range: List[float], clear_voxels: bool = True, empty_mean: bool = False, stream_int: int = 0) -> Tuple[Tensor, Tensor, Tensor]: 
+        """
+        Args:
+            points: 
+            voxels: 
+            indices: 
+            num_per_voxel: 
+            hashdata: 
+            point_indice_data: 
+            vsize: 
+            grid_size: 
+            grid_stride: 
+            coors_range: 
+            clear_voxels: 
+            empty_mean: 
+            stream_int: 
         """
         ...
