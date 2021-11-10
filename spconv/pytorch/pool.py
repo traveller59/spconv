@@ -153,6 +153,7 @@ class SparseMaxPool(SparseModule):
                                                  indice_pairs,
                                                  indice_pairs_num,
                                                  spatial_shape,
+                                                 out_spatial_shape,
                                                  is_subm=False,
                                                  algo=self.algo)
                         indice_dict[self.indice_key] = indice_data
@@ -201,6 +202,7 @@ class SparseMaxPool(SparseModule):
                         mask_argsort_bwd_splits=mask_argsort_bwd_splits,
                         masks=masks,
                         is_subm=self.subm,
+                        spatial_shape=spatial_shape,
                         out_spatial_shape=out_spatial_shape,
                         algo=self.algo)
                     msg = f"your indice key {self.indice_key} already exists in this sparse tensor."

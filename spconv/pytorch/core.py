@@ -41,11 +41,12 @@ else:
 
 class IndiceData(object):
     def __init__(self, out_indices, indices, indice_pairs, indice_pair_num,
-                 out_spatial_shape, is_subm: bool, algo: ConvAlgo):
+                 spatial_shape, out_spatial_shape, is_subm: bool, algo: ConvAlgo):
         self.out_indices = out_indices
         self.indices = indices
         self.indice_pairs = indice_pairs
         self.indice_pair_num = indice_pair_num
+        self.spatial_shape = spatial_shape
         self.out_spatial_shape = out_spatial_shape
         self.is_subm = is_subm
         self.algo = algo
@@ -58,8 +59,8 @@ class ImplicitGemmIndiceData(object):
                  pair_mask_bwd_splits: List[torch.Tensor],
                  mask_argsort_fwd_splits: List[torch.Tensor],
                  mask_argsort_bwd_splits: List[torch.Tensor],
-                 masks: List[np.ndarray], out_spatial_shape, is_subm: bool,
-                 algo: ConvAlgo):
+                 masks: List[np.ndarray], spatial_shape, 
+                 out_spatial_shape, is_subm: bool, algo: ConvAlgo):
         self.out_indices = out_indices
         self.indices = indices
         self.pair_fwd = pair_fwd
@@ -69,6 +70,7 @@ class ImplicitGemmIndiceData(object):
         self.mask_argsort_fwd_splits = mask_argsort_fwd_splits
         self.mask_argsort_bwd_splits = mask_argsort_bwd_splits
         self.masks = masks
+        self.spatial_shape = spatial_shape
         self.out_spatial_shape = out_spatial_shape
         self.is_subm = is_subm
         self.algo = algo

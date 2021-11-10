@@ -9,11 +9,23 @@
 ### Removed
 - remove a unnecessary device sync and slightly improve performance.
 
+## [2.1.4] - 2021-11-10
+### Fixed
+- Fix a bug of SparseInverseConv3d
+
+## [2.1.3] - 2021-11-08
+### Fixed
+- Fix a bug of CPU only package
+
+## [2.1.2] - 2021-11-06
+### Fixed
+- Fix a bug of python 3.7
+
 ## [2.1.0] - 2021-10-31
-### Addad
-* add implicit gemm algorithm for all kind of convolution with kernel volume <= 32. this algorithm is very fast with float16.
-* add pytorch wrapper for voxel generator
-* add CPU support and CPU-only build.
+### Added
+- add implicit gemm algorithm for all kind of convolution with kernel volume <= 32. this algorithm is very fast with float16.
+- add pytorch wrapper for voxel generator
+- add CPU support and CPU-only build.
 
 ## [2.0.2] - 2021-10-26
 ### Fixed
