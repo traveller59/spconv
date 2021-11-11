@@ -27,5 +27,9 @@ class OMPLib(pccm.Class):
         else:
             self.build_meta.add_cflags("g++", "-fopenmp")
             self.build_meta.add_cflags("clang++", "-fopenmp")
-            self.build_meta.add_ldflags("g++", "-fopenmp")
-            self.build_meta.add_ldflags("clang++", "-fopenmp")
+            if "g++" not in self.build_meta.compiler_to_ldflags:
+                self.build_meta.compiler_to_ldflags["g++"] = []
+            self.build_meta.compiler_to_ldflags["g++"].extend(["-fopenmp"])
+            if "clang++" not in self.build_meta.compiler_to_ldflags:
+                self.build_meta.compiler_to_ldflags["clang++"] = []
+            self.build_meta.compiler_to_ldflags["clang++"].extend(["-fopenmp"])
