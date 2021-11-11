@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.6] - 2021-11-10
+### Fixed
+- Fix missing -fopenmp in linker for CPU only
+### Removed
+- remove stale comment sending in CI
+
 ## [2.1.5] - 2021-11-10
 ### Added
 - Add cuda profile tool

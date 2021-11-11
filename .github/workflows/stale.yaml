@@ -14,6 +14,6 @@ jobs:
     steps:
       - uses: actions/stale@v4
         with:
-          stale-issue-message: 'Mark stale issues due to inactivity.'
-          stale-pr-message: 'Mark stale PRs due to inactivity.'
-          operations-per-run: 300
+          stale-issue-message: ''
+          stale-pr-message: ''
+          operations-per-run: 500
