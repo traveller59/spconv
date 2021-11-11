@@ -62,18 +62,11 @@ Spconv 1.x users **NEED READ [THIS](docs/SPCONV_2_BREAKING_CHANGEs.md)** before 
 * doesn't depend on pytorch binary. 
 * since spconv 2.x doesn't depend on pytorch binary (never in future), it's impossible to support torch.jit/libtorch inference.
 
-Spconv 2.1 vs 1.x speed:
+## Spconv 2.x Development and Roadmap
 
-|                | 1080Ti Spconv 1.x F32 | 1080Ti Spconv 2.0 F32 | 3080M* Spconv 2.1 F16  |
-| -------------- |:---------------------:| ---------------------:| ----------:|
-| 27x128x128 Fwd | 11ms                  | 5.4ms                 | 1.4ms      |
-
-\* 3080M (Laptop) ~= 3070 Desktop
+See [dev plan](docs/SPCONV_DEVELOP_PLAN.md). A complete guide of spconv development will be released soon.
 
 
-<!--
-TODO Spconv vs [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine) vs [torchsparse](https://github.com/mit-han-lab/torchsparse)
--->
 
 ## Usage
 
@@ -160,20 +153,7 @@ You need to rebuild ```cumm``` first if you are build along a CUDA version that 
 5. run ```pip install pccm cumm wheel```
 6. run ```python setup.py bdist_wheel```+```pip install dists/xxx.whl```
 
-## Roadmap for Spconv 2.2-2.3: 
-* TensorFormat32 support for faster fp32 training when you use NVIDIA Geforce RTX 30x0/Tesla A100/Quadro RTX Ax000 (2.2)
-* change implicit gemm weight layout from KRSC to RSKC to make sure we can use native algorithm with implicit gemm weight. (2.2)
-* documents (2.2)
-* Ampere feature support (2.3)
-* pytorch int8 inference, and QAT support (2.3)
 
-## TODO in Spconv 2.x
-- [ ] Ampere (A100 / RTX 3000 series) feature support (work in progress)
-- [ ] torch QAT support (work in progress)
-- [ ] TensorRT (torch.fx based)
-- [ ] Build C++ only package
-- [ ] JIT compilation for CUDA kernels
-- [ ] Document (low priority)
 
 ## Note
 

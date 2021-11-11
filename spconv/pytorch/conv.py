@@ -346,7 +346,7 @@ class SparseConvolution(SparseModule):
                     mask_argsort_bwd_splits = datas.mask_argsort_fwd_splits
                     masks = datas.masks
                     out_spatial_shape = datas.spatial_shape
-                    assert pair_fwd.shape[0] == np.prod(
+                    assert datas.pair_fwd.shape[0] == np.prod(
                         self.kernel_size
                     ), "inverse conv must have same kernel size as its couple conv"
 
@@ -362,6 +362,8 @@ class SparseConvolution(SparseModule):
                         masks = datas.masks
                     else:
                         with input._timer.namespace("gen_pairs"):
+                            # we need to gen bwd indices for regular conv
+                            # because it may be inversed.
                             res = ops.get_indice_pairs_implicit_gemm(
                                 indices,
                                 batch_size,
@@ -374,7 +376,7 @@ class SparseConvolution(SparseModule):
                                 out_padding=self.output_padding,
                                 subm=self.subm,
                                 transpose=self.transposed,
-                                is_train=self.training,
+                                is_train=(not self.subm) or self.training,
                                 alloc=input.thrust_allocator,
                                 timer=input._timer)
                         outids = res[0]

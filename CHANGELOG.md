@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.1.7] - 2021-11-11
+### Fixed
+- Fix a bug when net have inverse and run inference in eval mode.
+
 ## [2.1.6] - 2021-11-10
 ### Fixed
 - Fix missing -fopenmp in linker for CPU only

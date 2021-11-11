@@ -178,7 +178,7 @@ class SparseMaxPool(SparseModule):
                         dilation=self.dilation,
                         out_padding=out_padding,
                         subm=self.subm,
-                        is_train=self.training,
+                        is_train=(not self.subm) or self.training,
                         alloc=input.thrust_allocator,
                         timer=input._timer)
                 outids = res[0]
