@@ -21,7 +21,7 @@
 * ```x.features = F.relu(x.features)``` now raise error. use ```x = x.replace_feature(F.relu(x.features))``` instead.
 * weight layout has been changed to RSKC (native algorithm) or KRSC (implicit gemm), no longer RSCK (spconv 1.x). RS is kernel size, C is input channel, K is output channel.
 * all util ops are removed (pillar scatter/nms/rbbox_iou...)
-* VoxelGenerator has been replaced by Point2VoxelGPU[1-4]d/Point2VoxelCPU[1-4]d.
+* VoxelGenerator has been replaced by ```spconv.pytorch.utils.PointToVoxel``` (torch API) or Point2VoxelGPU[1-4]d/Point2VoxelCPU[1-4]d (tv.Tensor API).
 * spconv < 2.1 don't support CPU. spconv 2.1+ support cpu for debug usage.
 
-* test spconv 1.x model in spconv 2.x: set environment variable before run program. Linux: ```export SPCONV_FILTER_HWIO="1"```, Windows powershell: ```$Env:SPCONV_FILTER_HWIO = "1"```. **WARNING** test spconv 1.x model don't support implicit gemm algorithm, you need to train from scratch with spconv 2.x and select ConvAlgo.MaskSplitImplicitGemm.
+* test spconv 1.x model in spconv 2.x: Firstly set environment variable before run program, Then set all ```algo``` in conv/pool to ```ConvAlgo.Native```. Linux: ```export SPCONV_FILTER_HWIO="1"```, Windows powershell: ```$Env:SPCONV_FILTER_HWIO = "1"```. **WARNING** test spconv 1.x model don't support implicit gemm algorithm.

@@ -33,14 +33,14 @@
 # SpConv: Spatially Sparse Convolution Library
 [![Build Status](https://github.com/traveller59/spconv/workflows/build/badge.svg)](https://github.com/traveller59/spconv/actions?query=workflow%3Abuild) 
 
-|                | PyPi Version  | Downloads  |
-| -------------- |:---------------------:| ---------------------:| 
-| CPU (Linux Only) | [![PyPI Version][pypi-ver-cpu]][pypi-url-cpu] | [![pypi monthly download][pypi-download-cpu]][pypi-url-cpu] | 
-| CUDA 10.2 | [![PyPI Version][pypi-ver-102]][pypi-url-102] | [![pypi monthly download][pypi-download-102]][pypi-url-102] | 
-| CUDA 11.1 | [![PyPI Version][pypi-ver-111]][pypi-url-111] | [![pypi monthly download][pypi-download-111]][pypi-url-111]| 
-| CUDA 11.3 (Linux Only) | [![PyPI Version][pypi-ver-113]][pypi-url-113] |[![pypi monthly download][pypi-download-113]][pypi-url-113]| 
-| CUDA 11.4 | [![PyPI Version][pypi-ver-114]][pypi-url-114] | [![pypi monthly download][pypi-download-114]][pypi-url-114]| 
 
+|                | PyPi   | Install  |Downloads  |
+| -------------- |:---------------------:| ---------------------:| ---------------------:| 
+| CPU (Linux Only) | [![PyPI Version][pypi-ver-cpu]][pypi-url-cpu] | ```pip install spconv``` | [![pypi monthly download][pypi-download-cpu]][pypi-url-cpu] | 
+| CUDA 10.2 | [![PyPI Version][pypi-ver-102]][pypi-url-102] | ```pip install spconv-cu102``` | [![pypi monthly download][pypi-download-102]][pypi-url-102] | 
+| CUDA 11.1 | [![PyPI Version][pypi-ver-111]][pypi-url-111] | ```pip install spconv-cu111```| [![pypi monthly download][pypi-download-111]][pypi-url-111]| 
+| CUDA 11.3 (Linux Only) | [![PyPI Version][pypi-ver-113]][pypi-url-113] | ```pip install spconv-cu113```| [![pypi monthly download][pypi-download-113]][pypi-url-113]| 
+| CUDA 11.4 | [![PyPI Version][pypi-ver-114]][pypi-url-114] | ```pip install spconv-cu114```| [![pypi monthly download][pypi-download-114]][pypi-url-114]|
 
 ```spconv``` is a project that provide heavily-optimized sparse convolution implementation with tensor core support. check [benchmark](docs/BENCHMARK.md) to see how fast spconv 2.x runs.
 
@@ -66,8 +66,6 @@ Spconv 1.x users **NEED READ [THIS](docs/SPCONV_2_BREAKING_CHANGEs.md)** before 
 
 See [dev plan](docs/SPCONV_DEVELOP_PLAN.md). A complete guide of spconv development will be released soon.
 
-
-
 ## Usage
 
 Firstly you need to use ```import spconv.pytorch as spconv``` in spconv 2.x.
@@ -78,7 +76,7 @@ Don't forget to check [performance guide](docs/PERFORMANCE_GUIDE.md).
 
 ## Install
 
-You need to install python >= 3.7 first to use spconv 2.x.
+You need to install python >= 3.6 (>=3.7 for windows) first to use spconv 2.x.
 
 You need to install CUDA toolkit first before using prebuilt binaries or build from source.
 
@@ -86,7 +84,9 @@ You need at least CUDA 10.2 to build and run spconv 2.x. We won't offer any supp
 
 ### Prebuilt
 
-We offer python 3.7-3.10 and cuda 10.2/11.1/11.3/11.4 prebuilt binaries for linux (manylinux) and windows 10/11.
+We offer python 3.6-3.10 and cuda 10.2/11.1/11.3/11.4 prebuilt binaries for linux (manylinux).
+
+We offer python 3.7-3.10 and cuda 10.2/11.1/11.4 prebuilt binaries for windows 10/11.
 
 We will provide prebuilts for CUDA versions supported by latest pytorch release. For example, pytorch 1.10 provide cuda 10.2 and 11.3 prebuilts, so we provide them too.
 
