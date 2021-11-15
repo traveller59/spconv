@@ -61,7 +61,7 @@ Spconv 1.x users **NEED READ [THIS](docs/SPCONV_2_BREAKING_CHANGEs.md)** before 
 * fp32 (not tf32) training/inference speed is increased (+50~80%)
 * fp16 training/inference speed is greatly increased when your layer support tensor core (channel size must be multiple of 8).
 * int8 op is ready, but we still need some time to figure out how to run int8 in pytorch.
-* doesn't depend on pytorch binary. 
+* [doesn't depend on pytorch binary](docs/FAQ.md#What-does-no-dependency-on-pytorch-mean), but you may need at least pytorch >= 1.6.0 to run spconv 2.x.
 * since spconv 2.x doesn't depend on pytorch binary (never in future), it's impossible to support torch.jit/libtorch inference.
 
 ## Spconv 2.x Development and Roadmap

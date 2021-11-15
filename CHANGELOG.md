@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.1.8] - 2021-11-15
+### Added
+- Add support for pytorch 1.5
+
 ## [2.1.7] - 2021-11-11
 ### Fixed
 - Fix a bug when net have inverse and run inference in eval mode.

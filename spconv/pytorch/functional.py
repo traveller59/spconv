@@ -15,19 +15,33 @@
 import torch
 from torch import nn
 from torch.autograd import Function
-from typing import Optional
+from typing import Optional, TypeVar
 from spconv.tools import CUDAKernelTimer
 from spconv.pytorch import ops
-import torch.cuda.amp as amp
+from spconv.pytorch.constants import PYTORCH_VERSION
+
 from torch.autograd.function import once_differentiable
 import numpy as np
 
 from typing import List
 
+_T = TypeVar("_T")
+
+def identity_decorator(func: _T) -> _T:
+    return func
+
+if PYTORCH_VERSION >= [1, 6, 0]:
+    import torch.cuda.amp as amp
+    _TORCH_CUSTOM_FWD = amp.custom_fwd(cast_inputs=torch.float16)
+    _TORCH_CUSTOM_BWD = amp.custom_bwd
+
+else:
+    _TORCH_CUSTOM_FWD = identity_decorator
+    _TORCH_CUSTOM_BWD = identity_decorator
 
 class SparseConvFunction(Function):
     @staticmethod
-    @amp.custom_fwd(cast_inputs=torch.float16)
+    @_TORCH_CUSTOM_FWD
     def forward(ctx,
                 features,
                 filters,
@@ -50,7 +64,7 @@ class SparseConvFunction(Function):
 
     @staticmethod
     @once_differentiable
-    @amp.custom_bwd
+    @_TORCH_CUSTOM_BWD
     def backward(ctx, grad_output):
         indice_pairs, indice_pair_num, features, filters = ctx.saved_tensors
         timer = ctx.timer
@@ -69,7 +83,7 @@ class SparseConvFunction(Function):
 
 class SparseInverseConvFunction(Function):
     @staticmethod
-    @amp.custom_fwd(cast_inputs=torch.float16)
+    @_TORCH_CUSTOM_FWD
     def forward(ctx,
                 features,
                 filters,
@@ -94,7 +108,7 @@ class SparseInverseConvFunction(Function):
 
     @staticmethod
     @once_differentiable
-    @amp.custom_bwd
+    @_TORCH_CUSTOM_BWD
     def backward(ctx, grad_output):
         indice_pairs, indice_pair_num, features, filters = ctx.saved_tensors
         timer = ctx.timer
@@ -114,7 +128,7 @@ class SparseInverseConvFunction(Function):
 
 class SparseImplicitGemmFunction(Function):
     @staticmethod
-    @amp.custom_fwd(cast_inputs=torch.float16)
+    @_TORCH_CUSTOM_FWD
     def forward(ctx,
                 features: torch.Tensor,
                 filters: torch.Tensor,
@@ -151,7 +165,7 @@ class SparseImplicitGemmFunction(Function):
 
     @staticmethod
     @once_differentiable
-    @amp.custom_bwd
+    @_TORCH_CUSTOM_BWD
     def backward(ctx, grad_output):
         features, filters, pair_fwd, pair_bwd = ctx.saved_tensors
         mask_width = ctx.mask_width
@@ -185,7 +199,7 @@ class SparseImplicitGemmFunction(Function):
 
 class SubMConvFunction(Function):
     @staticmethod
-    @amp.custom_fwd(cast_inputs=torch.float16)
+    @_TORCH_CUSTOM_FWD
     def forward(ctx,
                 features,
                 filters,
@@ -209,7 +223,7 @@ class SubMConvFunction(Function):
 
     @staticmethod
     @once_differentiable
-    @amp.custom_bwd
+    @_TORCH_CUSTOM_BWD
     def backward(ctx, grad_output):
         indice_pairs, indice_pair_num, features, filters = ctx.saved_tensors
         timer = ctx.timer
@@ -229,7 +243,7 @@ class SubMConvFunction(Function):
 
 class SparseMaxPoolFunction(Function):
     @staticmethod
-    @amp.custom_fwd(cast_inputs=torch.float16)
+    @_TORCH_CUSTOM_FWD
     def forward(ctx, features, indice_pairs, indice_pair_num,
                 num_activate_out):
         out = ops.indice_maxpool(features, indice_pairs, indice_pair_num,
@@ -239,7 +253,7 @@ class SparseMaxPoolFunction(Function):
 
     @staticmethod
     @once_differentiable
-    @amp.custom_bwd
+    @_TORCH_CUSTOM_BWD
     def backward(ctx, grad_output):
         indice_pairs, indice_pair_num, features, out = ctx.saved_tensors
         input_bp = ops.indice_maxpool_backward(features, out, grad_output,
@@ -249,7 +263,7 @@ class SparseMaxPoolFunction(Function):
 
 class SparseMaxPoolImplicitGemmFunction(Function):
     @staticmethod
-    @amp.custom_fwd(cast_inputs=torch.float16)
+    @_TORCH_CUSTOM_FWD
     def forward(ctx, features: torch.Tensor, indice_pairs_fwd: torch.Tensor,
                 indice_pairs_bwd: torch.Tensor, num_activate_out: int):
         out = ops.indice_maxpool_implicit_gemm(features, indice_pairs_fwd,
@@ -259,7 +273,7 @@ class SparseMaxPoolImplicitGemmFunction(Function):
 
     @staticmethod
     @once_differentiable
-    @amp.custom_bwd
+    @_TORCH_CUSTOM_BWD
     def backward(ctx, grad_output):
         indice_pairs_bwd, features, out = ctx.saved_tensors
         input_bp = ops.indice_maxpool_implicit_gemm_backward(
