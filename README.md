@@ -34,7 +34,7 @@
 [![Build Status](https://github.com/traveller59/spconv/workflows/build/badge.svg)](https://github.com/traveller59/spconv/actions?query=workflow%3Abuild) 
 
 
-|                | PyPi   | Install  |Downloads  |
+|                | PyPI   | Install  |Downloads  |
 | -------------- |:---------------------:| ---------------------:| ---------------------:| 
 | CPU (Linux Only) | [![PyPI Version][pypi-ver-cpu]][pypi-url-cpu] | ```pip install spconv``` | [![pypi monthly download][pypi-download-cpu]][pypi-url-cpu] | 
 | CUDA 10.2 | [![PyPI Version][pypi-ver-102]][pypi-url-102] | ```pip install spconv-cu102``` | [![pypi monthly download][pypi-download-102]][pypi-url-102] | 
@@ -65,6 +65,8 @@ Spconv 1.x users **NEED READ [THIS](docs/SPCONV_2_BREAKING_CHANGEs.md)** before 
 * since spconv 2.x doesn't depend on pytorch binary (never in future), it's impossible to support torch.jit/libtorch inference.
 
 ## Spconv 2.x Development and Roadmap
+
+Spconv 2.2 development has started. See [this issue](https://github.com/traveller59/spconv/issues/380) for more details.
 
 See [dev plan](docs/SPCONV_DEVELOP_PLAN.md). A complete guide of spconv development will be released soon.
 

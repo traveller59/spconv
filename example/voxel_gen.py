@@ -21,6 +21,7 @@ import torch
 
 
 def main():
+    np.random.seed(50051)
     # voxel gen source code: spconv/csrc/sparse/pointops.py
     gen = Point2VoxelCPU3d(vsize_xyz=[0.1, 0.1, 0.1],
                            coors_range_xyz=[-80, -80, -2, 80, 80, 6],
@@ -36,7 +37,7 @@ def main():
     voxels_np = voxels_tv.numpy_view()
     indices_np = indices_tv.numpy_view()
     num_p_in_vx_np = num_p_in_vx_tv.numpy_view()
-    print("------Raw Voxels-------")
+    print(f"------Raw Voxels {voxels_np.shape[0]}-------")
     print(voxels_np[0])
     # run voxel gen and FILL MEAN VALUE to voxel remain
     voxels_tv, indices_tv, num_p_in_vx_tv = gen.point_to_voxel_empty_mean(
@@ -49,6 +50,7 @@ def main():
 
 
 def main_point_with_features():
+    np.random.seed(50051)
     # voxel gen source code: spconv/csrc/sparse/pointops.py
     gen = Point2VoxelCPU3d(
         vsize_xyz=[0.1, 0.1, 0.1],
@@ -68,7 +70,7 @@ def main_point_with_features():
     voxels_np = voxels_tv.numpy_view()
     indices_np = indices_tv.numpy_view()
     num_p_in_vx_np = num_p_in_vx_tv.numpy_view()
-    print("------Raw Voxels-------")
+    print(f"------Raw Voxels {voxels_np.shape[0]}-------")
     print(voxels_np[0])
     # run voxel gen and FILL MEAN VALUE to voxel remain
     voxels_tv, indices_tv, num_p_in_vx_tv = gen.point_to_voxel_empty_mean(
@@ -81,6 +83,7 @@ def main_point_with_features():
 
 
 def main_pytorch_voxel_gen():
+    np.random.seed(50051)
     # voxel gen source code: spconv/csrc/sparse/pointops.py
     gen = PointToVoxel(vsize_xyz=[0.1, 0.1, 0.1],
                        coors_range_xyz=[-80, -80, -2, 80, 80, 6],
@@ -94,7 +97,7 @@ def main_pytorch_voxel_gen():
     voxels_np = voxels_th.numpy()
     indices_np = indices_th.numpy()
     num_p_in_vx_np = num_p_in_vx_th.numpy()
-    print("------Raw Voxels-------")
+    print(f"------Raw Voxels {voxels_np.shape[0]}-------")
     print(voxels_np[0])
     # run voxel gen and FILL MEAN VALUE to voxel remain
     voxels_tv, indices_tv, num_p_in_vx_tv = gen(pc_th, empty_mean=True)
@@ -106,6 +109,7 @@ def main_pytorch_voxel_gen():
 
 
 def main_pytorch_voxel_gen_cuda():
+    np.random.seed(50051)
     # voxel gen source code: spconv/csrc/sparse/pointops.py
     device = torch.device("cuda:0")
     gen = PointToVoxel(vsize_xyz=[0.1, 0.1, 0.1],
@@ -121,7 +125,7 @@ def main_pytorch_voxel_gen_cuda():
     voxels_np = voxels_th.cpu().numpy()
     indices_np = indices_th.cpu().numpy()
     num_p_in_vx_np = num_p_in_vx_th.cpu().numpy()
-    print("------Raw Voxels-------")
+    print(f"------Raw Voxels {voxels_np.shape[0]}-------")
     print(voxels_np[0])
     # run voxel gen and FILL MEAN VALUE to voxel remain
     voxels_tv, indices_tv, num_p_in_vx_tv = gen(pc_th, empty_mean=True)

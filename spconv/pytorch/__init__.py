@@ -3,17 +3,21 @@ from pathlib import Path
 
 import numpy as np
 import torch
-
-from spconv.pytorch import ops, functional
-from spconv.pytorch.conv import (SparseConv2d, SparseConv3d,
+from spconv.pytorch import functional, ops
+from spconv.pytorch.conv import (SparseConv1d, SparseConv2d, SparseConv3d,
+                                 SparseConv4d, SparseConvTranspose1d,
                                  SparseConvTranspose2d, SparseConvTranspose3d,
+                                 SparseConvTranspose4d, SparseInverseConv1d,
                                  SparseInverseConv2d, SparseInverseConv3d,
-                                 SubMConv2d, SubMConv3d)
+                                 SparseInverseConv4d, SubMConv1d, SubMConv2d,
+                                 SubMConv3d, SubMConv4d)
 from spconv.pytorch.core import SparseConvTensor
 from spconv.pytorch.identity import Identity
-from spconv.pytorch.modules import SparseModule, SparseSequential, assign_name_for_sparse_modules
+from spconv.pytorch.modules import (SparseModule, SparseSequential,
+                                    assign_name_for_sparse_modules)
 from spconv.pytorch.ops import ConvAlgo
-from spconv.pytorch.pool import SparseMaxPool2d, SparseMaxPool3d
+from spconv.pytorch.pool import (SparseMaxPool1d, SparseMaxPool2d,
+                                 SparseMaxPool3d, SparseMaxPool4d)
 from spconv.pytorch.tables import AddTable, ConcatTable, JoinTable
 
 
