@@ -36,7 +36,7 @@ else:
     GEMM = None
     CONV = None
 import time
-from spconv.constants import FILTER_HWIO
+from spconv.constants import FILTER_HWIO, ALL_WEIGHT_IS_KRSC
 from cumm.gemm import codeops
 from spconv.tools import CUDAKernelTimer
 
@@ -606,21 +606,40 @@ def indice_conv(features: torch.Tensor,
 
     if features.dtype == torch.int8 or features.dtype == torch.qint8:
         raise NotImplementedError("work in progress")
-    if FILTER_HWIO:
-        out_channel = filters.shape[-1]
+    
+    if not ALL_WEIGHT_IS_KRSC:
+        kv_dim = 0
+        is_KC_not_CK = not FILTER_HWIO
+        if FILTER_HWIO:
+            out_channel = filters.shape[-1]
+            filter_shape_per_kv = [filters.shape[-2], out_channel]
+        else:
+            out_channel = filters.shape[-2]
+            filter_shape_per_kv = [out_channel, filters.shape[-1]]
+        filters = filters.reshape(-1, *filters.shape[-2:])
+        kv = filters.shape[0]
+
     else:
-        out_channel = filters.shape[-2]
-    filters = filters.reshape(-1, *filters.shape[-2:])
-    kv = filters.shape[0]
+        kv_dim = 1
+        out_channel = filters.shape[0]
+        filters = filters.reshape(out_channel, -1, filters.shape[-1])
+        is_KC_not_CK = True
+        kv = filters.shape[1]
+        filter_shape_per_kv = [out_channel, filters.shape[-1]]
+
+
     kv_center = kv // 2
     if subm:
         # out_features = torch.zeros((num_activate_out, out_channel),
         #                            dtype=features.dtype,
         #                            device=features.device)
-        if FILTER_HWIO:
-            out_features = torch.mm(features, filters[kv_center])
+        if not ALL_WEIGHT_IS_KRSC:
+            if not is_KC_not_CK:
+                out_features = torch.mm(features, filters[kv_center])
+            else:
+                out_features = torch.mm(features, filters[kv_center].T)
         else:
-            out_features = torch.mm(features, filters[kv_center].T)
+            out_features = torch.mm(features, filters[:, kv_center].T)
     else:
         out_features = torch.zeros((num_activate_out, out_channel),
                                    dtype=features.dtype,
@@ -640,7 +659,6 @@ def indice_conv(features: torch.Tensor,
     pair_in = indice_pairs_tv[int(inverse)]
     pair_out = indice_pairs_tv[int(not inverse)]
     filters_tv = torch_tensor_to_tv(filters)
-
     if not features.is_cuda:
         # perform gather-mm-scatter_add for cpu data
         assert not filters.is_cuda
@@ -662,7 +680,8 @@ def indice_conv(features: torch.Tensor,
             inp_indices = pair_in[i].slice_first_axis(0, nhot)
             out_indices = pair_out[i].slice_first_axis(0, nhot)
             SpconvOps.gather_cpu(inp_buffer_tv, a, inp_indices)
-            filters_cur = filters[i] if FILTER_HWIO else filters[i].T
+            filters_i = filters.select(kv_dim, i)
+            filters_cur = filters_i if not is_KC_not_CK else filters_i.T
             torch.mm(inp_buffer[:nhot], filters_cur, out=out_buffer[:nhot])
             SpconvOps.scatter_add_cpu(c, out_buffer_tv, out_indices)
 
@@ -689,10 +708,10 @@ def indice_conv(features: torch.Tensor,
                                     filters_tv.dtype,
                                     c.dtype,
                                     a.shape,
-                                    filters.shape[-2:],
+                                    filter_shape_per_kv,
                                     c.shape,
                                     False,
-                                    False if FILTER_HWIO else True,
+                                    is_KC_not_CK,
                                     False,
                                     arch=arch,
                                     shuffle_type=ShuffleStrideType.ShuffleAC,
@@ -708,13 +727,14 @@ def indice_conv(features: torch.Tensor,
         inp_indices = torch_tensor_to_tv(inp_indices_th)
         out_indices = torch_tensor_to_tv(out_indices_th)
         filter_tv = torch_tensor_to_tv(filters)[profile_idx]
-
+        filter_tv = torch_tensor_to_tv(filters).select(kv_dim, profile_idx)
+        
         tuned_res, min_time = GEMM.tune_and_cache(
             a,
             filter_tv,
             c,
             False,
-            False if FILTER_HWIO else True,
+            is_KC_not_CK,
             False,
             arch=arch,
             shuffle_type=ShuffleStrideType.ShuffleAC,
@@ -736,7 +756,7 @@ def indice_conv(features: torch.Tensor,
                 continue
             inp_indices = pair_in[i].slice_first_axis(0, nhot)
             out_indices = pair_out[i].slice_first_axis(0, nhot)
-            b = filters_tv[i]
+            b = filters_tv.select(kv_dim, i)
             # inp @ filter.T, NC @ KC
             beta = 1.0 if inited else 0.0
             algo_desp = GEMM.run_with_tuned_result(
@@ -745,7 +765,7 @@ def indice_conv(features: torch.Tensor,
                 b,
                 c,
                 False,
-                False if FILTER_HWIO else True,
+                is_KC_not_CK,
                 False,
                 arch=arch,
                 stream=stream,
@@ -783,11 +803,27 @@ def indice_conv_backward(features: torch.Tensor,
                          timer: CUDAKernelTimer = CUDAKernelTimer(False)):
     # print(out_bp.mean(), out_bp.max(), out_bp.min())
 
-    num_activate_out = out_bp.shape[0]
-    out_channel = out_bp.shape[-1]
     filters_shape = filters.shape
-    filters = filters.reshape(-1, *filters.shape[-2:])
-    kv = filters.shape[0]
+    if not ALL_WEIGHT_IS_KRSC:
+        kv_dim = 0
+        is_KC_not_CK = not FILTER_HWIO
+        if FILTER_HWIO:
+            out_channel = filters.shape[-1]
+            filter_shape_per_kv = [filters.shape[-2], out_channel]
+        else:
+            out_channel = filters.shape[-2]
+            filter_shape_per_kv = [out_channel, filters.shape[-1]]
+        filters = filters.reshape(-1, *filters.shape[-2:])
+        kv = filters.shape[0]
+
+    else:
+        kv_dim = 1
+        out_channel = filters.shape[0]
+        filters = filters.reshape(out_channel, -1, filters.shape[-1])
+        is_KC_not_CK = True
+        kv = filters.shape[1]
+        filter_shape_per_kv = [out_channel, filters.shape[-1]]
+
     kv_center = kv // 2
     if not out_bp.is_contiguous():
         out_bp = out_bp.contiguous()
@@ -797,20 +833,24 @@ def indice_conv_backward(features: torch.Tensor,
 
     if subm:
         dfilters = torch.zeros_like(filters)
-        if FILTER_HWIO:
-            torch.mm(features.T, out_bp, out=dfilters[kv_center])
-            # TODO can we use torch mm for f16 backward weight?
-            din = torch.mm(out_bp, filters[kv_center].T)
+        if not ALL_WEIGHT_IS_KRSC:
+            if not is_KC_not_CK:
+                torch.mm(features.T, out_bp, out=dfilters[kv_center])
+                din = torch.mm(out_bp, filters[kv_center].T)
+            else:
+                torch.mm(out_bp.T, features, out=dfilters[kv_center])
+                din = torch.mm(out_bp, filters[kv_center])
         else:
-            torch.mm(out_bp.T, features, out=dfilters[kv_center])
-            # TODO can we use torch mm for f16 backward weight?
-            din = torch.mm(out_bp, filters[kv_center])
+            # KN @ NC
+            torch.mm(out_bp.T, features, out=dfilters[:, kv_center])
+            # NK @ KC
+            din = torch.mm(out_bp, filters[:, kv_center])
+
     else:
         dfilters = torch.zeros_like(filters)
         din = torch.zeros_like(features)
     if kv == 1 and subm:
         return (din, dfilters.reshape(filters_shape))
-
     inited: bool = subm
     indice_pairs_tv = torch_tensor_to_tv(indice_pairs)
     # torch slice (a_th[x]) is very slow, so we need to use tv.Tensor earlier.
@@ -854,12 +894,18 @@ def indice_conv_backward(features: torch.Tensor,
             out_indices = pair_out[i].slice_first_axis(0, nhot)
             SpconvOps.gather_cpu(inp_buffer_tv, features_tv, inp_indices)
             SpconvOps.gather_cpu(out_buffer_tv, out_bp_tv, out_indices)
-            filters_T_cur = filters[i].T if FILTER_HWIO else filters[i]
-            dfilters_cur = dfilters[i] if FILTER_HWIO else dfilters[i].T
+            filters_i = filters.select(kv_dim, i)
+            dfilters_i = dfilters.select(kv_dim, i)
 
-            torch.mm(inp_buffer[:nhot].T, out_buffer[:nhot], out=dfilters_cur)
-            torch.mm(out_buffer[:nhot], filters_T_cur, out=inp_buffer[:nhot])
-
+            filters_KC = filters_i if is_KC_not_CK else filters_i.T
+            if is_KC_not_CK:
+                # KN @ NC
+                torch.mm(out_buffer[:nhot].T, inp_buffer[:nhot], out=dfilters_i)
+            else:
+                # CN @ NK
+                torch.mm(inp_buffer[:nhot].T, out_buffer[:nhot], out=dfilters_i)
+            # NK @ KC
+            torch.mm(out_buffer[:nhot], filters_KC, out=inp_buffer[:nhot])
             SpconvOps.scatter_add_cpu(din_tv, inp_buffer_tv, inp_indices)
         return (din, dfilters.reshape(filters_shape))
 
@@ -883,10 +929,10 @@ def indice_conv_backward(features: torch.Tensor,
         filters_tv.dtype,
         din_tv.dtype,
         out_bp_tv.shape,
-        filters.shape[-2:],
+        filter_shape_per_kv,
         din_tv.shape,
         False,
-        True if FILTER_HWIO else False,
+        not is_KC_not_CK,
         False,
         arch=arch,
         shuffle_type=ShuffleStrideType.ShuffleAC,
@@ -896,13 +942,13 @@ def indice_conv_backward(features: torch.Tensor,
     if tuned_res_dgrad is None:
         inp_indices = pair_in[profile_idx].slice_first_axis(0, nhot_profile)
         out_indices = pair_out[profile_idx].slice_first_axis(0, nhot_profile)
-        filter_tv = filters_tv[profile_idx]
+        filter_tv = filters_tv.select(kv_dim, profile_idx)
         tuned_res_dgrad, min_time = GEMM.tune_and_cache(
             out_bp_tv,
             filter_tv,
             din_tv,
             False,
-            True if FILTER_HWIO else False,
+            not is_KC_not_CK,
             False,
             arch=arch,
             shuffle_type=ShuffleStrideType.ShuffleAC,
@@ -912,7 +958,7 @@ def indice_conv_backward(features: torch.Tensor,
             beta=0.0,
             hint=AlgoHint.BackwardInput.value,
             stream=stream)
-    if not FILTER_HWIO:
+    if is_KC_not_CK:
         a_wgrad = out_bp_tv
         b_wgrad = features_tv
     else:
@@ -924,7 +970,7 @@ def indice_conv_backward(features: torch.Tensor,
         filters_tv.dtype,
         a_wgrad.shape,
         b_wgrad.shape,
-        filters.shape[-2:],
+        filter_shape_per_kv,
         True,
         False,
         False,
@@ -937,8 +983,8 @@ def indice_conv_backward(features: torch.Tensor,
     if tuned_res_wgrad is None:
         inp_indices = pair_in[profile_idx].slice_first_axis(0, nhot_profile)
         out_indices = pair_out[profile_idx].slice_first_axis(0, nhot_profile)
-        dfilter_tv = dfilters_tv[profile_idx]
-        if not FILTER_HWIO:
+        dfilter_tv = dfilters_tv.select(kv_dim, profile_idx)
+        if is_KC_not_CK:
             a_inds_wgrad = out_indices
             b_inds_wgrad = inp_indices
         else:
@@ -961,7 +1007,7 @@ def indice_conv_backward(features: torch.Tensor,
             stream=stream)
         # print(tuned_res_wgrad.algo_desp, tuned_res_wgrad.splitk, min_time)
     # get workspace size for wgrad
-    if not FILTER_HWIO:
+    if is_KC_not_CK:
         a_shape = [maxnhot, out_bp_tv.dim(1)]
         b_shape = [maxnhot, features_tv.dim(1)]
     else:
@@ -1003,13 +1049,13 @@ def indice_conv_backward(features: torch.Tensor,
         inp_indices = pair_in[i].slice_first_axis(0, nhot)
         out_indices = pair_out[i].slice_first_axis(0, nhot)
         # out.T @ inp, NK @ NC
-        # print(features_tv.shape, out_bp_tv.shape)
+        filter_i_tv = filters_tv.select(kv_dim, i)
         GEMM.run_with_tuned_result(tuned_res_dgrad,
                                    out_bp_tv,
-                                   filters_tv[i],
+                                   filter_i_tv,
                                    din_tv,
                                    False,
-                                   True if FILTER_HWIO else False,
+                                   not is_KC_not_CK,
                                    False,
                                    arch=arch,
                                    stream=stream,
@@ -1033,7 +1079,7 @@ def indice_conv_backward(features: torch.Tensor,
         GEMM.run_with_tuned_result(tuned_res_wgrad,
                                    a,
                                    b,
-                                   dfilters_tv[i],
+                                   dfilters_tv.select(kv_dim, i),
                                    True,
                                    False,
                                    False,

@@ -53,7 +53,7 @@ def reduce_mask_count_x(mask: np.ndarray, width: int):
     return maskr
 
 
-def dev_subm_inds_v2(subm: bool = False, run_conv: bool = True):
+def dev_subm_inds_v2(subm: bool = True, run_conv: bool = True):
     limit_input_n = 16384
     limit_input_n = None
     np.random.seed(484)
@@ -64,13 +64,13 @@ def dev_subm_inds_v2(subm: bool = False, run_conv: bool = True):
         voxels_np = voxels_np[:limit_input_n]
         indices_np = indices_np[:limit_input_n]
 
-        spatial_shape = [19, 18, 17]
-        sparse_dict = generate_sparse_data(spatial_shape, [1024], 128)
+        # spatial_shape = [19, 18, 17]
+        # sparse_dict = generate_sparse_data(spatial_shape, [1024], 128)
 
-        voxels_np = np.ascontiguousarray(sparse_dict["features"]).astype(
-            np.float32)
-        indices_np = np.ascontiguousarray(
-            sparse_dict["indices"][:, [3, 0, 1, 2]]).astype(np.int32)
+        # voxels_np = np.ascontiguousarray(sparse_dict["features"]).astype(
+        #     np.float32)
+        # indices_np = np.ascontiguousarray(
+        #     sparse_dict["indices"][:, [3, 0, 1, 2]]).astype(np.int32)
 
         voxels = tv.from_numpy(voxels_np).cuda()
         indices = tv.from_numpy(indices_np).cuda()
@@ -96,7 +96,7 @@ def dev_subm_inds_v2(subm: bool = False, run_conv: bool = True):
         dilation, out_padding, subm)
     indice_num_per_loc_np = indice_num_per_loc.cpu().numpy()
     indice_pairs_np = pair_ref.cpu().numpy()
-    algo = ConvAlgo.MaskSplitImplicitGemm
+    algo = ConvAlgo.MaskImplicitGemm
     if algo == ConvAlgo.MaskImplicitGemm:
         num_split = 1
     else:
@@ -116,7 +116,12 @@ def dev_subm_inds_v2(subm: bool = False, run_conv: bool = True):
 
     pair_bwd = res[3]
     pair_mask_fwd_splits = res[4]
+
     pair_mask_bwd_splits = res[5]
+    mask_tv = torch_tensor_to_tv(pair_mask_fwd_splits[0], dtype=tv.uint32).cpu().numpy()
+    bench_reduce_mask(mask_tv)
+    return
+
     mask_argsort_fwd_splits = res[6]
     mask_argsort_bwd_splits = res[7]
     masks = res[8]
@@ -357,6 +362,47 @@ def dev_subm_inds_v2(subm: bool = False, run_conv: bool = True):
                     "ERROR",
                     np.linalg.norm(
                         dw_cpu.reshape(-1) - dw_ref_kcrs.reshape(-1)))
+
+def reverse_bits(a: np.ndarray):
+    a_unpack = np.unpackbits(a, bitorder="little")
+    return np.packbits(a_unpack)
+
+def _count_mask_reduce(masks: np.ndarray):
+    masks_tv_count = SpconvOps.count_bits(tv.from_numpy(masks))
+    masks_tv_count_sum = masks_tv_count.numpy_view().sum()
+
+    reduce_count = reduce_mask_count(masks, 64)
+    print(masks_tv_count_sum, reduce_count, reduce_count / masks_tv_count_sum)
+
+
+def bench_reduce_mask(masks: np.ndarray, width: int = 27):
+    # masks = np.random.randint(0, 2000000000, size=[100000], dtype=np.uint32)#  & 0xffff
+    width_mask = np.array(0xffffffff, dtype=np.uint32) << (32 - width) >> (32 - width)
+
+    width_half_mask = np.array(0xffffffff, dtype=np.uint32) >> (32 - width // 2 - 1)
+    width_half_mask_left = width_half_mask << (width // 2 + 1)
+    print(bin(width_half_mask))
+    masks_sort = masks.copy()
+    masks_sort.sort()
+    _count_mask_reduce(masks_sort)
+    masks_sort = masks.copy() & width_half_mask
+    masks_sort.sort()
+    _count_mask_reduce(masks_sort)
+
+    # masks.sort()
+    # masks = masks & 0xffff
+
+    reversed_masks = SpconvOps.reverse_bits(tv.from_numpy(masks)).numpy()#  & 0xffff0000
+    new_masks = np.concatenate([masks, reversed_masks])
+    
+    np.random.shuffle(new_masks)
+    new_masks.sort()
+    _count_mask_reduce(new_masks)
+    new_masks &= width_half_mask
+    new_masks.sort()
+    _count_mask_reduce(new_masks)
+
+
 
 
 if __name__ == "__main__":

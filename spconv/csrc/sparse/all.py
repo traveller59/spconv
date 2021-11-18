@@ -816,6 +816,66 @@ class SpconvOps(pccm.Class):
         return code.ret("tv::Tensor")
 
     @pccm.pybind.mark
+    @pccm.cuda.static_function
+    def reverse_bits(self):
+        code = pccm.FunctionCode()
+        if CUMM_CPU_ONLY_BUILD:
+            return code.make_invalid()
+
+        code.add_dependency(TensorViewKernel)
+        code.arg("a", "tv::Tensor")
+        code.code_after_include = f"""
+        __global__ void reverse_bits_kernel_64(const uint64_t* data, uint64_t* out, int size){{
+            for (int i : tv::KernelLoopX<int>(size)){{
+                out[i] = __brevll(reinterpret_cast<const unsigned long long*>(data)[i]);
+            }}
+        }}
+
+        __global__ void reverse_bits_kernel(const uint32_t* data, uint32_t* out, int size){{
+            for (int i : tv::KernelLoopX<int>(size)){{
+                out[i] = __brev(data[i]);
+            }}
+        }}
+
+        uint32_t reverse(uint32_t x)
+        {{
+            x = ((x >> 1) & 0x55555555u) | ((x & 0x55555555u) << 1);
+            x = ((x >> 2) & 0x33333333u) | ((x & 0x33333333u) << 2);
+            x = ((x >> 4) & 0x0f0f0f0fu) | ((x & 0x0f0f0f0fu) << 4);
+            x = ((x >> 8) & 0x00ff00ffu) | ((x & 0x00ff00ffu) << 8);
+            x = ((x >> 16) & 0xffffu) | ((x & 0xffffu) << 16);
+            return x;
+        }}
+
+        int reverse(uint64_t i)
+        {{
+            return (reverse(uint32_t(i)) << 32) | reverse(uint32_t(i >> 32));
+        }}
+        """
+        code.raw(f"""
+        tv::Tensor res(a.shape(), a.dtype(), a.device());
+        tv::dispatch<uint32_t, uint64_t>(a.dtype(), [&](auto I){{
+            using T = TV_DECLTYPE(I);
+            auto res_ptr = res.data_ptr<T>();
+            auto a_ptr = a.data_ptr<const T>();
+            if (a.device() == -1){{
+                for (int i = 0; i < a.size(); ++i){{
+                    res_ptr[i] = reverse(a_ptr[i]);
+                }}
+            }}else{{
+                tv::cuda::Launch launcher(a.size());
+                tv::if_constexpr<std::is_same<T, uint64_t>::value>([=](auto _)mutable{{
+                    launcher(_(reverse_bits_kernel_64), a_ptr, res_ptr, int(a.size()));
+                }}, [=](auto _)mutable{{
+                    launcher(_(reverse_bits_kernel), a_ptr, res_ptr, int(a.size()));
+                }});
+            }}
+        }});
+        return res;
+        """)
+        return code.ret("tv::Tensor")
+
+    @pccm.pybind.mark
     @pccm.static_function
     def calc_point2voxel_meta_data(self):
         code = pccm.FunctionCode()

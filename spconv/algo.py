@@ -320,15 +320,16 @@ class SimpleGemm:
                                                c_inds.shape)
         avail = self.get_all_available(a, b, c, trans_a, trans_b, trans_c,
                                        arch, shuffle_type)
-
-        c_ = c.clone()
+        # c may be weight, may non-contiguous.
+        # cumm.tensorview.Tensor don't support non-contiguous clone
+        c_ = c.clone_whole_storage()
         times: List[float] = []
         best_gather_params = (-1, -1, -1, -1)
         best_scatter_params = (-1, -1, -1, -1)
 
         all_profile_res: List[BestAlgoByProfile] = []
         for desp in avail:
-            c_.zero_()
+            c_.zero_whole_storage_()
             split_k_slices = 1
             # TODO better splitk selection
             if desp.split_k_serial and hint & AlgoHint.BackwardWeight.value:

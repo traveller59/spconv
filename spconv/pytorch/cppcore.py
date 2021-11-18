@@ -31,7 +31,7 @@ _TORCH_DTYPE_TO_TV = {
 def torch_tensor_to_tv(ten: torch.Tensor,
                        dtype: Optional[int] = None,
                        shape: Optional[List[int]] = None):
-    assert ten.is_contiguous(), "must be contiguous tensor"
+    # assert ten.is_contiguous(), "must be contiguous tensor"
     ptr = ten.data_ptr()
     device = ten.device
     if device.type == "cpu":
@@ -44,7 +44,7 @@ def torch_tensor_to_tv(ten: torch.Tensor,
         shape = list(ten.shape)
     if dtype is None:
         dtype = _TORCH_DTYPE_TO_TV[ten.dtype]
-    return tv.from_blob(ptr, shape, dtype, tv_device)
+    return tv.from_blob(ptr, shape, list(ten.stride()), dtype, tv_device)
 
 
 def get_current_stream():

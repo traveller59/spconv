@@ -16,7 +16,6 @@ import pccm
 from ccimport import compat
 from cumm.common import TensorView
 
-
 class OMPLib(pccm.Class):
     def __init__(self):
         super().__init__()

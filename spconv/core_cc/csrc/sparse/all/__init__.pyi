@@ -283,6 +283,13 @@ class SpconvOps:
         """
         ...
     @staticmethod
+    def reverse_bits(a: Tensor) -> Tensor: 
+        """
+        Args:
+            a: 
+        """
+        ...
+    @staticmethod
     def calc_point2voxel_meta_data(vsize_xyz: List[float], coors_range_xyz: List[float]) -> Tuple[List[float], List[int], List[int], List[float]]: 
         """
         Args:

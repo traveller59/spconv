@@ -28,12 +28,12 @@ if (($CUDA_VERSION_FULL -eq "10.2") -or ($CUDA_VERSION_FULL -eq "11.0") -or ($CU
     )
 } elseif ($CUDA_VERSION_FULL -eq "11.3"){
     $CUDA_PACKAGES_IN = @(
-        "cuda_nvcc";
+        "nvcc";
         "visual_studio_integration";
-        "cuda_nvrtc";
-        "cuda_cudart";
-        "cuda_thrust";
-        "libcurand";
+        "nvrtc_dev";
+        "cudart";
+        "thrust";
+        "curand_dev";
     )
 } else {
     # after cuda 11.4

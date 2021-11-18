@@ -168,8 +168,8 @@ class Net(nn.Module):
             # nn.ReLU(),
 
             # spconv.SparseInverseConv3d(256, 128, 2, indice_key="m5", bias=False, algo=algo),
-            # # nn.BatchNorm1d(128),
-            # # nn.ReLU(),
+            # # # nn.BatchNorm1d(128),
+            # # # nn.ReLU(),
 
             # spconv.SparseInverseConv3d(128, 64, 2, indice_key="m4", bias=False, algo=algo),
         )
@@ -312,7 +312,8 @@ def main():
     # MaskImpGemm: 51.0ms
     # MaskSplitImpGemm: 41.1ms
     # algo = None
-    net = Net(spatial_shape, algo).to(device).eval().to(dtype).train()
+    net = Net(spatial_shape, algo).to(device).eval().to(dtype)# .train()
+    # net.load_state_dict(net.state_dict())
     spconv.assign_name_for_sparse_modules(net)
     print(coors_th.shape)
     out = net(voxels_th, coors_th, 1)
@@ -323,25 +324,25 @@ def main():
 
     print(out.spatial_shape, out.features.mean(), out.features.max(),
           out.features.min())
-    times = []
-    with torch.no_grad():
-        for i in range(20):
-            print("------------")
-            torch.cuda.synchronize()
-            t = time.time()
-            out_nograd = net(voxels_th, coors_th, 1, True)
-            timer = out_nograd._timer
-            res = timer.collect_by_name("forward", timer.get_all_pair_time())
-            res2 = timer.collect_by_name("forward0", timer.get_all_pair_time())
+    # times = []
+    # with torch.no_grad():
+    #     for i in range(20):
+    #         print("------------")
+    #         torch.cuda.synchronize()
+    #         t = time.time()
+    #         out_nograd = net(voxels_th, coors_th, 1, False)
+    #         timer = out_nograd._timer
+    #         # res = timer.collect_by_name("forward", timer.get_all_pair_time())
+    #         # res2 = timer.collect_by_name("forward0", timer.get_all_pair_time())
 
-            print(sum(res.values()) + sum(res2.values()))
-            # print(timer.get_all_pair_time())
+    #         # print(sum(res.values()) + sum(res2.values()))
+    #         # print(timer.get_all_pair_time())
 
-            # print(sum(timer.get_all_pair_time().values()))
-            torch.cuda.synchronize()
-            # sort_bench()
-            times.append(time.time() - t)
-    print("spconv time", np.mean(times[10:]))
+    #         # print(sum(timer.get_all_pair_time().values()))
+    #         torch.cuda.synchronize()
+    #         # sort_bench()
+    #         times.append(time.time() - t)
+    # print("spconv time", np.mean(times[10:]))
     # times = []
 
     # for i in range(10):

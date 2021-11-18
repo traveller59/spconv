@@ -23,15 +23,17 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from spconv import pytorch as spconv
+from spconv import SPCONV_VERSION_NUMBERS
 from spconv.core import ConvAlgo
 from spconv.pytorch import functional as Fsp
 from spconv.pytorch import ops
 from spconv.cppconstants import CPU_ONLY_BUILD
 from spconv.pytorch.core import IndiceData, SparseConvTensor, ImplicitGemmIndiceData
 from spconv.pytorch.modules import SparseModule
-from spconv.constants import FILTER_HWIO
+from spconv.constants import SAVED_WEIGHT_LAYOUT, ALL_WEIGHT_IS_KRSC
 from spconv.utils import nullcontext
 
+FILTER_HWIO = False
 
 def _calculate_fan_in_and_fan_out_hwio(tensor, algo: ConvAlgo):
     dimensions = tensor.ndimension()
@@ -132,7 +134,7 @@ class SparseConvolution(SparseModule):
             assert algo == ConvAlgo.Native, "cpu only build only support native algorithm"
         self.algo = algo
         # self.algo = ConvAlgo.Native
-        if self.algo == ConvAlgo.Native:
+        if self.algo == ConvAlgo.Native and not ALL_WEIGHT_IS_KRSC:
             if FILTER_HWIO:
                 # RSCK
                 self.weight = Parameter(
@@ -151,6 +153,37 @@ class SparseConvolution(SparseModule):
         else:
             self.register_parameter('bias', None)
         self.reset_parameters()
+
+        self._register_load_state_dict_pre_hook(self._load_weight_different_layout)
+
+    def _load_weight_different_layout(
+            self, state_dict, prefix, local_metadata, strict,
+            missing_keys, unexpected_keys, error_msgs):
+        if not SAVED_WEIGHT_LAYOUT:
+            return
+        key = prefix + "weight"
+        assert key in state_dict
+        ndim = self.ndim
+        if SAVED_WEIGHT_LAYOUT == "RSKC":
+            state_dict[key] = state_dict[key].permute(ndim, *range(ndim), ndim + 1).contiguous()
+        elif SAVED_WEIGHT_LAYOUT == "RSCK":
+            state_dict[key] = state_dict[key].permute(ndim + 1, *range(ndim), ndim).contiguous()
+
+        if ALL_WEIGHT_IS_KRSC or self.algo != ConvAlgo.Native:
+            # in spconv 2.2, we only support KRSC layout.
+            if SAVED_WEIGHT_LAYOUT == "RSKC":
+                state_dict[key] = state_dict[key].permute(ndim, *range(ndim), ndim + 1).contiguous()
+            elif SAVED_WEIGHT_LAYOUT == "RSCK":
+                state_dict[key] = state_dict[key].permute(ndim + 1, *range(ndim), ndim).contiguous()
+
+        else:
+            if self.algo == ConvAlgo.Native:
+                # to RSCK
+                if SAVED_WEIGHT_LAYOUT == "RSKC":
+                    state_dict[key] = state_dict[key].permute(*range(ndim), ndim + 1, ndim).contiguous()
+                elif SAVED_WEIGHT_LAYOUT == "KRSC":
+                    state_dict[key] = state_dict[key].permute(*range(1, ndim + 1), 0, ndim + 1).contiguous()
+
 
     def extra_repr(self):
         s = ('{in_channels}, {out_channels}, kernel_size={kernel_size}'

@@ -23,7 +23,7 @@ from spconv.core import ConvAlgo
 
 import spconv.pytorch as spconv
 from spconv.test_utils import TestCase, generate_sparse_data, params_grid
-from spconv.constants import FILTER_HWIO
+from spconv.constants import ALL_WEIGHT_IS_KRSC, FILTER_HWIO
 # import sparseconvnet as scn
 
 # we must disable tf32 to increase reference precision.
@@ -368,14 +368,14 @@ class TestSpConv(TestCase):
             ConvAlgo.Native, ConvAlgo.MaskImplicitGemm,
             ConvAlgo.MaskSplitImplicitGemm
         ]
-        algos = [ConvAlgo.MaskSplitImplicitGemm]
+        # algos = [ConvAlgo.Native]
 
         for dev, shape, bs, IC, OC, k, s, p, d, al in params_grid(
                 devices, shapes, batchsizes, in_channels, out_channels, ksizes,
                 strides, paddings, dilations, algos):
             if all([s > 1, d > 1]):
                 continue  # don't support this.
-            print(k, s, p, d)
+            # print(dev, shape, bs, IC, OC, k, s, p, d)
             device = torch.device(dev)
             num_points = [1000] * bs
             dtype = torch.float32
@@ -405,7 +405,7 @@ class TestSpConv(TestCase):
             features_dense_t = torch.from_numpy(features_dense).to(device).to(
                 dtype)
             features_dense_t.requires_grad = True
-            if net.algo == ConvAlgo.Native:
+            if net.algo == ConvAlgo.Native and not ALL_WEIGHT_IS_KRSC:
                 if FILTER_HWIO:
                     filters = np.random.uniform(-1, 1,
                                                 size=[k, k, k, IC,
@@ -451,7 +451,7 @@ class TestSpConv(TestCase):
             for layer, layer_ref in zip(net.net, net_ref.net):
                 dw = layer.weight.grad.detach().cpu().numpy()
                 dw_ref = layer_ref.weight.grad.detach().cpu().numpy()
-                if net.algo == ConvAlgo.Native:
+                if net.algo == ConvAlgo.Native and not ALL_WEIGHT_IS_KRSC:
                     if FILTER_HWIO:
                         dw = dw.transpose(4, 3, 0, 1, 2)
                     else:
@@ -829,4 +829,4 @@ if __name__ == '__main__':
     # main(algo=spconv.ConvAlgo.SparseConvNet, dtype=torch.float32)
     # TestCase().assertAllClose(out_my, out_ref)
     # unittest.main()
-    TestSpConv().testSpMaxPool3d()
+    TestSpConv().testSpConv3d()
