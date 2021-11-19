@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.10] - 2021-11-19
+### Fixed
+- Fixed a bug in utils.PointToVoxel, shouldn't get cuda stream in cpu code
+
+## [2.1.9] - 2021-11-18
+### Removed
+- Remove a wrong assert
+
 ## [2.1.8] - 2021-11-15
 ### Added
 - Add support for pytorch 1.5

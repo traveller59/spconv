@@ -104,7 +104,6 @@ class PointToVoxel(object):
                 num_voxels = res[0].shape[0]
             else:
                 pc_tv = torch_tensor_to_tv(pc)
-                stream = get_current_stream()
                 voxels_tv = torch_tensor_to_tv(self.voxels)
                 indices_tv = torch_tensor_to_tv(self.indices)
                 num_per_voxel_tv = torch_tensor_to_tv(self.num_per_voxel)
