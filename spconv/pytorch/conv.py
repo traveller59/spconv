@@ -108,7 +108,11 @@ class SparseConvolution(SparseModule):
         self.out_channels = out_channels
         self.kernel_size = kernel_size
         kv = int(np.prod(kernel_size))
+        kv_stride = int(np.prod(stride))
         self.conv1x1 = kv == 1
+        # TODO we should deprecate support for ksize == 1 but stride != 1.
+        if not subm:
+            self.conv1x1 &= kv_stride == 1
         self.stride = stride
         self.padding = padding
         self.dilation = dilation
@@ -247,6 +251,8 @@ class SparseConvolution(SparseModule):
             if self.bias is not None:
                 features += self.bias
             out_tensor = out_tensor.replace_feature(features)
+            # padding may change spatial shape of conv 1x1.
+            out_tensor.spatial_shape = out_spatial_shape
             return out_tensor
         indice_dict = input.indice_dict.copy()
 

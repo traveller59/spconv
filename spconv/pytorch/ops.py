@@ -789,6 +789,9 @@ def indice_conv_backward(features: torch.Tensor,
     filters = filters.reshape(-1, *filters.shape[-2:])
     kv = filters.shape[0]
     kv_center = kv // 2
+    # TODO handle this in nn.Module to make sure features in backward is contiguous
+    if not features.is_contiguous():
+        features = features.contiguous()
     if not out_bp.is_contiguous():
         out_bp = out_bp.contiguous()
     assert out_bp.is_contiguous()
@@ -1200,6 +1203,9 @@ def implicit_gemm_backward(features: torch.Tensor,
         raise NotImplementedError("work in progress")
     if not out_bp.is_contiguous():
         out_bp = out_bp.contiguous()
+    if not features.is_contiguous():
+        features = features.contiguous()
+
     assert out_bp.is_contiguous()
     assert filters.is_contiguous()
     assert features.is_contiguous()
@@ -1357,6 +1363,8 @@ def indice_maxpool(features: torch.Tensor, indice_pairs: torch.Tensor,
     # stream = get_current_stream()
     # CONV.stream_synchronize(stream)
     # t = time.time()
+    if not features.is_contiguous():
+        features = features.contiguous()
 
     out_channel = features.shape[-1]
     out_features = torch.zeros((num_activate_out, out_channel),
@@ -1399,6 +1407,9 @@ def indice_maxpool_backward(features, out_features, out_bp, indice_pairs,
     indice_pair_num_cpu = indice_pair_num.cpu().tolist()
     if not out_bp.is_contiguous():
         out_bp = out_bp.contiguous()
+    if not features.is_contiguous():
+        features = features.contiguous()
+
     out_features_tv = torch_tensor_to_tv(out_features)
     features_tv = torch_tensor_to_tv(features)
     out_bp_tv = torch_tensor_to_tv(out_bp)
@@ -1428,6 +1439,8 @@ def indice_maxpool_implicit_gemm(features: torch.Tensor,
     stream = get_current_stream()
     # CONV.stream_synchronize(stream)
     # t = time.time()
+    if not features.is_contiguous():
+        features = features.contiguous()
 
     out_channel = features.shape[-1]
     out_features = torch.empty((num_activate_out, out_channel),
@@ -1456,6 +1469,9 @@ def indice_maxpool_implicit_gemm_backward(features, out_features, out_bp,
     assert features.is_cuda
     if not out_bp.is_contiguous():
         out_bp = out_bp.contiguous()
+    if not features.is_contiguous():
+        features = features.contiguous()
+
     stream = get_current_stream()
     out_features_tv = torch_tensor_to_tv(out_features)
     features_tv = torch_tensor_to_tv(features)
