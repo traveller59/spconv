@@ -82,6 +82,8 @@ class ExampleNet(nn.Module):
 
 Inverse sparse convolution means "inv" of sparse convolution. the output of inverse convolution contains same indices as input of sparse convolution.
 
+**WARNING** ```SparseInverseConv``` isn't equivalent to ```SparseConvTranspose```. SparseConvTranspose is equivalent to ```ConvTranspose``` in pytorch, but SparseInverseConv isn't.
+
 Inverse convolution usually used in semantic segmentation.
 
 ```Python
@@ -112,8 +114,10 @@ voxel generator in spconv generate indices in **ZYX** order, the params format a
 
 generated indices don't include batch axis, you need to add it by yourself.
 
+see examples/voxel_gen.py for examples.
+
 ```Python
-from spconv.pytorch.utils import PointToVoxel
+from spconv.pytorch.utils import PointToVoxel, gather_features_by_pc_voxel_id
 # this generator generate ZYX indices.
 gen = PointToVoxel(
     vsize_xyz=[0.1, 0.1, 0.1], 
@@ -123,5 +127,14 @@ gen = PointToVoxel(
     max_num_points_per_voxel=5)
 pc = np.random.uniform(-10, 10, size=[1000, 3])
 pc_th = torch.from_numpy(pc)
-voxels, coords, num_points_per_voxel = gen(pc_th)
+voxels, coords, num_points_per_voxel = gen(pc_th, empty_mean=True)
+```
+
+If you want to get label for every point of your pc, you need to use another function to get pc_voxel_id and gather features from sematic segmentation result:
+```Python
+voxels, coords, num_points_per_voxel, pc_voxel_id = gen.generate_voxel_with_id(pc_th, empty_mean=True)
+seg_features = YourSegNet(...)
+# if voxel id is invalid (point out of range, or no space left in a voxel)
+# features will be zero.
+point_features = gather_features_by_pc_voxel_id(seg_features, pc_voxel_id)
 ```

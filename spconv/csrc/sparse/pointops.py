@@ -208,6 +208,7 @@ class Point2VoxelKernel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         code.arg("points_indice_data", f"const int64_t*")
         code.arg("voxels", f"{self.dtype} *")
         code.arg("num_per_voxel", f"int *")
+        code.arg("points_voxel_id", f"int64_t*")
 
         code.arg("point_stride", f"int")
         code.arg("max_points_per_voxel", f"int")
@@ -219,14 +220,17 @@ class Point2VoxelKernel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         code.arg("grid_stride", f"tv::array<int, {self.ndim}>")
 
         code.arg("num_points", f"int")
+        # TODO add backward?
         code.raw(f"""
         int voxel_stride0 = point_stride * max_points_per_voxel;
         for (int i : tv::KernelLoopX<int>(num_points)){{
             int64_t prod = points_indice_data[i];
+            int voxel_id = -1;
             if (prod != -1){{
                 auto voxel_index_pair = table.lookup(prod);
                 if (!voxel_index_pair.empty() &&
                     voxel_index_pair.second < max_voxels) {{
+                    voxel_id = voxel_index_pair.second;
                     int old = atomicAdd(num_per_voxel + voxel_index_pair.second, 1);
                     if (old < max_points_per_voxel) {{
                         for (int j = 0; j < point_stride; ++j) {{
@@ -235,6 +239,7 @@ class Point2VoxelKernel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
                     }}
                 }}
             }}
+            points_voxel_id[i] = voxel_id;
         }}
         """)
         return code
@@ -385,6 +390,7 @@ class Point2Voxel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         code.arg("stream_int", f"std::uintptr_t", "0")
 
         code.raw(f"""
+        tv::Tensor points_voxel_id = tv::empty({{points.dim(0)}}, tv::int64, 0);
         int64_t expected_hash_data_num = points.dim(0) * 2;
         if (hashdata.dim(0) < expected_hash_data_num){{
             hashdata = tv::zeros({{expected_hash_data_num}}, tv::custom128, 0);
@@ -393,65 +399,9 @@ class Point2Voxel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
             point_indice_data = tv::zeros({{points.dim(0)}}, tv::int64, 0);
         }}
         return point_to_voxel_hash_static(points, voxels, indices, num_per_voxel, 
-            hashdata, point_indice_data, Point2VoxelCommon::tvarray2array(vsize), 
+            hashdata, point_indice_data, points_voxel_id, Point2VoxelCommon::tvarray2array(vsize), 
             Point2VoxelCommon::tvarray2array(grid_size), Point2VoxelCommon::tvarray2array(grid_stride), 
             Point2VoxelCommon::tvarray2array(coors_range), clear_voxels, empty_mean, stream_int);
-        """)
-        return code.ret("std::tuple<tv::Tensor, tv::Tensor, tv::Tensor>")
-        code.raw(f"""
-
-        TV_ASSERT_INVALID_ARG(points.ndim() == 2 && points.dim(1) >= {self.ndim}, "error");
-        using V = int64_t;
-        using KeyType = int64_t;
-        constexpr KeyType kEmptyKey = std::numeric_limits<KeyType>::max();
-        if (clear_voxels){{
-            voxels.zero_();
-        }}
-        using table_t =
-            tv::hash::LinearHashTable<KeyType, V, tv::hash::Murmur3Hash<KeyType>,
-                                        kEmptyKey, false>;
-        using pair_t = typename table_t::value_type;
-        // int64_t expected_hash_data_num = int64_t(tv::hash::align_to_power2(points.dim(0) * 2));
-        int64_t expected_hash_data_num = points.dim(0) * 2;
-
-        if (hashdata.dim(0) < expected_hash_data_num){{
-            hashdata = tv::zeros({{expected_hash_data_num}}, tv::custom128, 0);
-        }}
-        if (point_indice_data.dim(0) < points.dim(0)){{
-            point_indice_data = tv::zeros({{points.dim(0)}}, tv::int64, 0);
-        }}
-        // auto timer = tv::CudaContextTimer<>();
-        num_per_voxel.zero_();
-        table_t hash = table_t(hashdata.data_ptr<pair_t>(), expected_hash_data_num);
-        hash.clear();
-        // tv::ssprint("clear time", timer.report());
-        auto launcher = tv::cuda::Launch(points.dim(0));
-        launcher(kernel::build_hash_table<table_t>, hash, points.data_ptr<const {self.dtype}>(),
-                point_indice_data.data_ptr<int64_t>(),
-                points.dim(1), vsize, coors_range, grid_size, grid_stride, points.dim(0));
-        // tv::ssprint("build_hash_table", timer.report());
-
-        auto table_launcher = tv::cuda::Launch(hash.size());
-        tv::Tensor count = tv::zeros({{1}}, tv::int32, 0);
-        Layout layout = Layout::from_shape(grid_size);
-        table_launcher(kernel::assign_table<table_t>, hash, indices.data_ptr<int>(),
-                        count.data_ptr<int>(),
-                        layout, voxels.dim(0));
-        auto count_cpu = count.cpu();
-        int count_val = count_cpu.item<int32_t>();
-        // tv::ssprint("assign_table", timer.report());
-
-        launcher(kernel::generate_voxel<table_t>, hash, points.data_ptr<const {self.dtype}>(),
-                point_indice_data.data_ptr<const int64_t>(), voxels.data_ptr<{self.dtype}>(),
-                num_per_voxel.data_ptr<int>(), points.dim(1), voxels.dim(1), 
-                voxels.dim(0), vsize, coors_range,
-                grid_size, grid_stride, points.dim(0));
-        // tv::ssprint("generate_voxel", timer.report());
-
-        return std::make_tuple(voxels.slice_first_axis(0, count_val), 
-            indices.slice_first_axis(0, count_val), 
-            num_per_voxel.slice_first_axis(0, count_val));
-
         """)
         return code.ret("std::tuple<tv::Tensor, tv::Tensor, tv::Tensor>")
 
@@ -460,7 +410,7 @@ class Point2Voxel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
     def point_to_voxel_hash_static(self):
         code = pccm.FunctionCode()
         code.arg("points", "tv::Tensor")
-        code.arg("voxels, indices, num_per_voxel, hashdata, point_indice_data",
+        code.arg("voxels, indices, num_per_voxel, hashdata, point_indice_data, points_voxel_id",
                  "tv::Tensor")
         code.arg("vsize", f"std::array<float, {self.ndim}>")
         code.arg("grid_size, grid_stride", f"std::array<int, {self.ndim}>")
@@ -495,7 +445,6 @@ class Point2Voxel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         int64_t expected_hash_data_num = points.dim(0) * 2;
         TV_ASSERT_RT_ERR(hashdata.dim(0) >= expected_hash_data_num, "hash table too small")
         TV_ASSERT_RT_ERR(point_indice_data.dim(0) >= points.dim(0), "point_indice_data too small")
-        // auto timer = tv::CudaContextTimer<>();
         num_per_voxel.zero_(ctx);
         table_t hash = table_t(hashdata.data_ptr<pair_t>(), expected_hash_data_num);
         hash.clear(custream);
@@ -512,14 +461,12 @@ class Point2Voxel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
                         layout, voxels.dim(0));
         auto count_cpu = count.cpu();
         int count_val = count_cpu.item<int32_t>();
-        // tv::ssprint("assign_table", timer.report());
-
+        count_val = count_val > voxels.dim(0) ? voxels.dim(0) : count_val;
         launcher(kernel::generate_voxel<table_t>, hash, points.data_ptr<const {self.dtype}>(),
                 point_indice_data.data_ptr<const int64_t>(), voxels.data_ptr<{self.dtype}>(),
-                num_per_voxel.data_ptr<int>(), points.dim(1), voxels.dim(1), 
+                num_per_voxel.data_ptr<int>(), points_voxel_id.data_ptr<int64_t>(), points.dim(1), voxels.dim(1), 
                 voxels.dim(0), vsize_tv, coors_range_tv,
                 grid_size_tv, grid_stride_tv, points.dim(0));
-        // tv::ssprint("generate_voxel", timer.report());
         auto voxel_launcher = tv::cuda::Launch(count_val, custream);
         if (empty_mean){{
             launcher(kernel::voxel_empty_fill_mean, voxels.data_ptr<{self.dtype}>(),
@@ -636,7 +583,7 @@ class Point2VoxelCPU(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
     def point_to_voxel_static_template(self, mean: bool = False):
         code = pccm.FunctionCode()
         code.arg("points", "tv::Tensor")
-        code.arg("voxels, indices, num_per_voxel, densehashdata", "tv::Tensor")
+        code.arg("voxels, indices, num_per_voxel, densehashdata, points_voxel_id", "tv::Tensor")
         code.arg("vsize", f"std::array<float, {self.ndim}>")
         code.arg("grid_size, grid_stride", f"std::array<int, {self.ndim}>")
         code.arg("coors_range", f"std::array<float, {self.ndim * 2}>")
@@ -653,6 +600,7 @@ class Point2VoxelCPU(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         if (clear_voxels){{
             voxels.zero_();
         }}
+        auto points_voxel_id_ptr = points_voxel_id.data_ptr<int64_t>();
         int res_voxel_num = 0;
         int num_features = points.dim(1);
         auto N = points.dim(0);
@@ -680,20 +628,25 @@ class Point2VoxelCPU(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
                     }}
                     coor[j] = c;
                 }}
-                if (failed)
+                if (failed){{
+                    points_voxel_id_ptr[i] = -1;
                     continue;
+                }}
                 voxelidx = coor_to_voxelidx_rw({codeops.unpack("coor", range(self.ndim))});
-
+                
                 if (voxelidx == -1) {{
                     voxelidx = voxel_num;
-                    if (voxel_num >= max_num_voxels)
+                    if (voxel_num >= max_num_voxels){{
+                        points_voxel_id_ptr[i] = -1;
                         continue;
+                    }}
                     voxel_num += 1;
                     coor_to_voxelidx_rw({codeops.unpack("coor", range(self.ndim))}) = voxelidx;
                     for (int k = 0; k < {self.ndim}; ++k) {{
                         coors_rw(voxelidx, k) = coor[k];
                     }}
                 }}
+                points_voxel_id_ptr[i] = voxelidx;
                 num = num_points_per_voxel_rw(voxelidx);
                 if (num < max_num_points_per_voxel) {{
                     // voxel_point_mask_rw(voxelidx, num) = {self.dtype}(1);
@@ -781,8 +734,10 @@ class Point2VoxelCPU(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         code.arg("points", "tv::Tensor")
         code.arg("clear_voxels", "bool", "true")
         code.raw(f"""
+        tv::Tensor points_voxel_id = tv::empty({{points.dim(0)}}, tv::int64, -1);
+
         return point_to_voxel_static(points, voxels, indices, num_per_voxel, densehashdata, 
-            tvarray2array(vsize), 
+            points_voxel_id, tvarray2array(vsize), 
             tvarray2array(grid_size), tvarray2array(grid_stride), 
             tvarray2array(coors_range), clear_voxels);
         """)
@@ -795,8 +750,10 @@ class Point2VoxelCPU(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         code.arg("points", "tv::Tensor")
         code.arg("clear_voxels", "bool", "true")
         code.raw(f"""
+        tv::Tensor points_voxel_id = tv::empty({{points.dim(0)}}, tv::int64, -1);
+
         return point_to_voxel_empty_mean_static(points, voxels, indices, num_per_voxel, 
-            densehashdata, tvarray2array(vsize), 
+            densehashdata, points_voxel_id, tvarray2array(vsize), 
             tvarray2array(grid_size), tvarray2array(grid_stride), 
             tvarray2array(coors_range), clear_voxels);
         """)
