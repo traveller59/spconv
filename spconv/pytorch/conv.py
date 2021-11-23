@@ -35,6 +35,20 @@ from spconv.utils import nullcontext
 
 FILTER_HWIO = False
 
+
+def expand_nd(val: Union[int, List[int], Tuple[int, ...]], ndim: int) -> List[int]:
+    if isinstance(val, int):
+        val = [val] * ndim
+    elif isinstance(val, list):
+        assert len(val) == ndim
+    elif isinstance(val, tuple):
+        assert len(val) == ndim
+        return [*val]
+    else:
+        raise NotImplementedError
+    return val
+
+
 def _calculate_fan_in_and_fan_out_hwio(tensor, algo: ConvAlgo):
     dimensions = tensor.ndimension()
     if dimensions < 2:
@@ -110,7 +124,9 @@ class SparseConvolution(SparseModule):
         self.out_channels = out_channels
         self.kernel_size = kernel_size
         kv = int(np.prod(kernel_size))
-        self.conv1x1 = kv == 1
+        kv_stride = int(np.prod(kernel_size))
+
+        self.conv1x1 = kv == 1 and kv_stride == 1
         self.stride = stride
         self.padding = padding
         self.dilation = dilation

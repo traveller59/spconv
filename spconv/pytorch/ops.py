@@ -1066,7 +1066,7 @@ def indice_conv_backward(features: torch.Tensor,
                                    alpha=1.0,
                                    beta=beta)
 
-        if not FILTER_HWIO:
+        if is_KC_not_CK:
             a = out_bp_tv
             b = features_tv
             a_inds = out_indices
@@ -1376,6 +1376,9 @@ def implicit_gemm_backward(features: torch.Tensor,
                                        mask_width=-1,
                                        beta=beta,
                                        stream=stream)
+            # for backward weight, beta = 0 because each split
+            # handle different kernel locations.
+            # TODO remove D iterator in backward weight kernel
             CONV.run_with_tuned_result(
                 wgrad_tune_res,
                 ConvOpType.kBackwardWeight,
@@ -1389,7 +1392,7 @@ def implicit_gemm_backward(features: torch.Tensor,
                 reverse_mask=False,
                 mask_filter=masks[j].item(),
                 mask_width=mask_width,
-                beta=beta,
+                beta=0,
                 workspace=workspace_tv,
                 stream=stream)
 
@@ -1403,6 +1406,8 @@ def indice_maxpool(features: torch.Tensor, indice_pairs: torch.Tensor,
     # stream = get_current_stream()
     # CONV.stream_synchronize(stream)
     # t = time.time()
+    if not features.is_contiguous():
+        features = features.contiguous()
 
     out_channel = features.shape[-1]
     out_features = torch.zeros((num_activate_out, out_channel),
@@ -1474,6 +1479,8 @@ def indice_maxpool_implicit_gemm(features: torch.Tensor,
     stream = get_current_stream()
     # CONV.stream_synchronize(stream)
     # t = time.time()
+    if not features.is_contiguous():
+        features = features.contiguous()
 
     out_channel = features.shape[-1]
     out_features = torch.empty((num_activate_out, out_channel),

@@ -131,9 +131,9 @@ class SimpleGemm:
                 # skip volta tensor op since it is very slow in architectures except volta.
                 if arch >= (7, 5) and desp.algo == GemmAlgo.Volta.value:
                     continue
-                lda = a.dim(1)
-                ldb = b.dim(1)
-                ldc = c.dim(1)
+                lda = a.stride[0]
+                ldb = b.stride[0]
+                ldc = c.stride[0]
                 if desp.supported_ldx(lda, ldb, ldc):
                     finally_algos.append(desp)
         return finally_algos

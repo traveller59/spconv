@@ -298,7 +298,7 @@ class SpconvOps:
         """
         ...
     @staticmethod
-    def point2voxel_cpu(points: Tensor, voxels: Tensor, indices: Tensor, num_per_voxel: Tensor, densehashdata: Tensor, vsize: List[float], grid_size: List[int], grid_stride: List[int], coors_range: List[float], empty_mean: bool = False, clear_voxels: bool = True) -> Tuple[Tensor, Tensor, Tensor]: 
+    def point2voxel_cpu(points: Tensor, voxels: Tensor, indices: Tensor, num_per_voxel: Tensor, densehashdata: Tensor, pc_voxel_id: Tensor, vsize: List[float], grid_size: List[int], grid_stride: List[int], coors_range: List[float], empty_mean: bool = False, clear_voxels: bool = True) -> Tuple[Tensor, Tensor, Tensor]: 
         """
         Args:
             points: 
@@ -306,6 +306,7 @@ class SpconvOps:
             indices: 
             num_per_voxel: 
             densehashdata: 
+            pc_voxel_id: 
             vsize: 
             grid_size: 
             grid_stride: 
@@ -315,7 +316,7 @@ class SpconvOps:
         """
         ...
     @staticmethod
-    def point2voxel_cuda(points: Tensor, voxels: Tensor, indices: Tensor, num_per_voxel: Tensor, hashdata: Tensor, point_indice_data: Tensor, vsize: List[float], grid_size: List[int], grid_stride: List[int], coors_range: List[float], empty_mean: bool = False, clear_voxels: bool = True, stream_int: int = 0) -> Tuple[Tensor, Tensor, Tensor]: 
+    def point2voxel_cuda(points: Tensor, voxels: Tensor, indices: Tensor, num_per_voxel: Tensor, hashdata: Tensor, point_indice_data: Tensor, pc_voxel_id: Tensor, vsize: List[float], grid_size: List[int], grid_stride: List[int], coors_range: List[float], empty_mean: bool = False, clear_voxels: bool = True, stream_int: int = 0) -> Tuple[Tensor, Tensor, Tensor]: 
         """
         Args:
             points: 
@@ -324,6 +325,7 @@ class SpconvOps:
             num_per_voxel: 
             hashdata: 
             point_indice_data: 
+            pc_voxel_id: 
             vsize: 
             grid_size: 
             grid_stride: 

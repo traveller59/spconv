@@ -24,7 +24,7 @@ from spconv.core import ConvAlgo
 import spconv.pytorch as spconv
 from spconv.utils import Point2VoxelCPU3d
 
-
+# torch.backends.cudnn.enabled = False
 def waymo_data(batch_size=1):
     gen = Point2VoxelCPU3d([0.1, 0.1, 0.1], [-80, -80, -2, 80, 80, 6], 3,
                            150000, 1)
@@ -289,7 +289,7 @@ def main():
     voxels_th = torch.from_numpy(voxels).to(device).to(dtype)
     coors_th = torch.from_numpy(coors).to(device).int()
     voxels_th.requires_grad = True
-    algo = spconv.ConvAlgo.Native
+    algo = spconv.ConvAlgo.MaskImplicitGemm
     # 3080 Laptop
     # MaskImpGemm: 11.2ms
     # MaskSplitImpGemm: 12.2ms
@@ -324,26 +324,26 @@ def main():
 
     print(out.spatial_shape, out.features.mean(), out.features.max(),
           out.features.min())
-    # times = []
-    # with torch.no_grad():
-    #     for i in range(20):
-    #         print("------------")
-    #         torch.cuda.synchronize()
-    #         t = time.time()
-    #         out_nograd = net(voxels_th, coors_th, 1, False)
-    #         timer = out_nograd._timer
-    #         # res = timer.collect_by_name("forward", timer.get_all_pair_time())
-    #         # res2 = timer.collect_by_name("forward0", timer.get_all_pair_time())
+    times = []
+    with torch.no_grad():
+        for i in range(20):
+            print("------------")
+            torch.cuda.synchronize()
+            t = time.time()
+            out_nograd = net(voxels_th, coors_th, 1, False)
+            timer = out_nograd._timer
+            # res = timer.collect_by_name("forward", timer.get_all_pair_time())
+            # res2 = timer.collect_by_name("forward0", timer.get_all_pair_time())
 
-    #         # print(sum(res.values()) + sum(res2.values()))
-    #         # print(timer.get_all_pair_time())
+            # print(sum(res.values()) + sum(res2.values()))
+            # print(timer.get_all_pair_time())
 
-    #         # print(sum(timer.get_all_pair_time().values()))
-    #         torch.cuda.synchronize()
-    #         # sort_bench()
-    #         times.append(time.time() - t)
-    # print("spconv time", np.mean(times[10:]))
-    # times = []
+            # print(sum(timer.get_all_pair_time().values()))
+            torch.cuda.synchronize()
+            # sort_bench()
+            times.append(time.time() - t)
+    print("spconv time", np.mean(times[10:]))
+    times = []
 
     # for i in range(10):
     #     out = net(voxels_th, coors_th, 1)

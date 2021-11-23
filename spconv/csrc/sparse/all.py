@@ -920,7 +920,7 @@ class SpconvOps(pccm.Class):
     def point2voxel_cpu(self):
         code = pccm.FunctionCode()
         code.arg("points", "tv::Tensor")
-        code.arg("voxels, indices, num_per_voxel, densehashdata", "tv::Tensor")
+        code.arg("voxels, indices, num_per_voxel, densehashdata, pc_voxel_id", "tv::Tensor")
         code.arg("vsize", f"std::vector<float>")
         code.arg("grid_size, grid_stride", f"std::vector<int>")
         code.arg("coors_range", f"std::vector<float>")
@@ -950,11 +950,11 @@ class SpconvOps(pccm.Class):
                 }}
                 if (empty_mean){{
                     return Point2Voxel{ndim}DCPU::point_to_voxel_empty_mean_static(points, voxels, indices, 
-                        num_per_voxel, densehashdata, 
+                        num_per_voxel, densehashdata, pc_voxel_id,
                         vsize_, grid_size_, grid_stride_, coors_range_, clear_voxels);
                 }} else{{
                     return Point2Voxel{ndim}DCPU::point_to_voxel_static(points, voxels, indices, 
-                        num_per_voxel, densehashdata, 
+                        num_per_voxel, densehashdata, pc_voxel_id,
                         vsize_, grid_size_, grid_stride_, coors_range_, clear_voxels);
                 }}
             }}
@@ -967,7 +967,7 @@ class SpconvOps(pccm.Class):
     def point2voxel_cuda(self):
         code = pccm.FunctionCode()
         code.arg("points", "tv::Tensor")
-        code.arg("voxels, indices, num_per_voxel, hashdata, point_indice_data",
+        code.arg("voxels, indices, num_per_voxel, hashdata, point_indice_data, pc_voxel_id",
                  "tv::Tensor")
         code.arg("vsize", f"std::vector<float>")
         code.arg("grid_size, grid_stride", f"std::vector<int>")
@@ -1000,7 +1000,7 @@ class SpconvOps(pccm.Class):
                     coors_range_[i + {ndim}] = coors_range[i + {ndim}];
                 }}
                 return Point2Voxel{ndim}D::point_to_voxel_hash_static(points, voxels, indices, 
-                    num_per_voxel, hashdata, point_indice_data,
+                    num_per_voxel, hashdata, point_indice_data, pc_voxel_id,
                     vsize_, grid_size_, grid_stride_, coors_range_, clear_voxels, 
                     empty_mean, stream_int);
             }}

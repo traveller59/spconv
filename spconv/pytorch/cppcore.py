@@ -30,7 +30,8 @@ _TORCH_DTYPE_TO_TV = {
 
 def torch_tensor_to_tv(ten: torch.Tensor,
                        dtype: Optional[int] = None,
-                       shape: Optional[List[int]] = None):
+                       shape: Optional[List[int]] = None,
+                       stride: Optional[List[int]] = None):
     # assert ten.is_contiguous(), "must be contiguous tensor"
     ptr = ten.data_ptr()
     device = ten.device
@@ -40,11 +41,20 @@ def torch_tensor_to_tv(ten: torch.Tensor,
         tv_device = 0
     else:
         raise NotImplementedError
-    if shape is None:
-        shape = list(ten.shape)
     if dtype is None:
         dtype = _TORCH_DTYPE_TO_TV[ten.dtype]
-    return tv.from_blob(ptr, shape, list(ten.stride()), dtype, tv_device)
+    if stride is None:
+        stride = list(ten.stride())
+    if shape is None:
+        shape = list(ten.shape)
+    else:
+        if not ten.is_contiguous():
+            msg = "if you provide custom shape for non-contig tensor, stride must not None"
+            assert stride is not None, msg
+        else:
+            # custom shape, if tensor is contiguous, we use from_blob and calc strides
+            return tv.from_blob(ptr, shape, dtype, tv_device)
+    return tv.from_blob_strided(ptr, shape, stride, dtype, tv_device)
 
 
 def get_current_stream():

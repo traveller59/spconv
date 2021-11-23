@@ -27,7 +27,7 @@ class Point2VoxelCPU:
         """
         ...
     @staticmethod
-    def point_to_voxel_static(points: Tensor, voxels: Tensor, indices: Tensor, num_per_voxel: Tensor, densehashdata: Tensor, vsize: List[float], grid_size: List[int], grid_stride: List[int], coors_range: List[float], clear_voxels: bool = True) -> Tuple[Tensor, Tensor, Tensor]: 
+    def point_to_voxel_static(points: Tensor, voxels: Tensor, indices: Tensor, num_per_voxel: Tensor, densehashdata: Tensor, points_voxel_id: Tensor, vsize: List[float], grid_size: List[int], grid_stride: List[int], coors_range: List[float], clear_voxels: bool = True) -> Tuple[Tensor, Tensor, Tensor]: 
         """
         Args:
             points: 
@@ -35,6 +35,7 @@ class Point2VoxelCPU:
             indices: 
             num_per_voxel: 
             densehashdata: 
+            points_voxel_id: 
             vsize: 
             grid_size: 
             grid_stride: 
@@ -43,7 +44,7 @@ class Point2VoxelCPU:
         """
         ...
     @staticmethod
-    def point_to_voxel_empty_mean_static(points: Tensor, voxels: Tensor, indices: Tensor, num_per_voxel: Tensor, densehashdata: Tensor, vsize: List[float], grid_size: List[int], grid_stride: List[int], coors_range: List[float], clear_voxels: bool = True) -> Tuple[Tensor, Tensor, Tensor]: 
+    def point_to_voxel_empty_mean_static(points: Tensor, voxels: Tensor, indices: Tensor, num_per_voxel: Tensor, densehashdata: Tensor, points_voxel_id: Tensor, vsize: List[float], grid_size: List[int], grid_stride: List[int], coors_range: List[float], clear_voxels: bool = True) -> Tuple[Tensor, Tensor, Tensor]: 
         """
         Args:
             points: 
@@ -51,6 +52,7 @@ class Point2VoxelCPU:
             indices: 
             num_per_voxel: 
             densehashdata: 
+            points_voxel_id: 
             vsize: 
             grid_size: 
             grid_stride: 

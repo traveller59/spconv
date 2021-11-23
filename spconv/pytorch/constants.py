@@ -27,3 +27,15 @@ try:
 except:
     # for unknown errors, just set a version
     PYTORCH_VERSION = [1, 8, 0]
+
+
+if PYTORCH_VERSION >= [1, 6, 0]:
+    TORCH_HAS_AMP = True
+else:
+    TORCH_HAS_AMP = False
+
+def is_amp_enabled():
+    if TORCH_HAS_AMP:
+        return torch.is_autocast_enabled()
+    else:
+        return False 

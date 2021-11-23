@@ -104,7 +104,8 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
                  indice_dict: Optional[dict] = None,
                  benchmark: bool = False,
                  permanent_thrust_allocator: bool = False,
-                 enable_timer: bool = False):
+                 enable_timer: bool = False,
+                 force_algo: Optional[ConvAlgo] = None):
         """
         Args:
             features: [num_points, num_features] feature tensor
@@ -115,6 +116,8 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
                 is very large.
             benchmark: whether to enable benchmark. if enabled, all sparse operators will be record to
                 SparseConvTensor.
+            enable_timer: if exists, all spconv internal ops run time will be record in _timer.
+            force_algo: force conv/pool layers use this algo, should only used for debug.
         """
         ndim = indices.shape[1] - 1
         assert features.ndim == 2
@@ -139,6 +142,7 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
         if permanent_thrust_allocator:
             self.thrust_allocator = ThrustSortAllocator(features.device)
         self._timer = CUDAKernelTimer(enable_timer)
+        self.force_algo = force_algo
 
     def replace_feature(self, feature: torch.Tensor):
         """we need to replace x.features = F.relu(x.features) with x = x.replace_feature(F.relu(x.features))
@@ -152,6 +156,8 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
         new_spt.benchmark_record = self.benchmark_record
         new_spt.thrust_allocator = self.thrust_allocator
         new_spt._timer = self._timer
+        new_spt.force_algo = self.force_algo
+
         return new_spt
 
     @property
@@ -217,4 +223,5 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
         tensor.benchmark_record = self.benchmark_record
         tensor.thrust_allocator = self.thrust_allocator
         tensor._timer = self._timer
+        tensor.force_algo = self.force_algo
         return tensor
