@@ -445,7 +445,6 @@ class Point2Voxel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         int64_t expected_hash_data_num = points.dim(0) * 2;
         TV_ASSERT_RT_ERR(hashdata.dim(0) >= expected_hash_data_num, "hash table too small")
         TV_ASSERT_RT_ERR(point_indice_data.dim(0) >= points.dim(0), "point_indice_data too small")
-        // auto timer = tv::CudaContextTimer<>();
         num_per_voxel.zero_(ctx);
         table_t hash = table_t(hashdata.data_ptr<pair_t>(), expected_hash_data_num);
         hash.clear(custream);
@@ -462,14 +461,12 @@ class Point2Voxel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
                         layout, voxels.dim(0));
         auto count_cpu = count.cpu();
         int count_val = count_cpu.item<int32_t>();
-        // tv::ssprint("assign_table", timer.report());
-
+        count_val = count_val > voxels.dim(0) ? voxels.dim(0) : count_val;
         launcher(kernel::generate_voxel<table_t>, hash, points.data_ptr<const {self.dtype}>(),
                 point_indice_data.data_ptr<const int64_t>(), voxels.data_ptr<{self.dtype}>(),
                 num_per_voxel.data_ptr<int>(), points_voxel_id.data_ptr<int64_t>(), points.dim(1), voxels.dim(1), 
                 voxels.dim(0), vsize_tv, coors_range_tv,
                 grid_size_tv, grid_stride_tv, points.dim(0));
-        // tv::ssprint("generate_voxel", timer.report());
         auto voxel_launcher = tv::cuda::Launch(count_val, custream);
         if (empty_mean){{
             launcher(kernel::voxel_empty_fill_mean, voxels.data_ptr<{self.dtype}>(),

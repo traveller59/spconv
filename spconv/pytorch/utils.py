@@ -156,3 +156,17 @@ class PointToVoxel(object):
 
             return (self.voxels[:num_voxels], self.indices[:num_voxels],
                     self.num_per_voxel[:num_voxels], pc_voxel_id)
+
+
+def gather_features_by_pc_voxel_id(seg_res_features: torch.Tensor, pc_voxel_id: torch.Tensor):
+    """This function is used to gather segmentation result to match origin pc.
+    """
+    if seg_res_features.device != pc_voxel_id.device:
+        pc_voxel_id = pc_voxel_id.to(seg_res_features.device)
+    res = torch.zeros((pc_voxel_id.shape[0], seg_res_features.shape[1]), dtype=seg_res_features.dtype, device=seg_res_features.device)
+    pc_voxel_id_valid = pc_voxel_id != -1
+    pc_voxel_id_valid_ids = torch.nonzero(pc_voxel_id_valid).view(-1)
+    seg_res_features_valid = seg_res_features[pc_voxel_id[pc_voxel_id_valid_ids]]
+    res[pc_voxel_id_valid_ids] = seg_res_features_valid
+    return res 
+

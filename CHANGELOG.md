@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.1.12] - 2021-11-23
+### Added 
+- Add a method for voxel generator to get pc_voxel_id, which is usually used in semantic segmentation
+### Fixed
+- Fix a bug in cuda voxel generater when max_voxels is smaller than real number of voxels
+
+## [2.1.11] - 2021-11-22
+### Fixed
+- Fixed a bug Volta kernels (TITAN V, Tesla V100), backward weight kernels use f16 as accumulator. we should use f32.
+- Fixed a corner case when user use kernel size = 1x1 but stride != 1.
+- Fixed a corner case when input feature is non-contiguous when maxpool.
+
+## [2.1.10] - 2021-11-19
+### Fixed
+- Fixed a bug in utils.PointToVoxel, shouldn't get cuda stream in cpu code
+
+## [2.1.9] - 2021-11-18
+### Removed
+- Remove a wrong assert
+
 ## [2.1.8] - 2021-11-15
 ### Added
 - Add support for pytorch 1.5
