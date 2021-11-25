@@ -24,6 +24,7 @@ jobs:
         with:
           filters: |
             needbuild:
+              - '.github/workflows/**'
               - 'setup.py'
               - 'spconv/csrc/**'
               - 'spconv/algo.py'
@@ -106,6 +107,7 @@ jobs:
         with:
           filters: |
             needbuild:
+              - '.github/workflows/**'
               - 'setup.py'
               - 'spconv/csrc/**'
               - 'spconv/algo.py'
