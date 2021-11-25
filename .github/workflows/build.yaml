@@ -35,6 +35,7 @@ jobs:
           CUDA_VERSION: ${{ matrix.cuda-version }}
           PYTHON_VERSION: ${{ matrix.python-version }}
           cuda: ${{ matrix.cuda-version }}
+          BOOST_VERSION: boost_1_77_0
         if: |
           (env.CUDA_VERSION != '') && (
             (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) ) || 
