@@ -47,7 +47,7 @@ jobs:
         shell: powershell
         run: |
           $ProgressPreference = 'SilentlyContinue'
-          Invoke-WebRequest -Uri "https://boostorg.jfrog.io/artifactory/main/release/1.77.0/source/$BOOST_VERSION.zip" -UseBasicParsing -OutFile $HOME/boost.zip
+          Invoke-WebRequest -Uri "https://boostorg.jfrog.io/artifactory/main/release/1.77.0/source/boost_1_77_0.zip" -UseBasicParsing -OutFile $HOME/boost.zip
           Expand-Archive $HOME/boost.zip -DestinationPath $HOME/boost
           .\tools\install_windows_cuda.ps1
       - name: Set up Python ${{ matrix.python-version }}
