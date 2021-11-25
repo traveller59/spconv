@@ -120,7 +120,7 @@ See [this page](https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-
 
 | CUDA version | GPU Arch List  |
 | -------------- |:---------------------:|
-| 10.2 | 50,52,60,61,70,75     | 
+| 10.2 | 52,60,61,70,75     | 
 | 11.x       | 52,60,61,70,75,80,86     | 
 | 12.x       | 60,61,70,75,80,86,90     | 
 
