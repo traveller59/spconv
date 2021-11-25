@@ -43,7 +43,11 @@ jobs:
             )
           )
         shell: powershell
-        run: .\tools\install_windows_cuda.ps1
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest -Uri "https://boostorg.jfrog.io/artifactory/main/release/1.77.0/source/$BOOST_VERSION.zip" -UseBasicParsing -OutFile $HOME/boost.zip
+          Expand-Archive $HOME/boost.zip -DestinationPath $HOME/boost
+          .\tools\install_windows_cuda.ps1
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v2
         with:
@@ -74,9 +78,6 @@ jobs:
           $Env:SPCONV_DISABLE_JIT = "1"
           pip install pccm pybind11
           # download boost header only
-          $ProgressPreference = 'SilentlyContinue'
-          Invoke-WebRequest -Uri https://boostorg.jfrog.io/artifactory/main/release/1.77.0/source/$BOOST_VERSION.zip -UseBasicParsing -OutFile $HOME/boost.zip
-          Expand-Archive $HOME/boost.zip -DestinationPath $HOME/boost
           $Env:BOOST_ROOT = "$HOME/boost/$BOOST_VERSION"
           # ls "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v${{ matrix.cuda-version }}\include\thrust"
           python -m build --wheel --outdir dist/ .
