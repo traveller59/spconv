@@ -59,6 +59,7 @@ jobs:
         env:
           CUDA_VERSION: ${{ matrix.cuda-version }}
           PYTHON_VERSION: ${{ matrix.python-version }}
+          BOOST_VERSION: boost_1_77_0
         if: |
           (env.CUDA_VERSION != '') && (
             (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) ) || 
@@ -72,6 +73,11 @@ jobs:
           $Env:CUMM_CUDA_ARCH_LIST = "all"
           $Env:SPCONV_DISABLE_JIT = "1"
           pip install pccm pybind11
+          # download boost header only
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest -Uri https://boostorg.jfrog.io/artifactory/main/release/1.77.0/source/$BOOST_VERSION.zip -UseBasicParsing -OutFile $HOME/boost.zip
+          Expand-Archive $HOME/boost.zip -DestinationPath $HOME/boost
+          $Env:BOOST_ROOT = "$HOME/boost/$BOOST_VERSION"
           # ls "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v${{ matrix.cuda-version }}\include\thrust"
           python -m build --wheel --outdir dist/ .
         shell: powershell
@@ -111,10 +117,15 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install pep build
+        env:
+          BOOST_VERSION: boost_1_77_0
         run: |
           python -m pip install build --user
           python -m pip install --upgrade pip twine wheel
           python -m pip install pytest setuptools
+          mkdir -p third_party
+          wget https://boostorg.jfrog.io/artifactory/main/release/1.77.0/source/$BOOST_VERSION.zip -O third_party/boost.zip
+          unzip third_party/boost.zip -d third_party/boost
 
       - name: Build a cuda wheel
         env:
@@ -122,6 +133,7 @@ jobs:
           PYTHON_VERSION: ${{ matrix.python-version }}
           DOCKER_IMAGE: scrin/manylinux2014-cuda:cu${{ matrix.cuda-version }}-devel-1.0.0
           PLAT: manylinux2014_x86_64
+          BOOST_VERSION: boost_1_77_0
         if: |
           (env.CUDA_VERSION != '') && (
             (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) ) || 
@@ -132,7 +144,10 @@ jobs:
           )
         run: |
           chmod +x tools/build-wheels.sh
-          docker run --rm -e PLAT=$PLAT -e CUMM_CUDA_VERSION=${{ matrix.cuda-version }} -e SPCONV_PYTHON_LIST=${{env.PYTHON_VERSION}} -v `pwd`:/io $DOCKER_IMAGE bash -c "source /etc/bashrc && /io/tools/build-wheels.sh"
+          docker run --rm -e PLAT=$PLAT -e CUMM_CUDA_VERSION=${{ matrix.cuda-version }} \
+           -e SPCONV_PYTHON_LIST=${{env.PYTHON_VERSION}} \
+           -e BOOST_ROOT=/io/third_party/boost/$BOOST_VERSION \
+           -v `pwd`:/io $DOCKER_IMAGE bash -c "source /etc/bashrc && /io/tools/build-wheels.sh"
 
       - name: Build a cpu wheel
         env:
@@ -140,6 +155,7 @@ jobs:
           PYTHON_VERSION: ${{ matrix.python-version }}
           DOCKER_IMAGE: scrin/manylinux2014-cuda:cu114-devel-1.0.0
           PLAT: manylinux2014_x86_64
+          BOOST_VERSION: boost_1_77_0
         if: |
           (env.CUDA_VERSION == '') && (
             (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) ) || 
@@ -150,7 +166,10 @@ jobs:
           )
         run: |
           chmod +x tools/build-wheels.sh
-          docker run --rm -e PLAT=$PLAT -e CUMM_CUDA_VERSION=${{ matrix.cuda-version }} -e SPCONV_PYTHON_LIST=${{env.PYTHON_VERSION}} -v `pwd`:/io $DOCKER_IMAGE bash -c "source /etc/bashrc && /io/tools/build-wheels.sh"
+          docker run --rm -e PLAT=$PLAT -e CUMM_CUDA_VERSION=${{ matrix.cuda-version }} \
+            -e SPCONV_PYTHON_LIST=${{env.PYTHON_VERSION}} \
+            -e BOOST_ROOT=/io/third_party/boost/$BOOST_VERSION \
+            -v `pwd`:/io $DOCKER_IMAGE bash -c "source /etc/bashrc && /io/tools/build-wheels.sh"
 
       - name: Publish a Python distribution to PyPI
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')

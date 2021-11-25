@@ -14,6 +14,7 @@
 
 import math
 import time
+import sys
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -24,6 +25,7 @@ from torch.nn.parameter import Parameter
 
 from spconv import pytorch as spconv
 from spconv.core import ConvAlgo
+from spconv.debug_utils import spconv_save_debug_data
 from spconv.pytorch import functional as Fsp
 from spconv.pytorch import ops
 from spconv.cppconstants import CPU_ONLY_BUILD
@@ -291,11 +293,21 @@ class SparseConvolution(SparseModule):
                         if input.benchmark:
                             torch.cuda.synchronize()
                             t = time.time()
-                        outids, indice_pairs, indice_pair_num = ops.get_indice_pairs(
-                            indices, batch_size, spatial_shape, algo,
-                            self.kernel_size, self.stride, self.padding,
-                            self.dilation, self.output_padding, self.subm,
-                            self.transposed)
+                        try:
+                            outids, indice_pairs, indice_pair_num = ops.get_indice_pairs(
+                                indices, batch_size, spatial_shape, algo,
+                                self.kernel_size, self.stride, self.padding,
+                                self.dilation, self.output_padding, self.subm,
+                                self.transposed)
+                        except Exception as e:
+                            msg = "[Exception|native_pair]"
+                            msg += f"indices={indices.shape},bs={batch_size},ss={spatial_shape},"
+                            msg += f"algo={algo},ksize={self.kernel_size},stride={self.stride},"
+                            msg += f"padding={self.padding},dilation={self.dilation},subm={self.subm},"
+                            msg += f"transpose={self.transposed}"
+                            print(msg, file=sys.stderr)
+                            spconv_save_debug_data(indices)
+                            raise e 
                         if input.benchmark:
                             torch.cuda.synchronize()
                             interval = time.time() - t
@@ -367,24 +379,36 @@ class SparseConvolution(SparseModule):
                         mask_argsort_bwd_splits = datas.mask_argsort_bwd_splits
                         masks = datas.masks
                     else:
+
                         with input._timer.namespace("gen_pairs"):
                             # we need to gen bwd indices for regular conv
                             # because it may be inversed.
-                            res = ops.get_indice_pairs_implicit_gemm(
-                                indices,
-                                batch_size,
-                                spatial_shape,
-                                algo,
-                                ksize=self.kernel_size,
-                                stride=self.stride,
-                                padding=self.padding,
-                                dilation=self.dilation,
-                                out_padding=self.output_padding,
-                                subm=self.subm,
-                                transpose=self.transposed,
-                                is_train=(not self.subm) or self.training,
-                                alloc=input.thrust_allocator,
-                                timer=input._timer)
+                            try:
+                                res = ops.get_indice_pairs_implicit_gemm(
+                                    indices,
+                                    batch_size,
+                                    spatial_shape,
+                                    algo,
+                                    ksize=self.kernel_size,
+                                    stride=self.stride,
+                                    padding=self.padding,
+                                    dilation=self.dilation,
+                                    out_padding=self.output_padding,
+                                    subm=self.subm,
+                                    transpose=self.transposed,
+                                    is_train=(not self.subm) or self.training,
+                                    alloc=input.thrust_allocator,
+                                    timer=input._timer)
+                            except Exception as e:
+                                msg = "[Exception|implicit_gemm_pair]"
+                                msg += f"indices={indices.shape},bs={batch_size},ss={spatial_shape},"
+                                msg += f"algo={algo},ksize={self.kernel_size},stride={self.stride},"
+                                msg += f"padding={self.padding},dilation={self.dilation},subm={self.subm},"
+                                msg += f"transpose={self.transposed}"
+                                print(msg, file=sys.stderr)
+                                spconv_save_debug_data(indices)
+                                raise e 
+
                         outids = res[0]
                         num_inds_per_loc = res[1]
                         pair_fwd = res[2]

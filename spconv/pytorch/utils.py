@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
+from typing import List, Union
 import torch
 from cumm import tensorview as tv
 
@@ -158,12 +158,16 @@ class PointToVoxel(object):
                     self.num_per_voxel[:num_voxels], pc_voxel_id)
 
 
-def gather_features_by_pc_voxel_id(seg_res_features: torch.Tensor, pc_voxel_id: torch.Tensor):
+def gather_features_by_pc_voxel_id(seg_res_features: torch.Tensor, pc_voxel_id: torch.Tensor, invalid_value: Union[int, float] = 0):
     """This function is used to gather segmentation result to match origin pc.
     """
     if seg_res_features.device != pc_voxel_id.device:
         pc_voxel_id = pc_voxel_id.to(seg_res_features.device)
-    res = torch.zeros((pc_voxel_id.shape[0], seg_res_features.shape[1]), dtype=seg_res_features.dtype, device=seg_res_features.device)
+    res_feature_shape = (pc_voxel_id.shape[0], *seg_res_features.shape[1:])
+    if invalid_value == 0:
+        res = torch.zeros(res_feature_shape, dtype=seg_res_features.dtype, device=seg_res_features.device)
+    else:
+        res = torch.full(res_feature_shape, invalid_value, dtype=seg_res_features.dtype, device=seg_res_features.device)
     pc_voxel_id_valid = pc_voxel_id != -1
     pc_voxel_id_valid_ids = torch.nonzero(pc_voxel_id_valid).view(-1)
     seg_res_features_valid = seg_res_features[pc_voxel_id[pc_voxel_id_valid_ids]]

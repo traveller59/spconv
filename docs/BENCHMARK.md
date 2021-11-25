@@ -16,7 +16,7 @@
 
 ## Simple Benchmark
 
-### Network Benchmark without batchnorm (F32/F16) in RTX 3080 Laptop GPU
+### Network Benchmark without batchnorm (F32/F16) in RTX 3080 Laptop GPU 150W
 
 Network Code: test/benchmark.py
 
@@ -24,6 +24,18 @@ Network Code: test/benchmark.py
 | -------------- |:---------------------:|---------------------:|---------------------:| ---------------------:|
 | Forward | 43ms     | 21.7ms/13.7ms    | 23.5ms/11.2ms      | 22ms/12.2ms      |
 | Backward | 80ms    | 41.9ms/25.2ms    | 51.0ms/13.8ms      | 41.1ms/12.2ms      |
+
+| F16 Forward | Native| Implicit Gemm | Implicit Gemm Split Mask  |
+| -------------- |:---------------------:|---------------------:| ---------------------:|
+| RTX 3080 Laptop 150W | 13.7ms     | 11.2ms    | 12.2ms      |
+| RTX A6000 | 19.1ms    |  11.7ms   | 14.0ms      |
+| TESLA V100 | 17.9ms    |  11.4ms   | 13.4ms      |
+
+| F16 Backward | Native| Implicit Gemm | Implicit Gemm Split Mask  |
+| -------------- |:---------------------:|---------------------:| ---------------------:|
+| RTX 3080 Laptop 150W | 25.2ms     | 13.8ms    | 12.2ms      |
+| RTX A6000       | 28.1ms     | 9.2ms     | 8.9ms      |
+| TESLA V100 | 33.9ms    |  12.2ms   | 12.9ms      |
 
 ### Network Gemm Kernel Benchmark FP16 in RTX 3080 Laptop GPU
 

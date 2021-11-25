@@ -16,6 +16,7 @@ import numpy as np
 from cumm import tensorview as tv
 from contextlib import AbstractContextManager
 from spconv.cppconstants import CPU_ONLY_BUILD
+from spconv.core_cc.csrc.utils.boxops import BoxOps
 
 from spconv.core_cc.csrc.sparse.all.ops_cpu1d import Point2VoxelCPU as Point2VoxelCPU1d
 from spconv.core_cc.csrc.sparse.all.ops_cpu2d import Point2VoxelCPU as Point2VoxelCPU2d
@@ -47,3 +48,69 @@ class nullcontext(AbstractContextManager):
 
     def __exit__(self, *excinfo):
         pass
+
+
+def rbbox_iou(box_corners: np.ndarray, qbox_corners: np.ndarray,
+              standup_iou: np.ndarray, standup_thresh: float):
+    if not BoxOps.has_boost():
+        raise NotImplementedError(
+            "this op require spconv built with boost, download boost, export BOOST_ROOT and rebuild."
+        )
+    N = box_corners.shape[0]
+    K = qbox_corners.shape[0]
+    overlap = np.zeros((N, K), dtype=box_corners.dtype)
+
+    BoxOps.rbbox_iou(tv.from_numpy(box_corners), tv.from_numpy(qbox_corners),
+                     tv.from_numpy(standup_iou), tv.from_numpy(overlap),
+                     standup_thresh, False)
+    return overlap
+
+
+def rbbox_intersection(box_corners: np.ndarray, qbox_corners: np.ndarray,
+                       standup_iou: np.ndarray, standup_thresh: float):
+    if not BoxOps.has_boost():
+        raise NotImplementedError(
+            "this op require spconv built with boost, download boost, export BOOST_ROOT and rebuild."
+        )
+    N = box_corners.shape[0]
+    K = qbox_corners.shape[0]
+    overlap = np.zeros((N, K), dtype=box_corners.dtype)
+
+    BoxOps.rbbox_iou(tv.from_numpy(box_corners), tv.from_numpy(qbox_corners),
+                     tv.from_numpy(standup_iou), tv.from_numpy(overlap),
+                     standup_thresh, True)
+    return overlap
+
+
+def rbbox_iou_loss(box_corners: np.ndarray, qbox_corners: np.ndarray):
+    if not BoxOps.has_boost():
+        raise NotImplementedError(
+            "this op require spconv built with boost, download boost, export BOOST_ROOT and rebuild."
+        )
+    N = box_corners.shape[0]
+    overlap = np.zeros((N, ), dtype=box_corners.dtype)
+
+    BoxOps.rbbox_iou_aligned(tv.from_numpy(box_corners),
+                             tv.from_numpy(qbox_corners),
+                             tv.from_numpy(overlap), False)
+    return overlap
+
+
+def non_max_suppression_cpu(boxes: np.ndarray,
+                            order: np.ndarray,
+                            thresh: float,
+                            eps: float = 0.0):
+    return BoxOps.non_max_suppression_cpu(tv.from_numpy(boxes),
+                                          tv.from_numpy(order), thresh, eps)
+
+
+def rotate_non_max_suppression_cpu(boxes: np.ndarray, order: np.ndarray,
+                                   standup_iou: np.ndarray, thresh: float):
+    if not BoxOps.has_boost():
+        raise NotImplementedError(
+            "this op require spconv built with boost, download boost, export BOOST_ROOT and rebuild."
+        )
+    return BoxOps.rotate_non_max_suppression_cpu(tv.from_numpy(boxes),
+                                                 tv.from_numpy(order),
+                                                 tv.from_numpy(standup_iou),
+                                                 thresh)

@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.1.13] - 2021-?-?
+### Added 
+- Add some ops from spconv 1.x, see spconv.utils for more details.
+- Add some debug tool for users to attach more info in issue.
+
 ## [2.1.12] - 2021-11-23
 ### Added 
 - Add a method for voxel generator to get pc_voxel_id, which is usually used in semantic segmentation

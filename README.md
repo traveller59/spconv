@@ -61,7 +61,7 @@ Spconv 1.x users **NEED READ [THIS](docs/SPCONV_2_BREAKING_CHANGEs.md)** before 
 * fp32 (not tf32) training/inference speed is increased (+50~80%)
 * fp16 training/inference speed is greatly increased when your layer support tensor core (channel size must be multiple of 8).
 * int8 op is ready, but we still need some time to figure out how to run int8 in pytorch.
-* [doesn't depend on pytorch binary](docs/FAQ.md#What-does-no-dependency-on-pytorch-mean), but you may need at least pytorch >= 1.6.0 to run spconv 2.x.
+* [doesn't depend on pytorch binary](docs/FAQ.md#What-does-no-dependency-on-pytorch-mean), but you may need at least pytorch >= 1.5.0 to run spconv 2.x.
 * since spconv 2.x doesn't depend on pytorch binary (never in future), it's impossible to support torch.jit/libtorch inference.
 
 ## Spconv 2.x Development and Roadmap
@@ -108,17 +108,31 @@ CUDA 11.1 will be removed in spconv 2.2 because pytorch 1.10 don't provide prebu
 
 ```pip install spconv-cu114``` for CUDA 11.4
 
-**NOTE** It's safe to have different **minor** cuda version between system and conda (pytorch) **in Linux**. for example, you can use spconv-cu114 with anaconda version of pytorch cuda 11.1 in a OS with CUDA 11.2 installed.
+**NOTE** It's safe to have different **minor** cuda version between system and conda (pytorch) in **CUDA >= 11.0** because of [CUDA Minor Version Compatibility](https://docs.nvidia.com/deploy/cuda-compatibility/#minor-version-compatibility). For example, you can use spconv-cu114 with anaconda version of pytorch cuda 11.1 in a OS with CUDA 11.2 installed.
+
+For CUDA 10, we don't know whether ```spconv-cu102``` works with CUDA 10.0 and 10.1. Users can have a try.
 
 **NOTE** In Linux, you can install spconv-cuxxx without install CUDA to system! only suitable NVIDIA driver is required. for CUDA 11, we need driver >= 450.82.
+
+#### Prebuilt GPU Support Matrix
+
+See [this page](https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/) to check supported GPU names by arch.
+
+| CUDA version | GPU Arch List  |
+| -------------- |:---------------------:|
+| 10.2 | 50,52,60,61,70,75     | 
+| 11.x       | 52,60,61,70,75,80,86     | 
+| 12.x       | 60,61,70,75,80,86,90     | 
 
 ### Build from source for development (JIT, recommend)
 
 The c++ code will be built automatically when you change c++ code in project.
 
-For NVIDIA Embedded Platforms, you need to specify cuda arch before build: ```export CUMM_CUDA_ARCH_LIST="7.2"``` for xavier.
+For NVIDIA Embedded Platforms, you need to specify cuda arch before build: ```export CUMM_CUDA_ARCH_LIST="7.2"``` for xavier, ```export CUMM_CUDA_ARCH_LIST="6.2"``` for TX2, ```export CUMM_CUDA_ARCH_LIST="8.7"``` for orin.
 
 You need to remove ```cumm``` in ```requires``` section in pyproject.toml after install editable ```cumm``` and before install spconv due to pyproject limit (can't find editable installed ```cumm```).
+
+You need to ensure ```pip list | grep spconv``` and ```pip list | grep cumm``` show nothing before install editable spconv/cumm.
 
 #### Linux
 

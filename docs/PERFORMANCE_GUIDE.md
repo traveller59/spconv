@@ -26,30 +26,3 @@
 * spconv 2.x in Windows 10 is 1.5x~2x slower than Linux. use Linux if possible.
 
 See [benchmark](BENCHMARK.md) for more performance details of different algorithms.
-
-## Algorithm Overview
-
-### Native Explicit (deprecated and removed in spconv 2.x)
-
-native algorithm (explicit, no fused) is standard gather-gemm-scatter algorithm. Assume we compute 3x3 conv, We can split it to 9 of 1x1 conv which can be computed by matmul, then sum them to get final result.
-For sparse convolution, we also do split-gemm-sum to calculate conv, but we need to collect data first because it's sparse.
-
-### Native
-
-Fused version of above algorithm. 1.5x-2x faster than non-fused version.
-
-### Implicit Gemm
-
-```Native``` algorithm do minimal mma (matrix multiply add), but it need to serialize IO. The pipeline of ```Native``` is gather-gemm-scatter-gather-gemm-scatter-...
-
-```Implicit Gemm``` fuse all calculation to one kernel and perform overlapped gather-mma-scatter to save a lot of time. 
-
-![Image Overlapped Gemm](https://raw.githubusercontent.com/NVIDIA/cutlass/master/media/images/software-pipeline.png)
-
-In my test, ```Implicit Gemm``` is almost 2x faster than ```Native```.
-
-### Implicit Gemm Split Mask
-
-TODO
-
-In my test, ```Implicit Gemm Split Mask``` is slightly faster than ```Implicit Gemm```, but the indice generation is slower, so currently we use ```Implicit Gemm``` by default.

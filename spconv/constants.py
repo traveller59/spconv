@@ -27,3 +27,15 @@ _filter_hwio_env = os.getenv("SPCONV_FILTER_HWIO", "0")
 FILTER_HWIO = _filter_hwio_env == "1"
 DISABLE_JIT = os.getenv("SPCONV_DISABLE_JIT", "0") == "1"
 NDIM_DONT_CARE = 3
+
+SPCONV_DEBUG_SAVE_PATH = os.getenv("SPCONV_DEBUG_SAVE_PATH", "")
+
+
+_BOOST_ROOT = os.getenv("BOOST_ROOT", None)
+
+if _BOOST_ROOT is None:
+    BOOST_ROOT = None 
+else:
+    BOOST_ROOT = Path(_BOOST_ROOT)
+    assert BOOST_ROOT.exists(), "you provide BOOST_ROOT, but it not exists"
+    assert (BOOST_ROOT / "boost" / "geometry").exists(), "you provide BOOST_ROOT, but BOOST_ROOT/boost/geometry not exists"
