@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.1.15] - 2021-11-28
+### Fixed
+- Fix missing pccm.Class in setup.py
+
 ## [2.1.14] - 2021-11-28
 ### Added 
 - Add hash table
