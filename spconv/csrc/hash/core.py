@@ -21,6 +21,12 @@ from cumm.common import (TensorView, TensorViewCPU, TensorViewHashKernel,
                          TensorViewKernel, TslRobinMap)
 from spconv.csrc.sparse.cpu_core import OMPLib
 
+if CUMM_CPU_ONLY_BUILD:
+    _member_func = pccm.member_function
+else:
+    _member_func = pccm.cuda.member_function
+
+
 class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
     """a simple hashtable for both cpu and cuda.
     CPU implementation don't support parallel.
@@ -79,7 +85,7 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
         return code 
 
     @pccm.pybind.mark 
-    @pccm.cuda.member_function
+    @_member_func
     def clear(self):
         """ in this function, if values is empty, it will be assigned to zero.
         """
@@ -123,7 +129,7 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
 
 
     @pccm.pybind.mark 
-    @pccm.cuda.member_function
+    @_member_func
     def insert(self):
         """ in this function, if values is empty, it will be assigned to zero.
         """
@@ -195,7 +201,7 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
         return code 
 
     @pccm.pybind.mark 
-    @pccm.cuda.member_function
+    @_member_func
     def query(self):
         """query keys, save to values, and save is_empty to is_empty
         """
@@ -267,7 +273,7 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
         return code 
 
     @pccm.pybind.mark 
-    @pccm.cuda.member_function
+    @_member_func
     def assign_arange_(self):
         """ this function assign "arange(NumItem)" to table values.
         useful in "unique-like" operations.
@@ -322,7 +328,7 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
         return code 
 
     @pccm.pybind.mark 
-    @pccm.cuda.member_function
+    @_member_func
     def size_cpu(self):
         """ this function can only be used to get cpu hash table size.
         """
@@ -342,7 +348,7 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
 
 
     @pccm.pybind.mark 
-    @pccm.cuda.member_function
+    @_member_func
     def items(self):
         """get items.
         """
