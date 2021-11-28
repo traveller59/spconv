@@ -20,14 +20,17 @@ from torch import nn
 from torch.autograd import Function
 from typing import Optional, TypeVar
 from spconv.tools import CUDAKernelTimer
-from spconv.pytorch import ops
+from spconv.pytorch import ops, SparseConvTensor
 from spconv.pytorch.constants import PYTORCH_VERSION
 from spconv.debug_utils import spconv_save_debug_data
 from torch.autograd.function import once_differentiable
 import numpy as np
 from pathlib import Path
-
+from spconv.pytorch.hash import HashTable
+from cumm.gemm.layout import to_stride
 from typing import List
+
+_MAX_INT32 = 2147483647
 
 _T = TypeVar("_T")
 
@@ -357,3 +360,69 @@ indice_inverse_conv = SparseInverseConvFunction.apply
 indice_subm_conv = SubMConvFunction.apply
 indice_maxpool = SparseMaxPoolFunction.apply
 indice_maxpool_implicit_gemm = SparseMaxPoolImplicitGemmFunction.apply
+
+
+def _indice_to_scalar(indices: torch.Tensor, shape: List[int]):
+    assert indices.shape[1] == len(shape)
+    stride = to_stride(np.array(shape, dtype=np.int64))
+    scalar_inds = indices[:, -1]
+    for i in range(len(shape) - 1):
+        scalar_inds += stride[i] * indices[:, i]
+    return scalar_inds.contiguous()
+
+def sparse_add_hash_based(*tens: SparseConvTensor):
+    table_size = 0
+    for ten in tens:
+        assert ten.spatial_shape == tens[0].spatial_shape
+        assert ten.batch_size == tens[0].batch_size
+        assert ten.features.shape[1] == tens[0].features.shape[1]
+        table_size += ten.features.shape[0]
+    first = tens[0]
+    feat = first.features
+    shape = [first.batch_size, *first.spatial_shape]
+    whole_shape = int(np.prod(shape))
+    table_size *= 2
+    k_type = torch.int32
+    if whole_shape >= _MAX_INT32:
+        k_type = torch.int64
+    table = HashTable(first.features.device, k_type, torch.int32, table_size)
+    scalars: List[torch.Tensor] = []
+    for ten in tens:
+        indices = ten.indices
+        if whole_shape >= _MAX_INT32:
+            indices = indices.long()
+        scalar = _indice_to_scalar(indices, shape)
+        scalars.append(scalar)
+        table.insert(scalar)
+    # assign arange to values of hash table
+    count = table.assign_arange_()
+    count_val = count.item()
+    out_features = torch.zeros([int(count_val), feat.shape[1]], dtype=feat.dtype, device=feat.device)
+    out_indices = torch.zeros([int(count_val), first.indices.shape[1]], dtype=first.indices.dtype, device=first.indices.device)
+
+    for ten, scalar in zip(tens, scalars):
+        out_inds, _ = table.query(scalar)
+        out_inds = out_inds.long()
+        out_features[out_inds] += ten.features
+        out_indices[out_inds] = ten.indices
+    res = SparseConvTensor(out_features, out_indices, first.spatial_shape, first.batch_size, 
+        benchmark=first.benchmark)
+    res.benchmark_record = first.benchmark_record
+    res._timer = first._timer 
+    res.thrust_allocator = first.thrust_allocator
+    return res 
+
+def sparse_add(a: SparseConvTensor, b: SparseConvTensor):
+    assert a.spatial_shape == b.spatial_shape
+    assert a.batch_size == b.batch_size
+    assert a.features.shape[1] == a.features.shape[1]
+    res_shape = [a.batch_size, *a.spatial_shape, a.features.shape[1]]
+
+    a_th = torch.sparse_coo_tensor(a.indices.T, a.features, res_shape, requires_grad=True)
+    b_th = torch.sparse_coo_tensor(b.indices.T, b.features, res_shape, requires_grad=True)
+
+    c_th = (a_th + b_th).coalesce()
+    c_th_inds = c_th.indices().T.contiguous().int()
+    c_th_values = c_th.values()
+    assert c_th_values.is_contiguous()
+    return SparseConvTensor(c_th_values, c_th_inds, a.spatial_shape, a.batch_size)

@@ -171,7 +171,9 @@ You need to rebuild ```cumm``` first if you are build along a CUDA version that 
 5. run ```pip install pccm cumm wheel```
 6. run ```python setup.py bdist_wheel```+```pip install dists/xxx.whl```
 
+## Know issues
 
+* Spconv 2.x F16 runs slow in A100. 
 
 ## Note
 

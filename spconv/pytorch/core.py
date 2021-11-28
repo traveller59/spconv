@@ -18,7 +18,6 @@ import numpy as np
 import torch
 from spconv.core import ConvAlgo
 from spconv.pytorch.constants import PYTORCH_VERSION
-from spconv.pytorch.ops import ThrustSortAllocator
 from spconv.tools import CUDAKernelTimer
 
 if PYTORCH_VERSION >= [1, 8, 0]:
@@ -37,6 +36,24 @@ else:
 
     class SpConvTensorMeta(type):
         pass
+
+
+class ThrustSortAllocator:
+    def __init__(self, device: torch.device) -> None:
+        super().__init__()
+        self.alloced_objs = {}
+
+        self.device = device
+
+    def alloc(self, n: int):
+        if n in self.alloced_objs:
+            return self.alloced_objs[n].data_ptr()
+        for n_cur, ten in self.alloced_objs.items():
+            if n < n_cur:
+                return ten.data_ptr()
+        ten = torch.empty([n], dtype=torch.uint8, device=self.device)
+        self.alloced_objs[n] = ten
+        return ten.data_ptr()
 
 
 class IndiceData(object):

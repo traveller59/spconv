@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.14] - 2021-11-28
+### Added 
+- Add hash table
+- update cumm version
+- Add AddTableMisaligned for sptensors with same shape but different indices.
+### Fixed
+- Fix a bug already fixed in 2.1.10 but introduced in 2.1.12 again.
+
 ## [2.1.13] - 2021-?-?
 ### Added 
 - Add some ops from spconv 1.x, see spconv.utils for more details.
