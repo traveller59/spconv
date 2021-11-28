@@ -371,12 +371,25 @@ def _indice_to_scalar(indices: torch.Tensor, shape: List[int]):
     return scalar_inds.contiguous()
 
 def sparse_add_hash_based(*tens: SparseConvTensor):
+    """ sparse add with misaligned indices.
+    if you use sparse add, the indice_dict will be dropped and impossible
+    to use inverse.
+    There is only one situation that keep indices: there is one operand that
+    its indices is output indices.
+    
+    """
     table_size = 0
-    for ten in tens:
+    max_num_indices = 0
+    max_num_indices_idx = 0
+    for i, ten in enumerate(tens):
         assert ten.spatial_shape == tens[0].spatial_shape
         assert ten.batch_size == tens[0].batch_size
         assert ten.features.shape[1] == tens[0].features.shape[1]
         table_size += ten.features.shape[0]
+        if max_num_indices < ten.features.shape[0]:
+            max_num_indices_idx = i
+            max_num_indices = ten.features.shape[0]
+        
     first = tens[0]
     feat = first.features
     shape = [first.batch_size, *first.spatial_shape]
@@ -399,7 +412,6 @@ def sparse_add_hash_based(*tens: SparseConvTensor):
     count_val = count.item()
     out_features = torch.zeros([int(count_val), feat.shape[1]], dtype=feat.dtype, device=feat.device)
     out_indices = torch.zeros([int(count_val), first.indices.shape[1]], dtype=first.indices.dtype, device=first.indices.device)
-
     for ten, scalar in zip(tens, scalars):
         out_inds, _ = table.query(scalar)
         out_inds = out_inds.long()
@@ -407,6 +419,8 @@ def sparse_add_hash_based(*tens: SparseConvTensor):
         out_indices[out_inds] = ten.indices
     res = SparseConvTensor(out_features, out_indices, first.spatial_shape, first.batch_size, 
         benchmark=first.benchmark)
+    if count_val == max_num_indices:
+        res.indice_dict = tens[max_num_indices_idx].indice_dict
     res.benchmark_record = first.benchmark_record
     res._timer = first._timer 
     res.thrust_allocator = first.thrust_allocator

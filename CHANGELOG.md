@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.1.16] - 2021-11-28
+### Fixed
+- Fix strange compile problem in windows
+
 ## [2.1.15] - 2021-11-28
 ### Fixed
 - Fix missing pccm.Class in setup.py

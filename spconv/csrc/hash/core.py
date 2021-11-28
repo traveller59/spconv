@@ -14,9 +14,11 @@
 
 import os
 from pathlib import Path
+from typing import List
 from cumm.constants import CUMM_CPU_ONLY_BUILD
 
 import pccm
+from cumm import dtypes
 from cumm.common import (TensorView, TensorViewCPU, TensorViewHashKernel,
                          TensorViewKernel, TslRobinMap)
 from spconv.csrc.sparse.cpu_core import OMPLib
@@ -25,6 +27,32 @@ if CUMM_CPU_ONLY_BUILD:
     _member_func = pccm.member_function
 else:
     _member_func = pccm.cuda.member_function
+
+def _dispatch_ints(code: pccm.FunctionCode, ints: List[int], var: str):
+    for i, val in enumerate(ints):
+        if i == 0:
+            with code.if_(f"{var} == {val}"):
+                yield val 
+        else:
+            with code.else_if_(f"{var} == {val}"):
+                yield val 
+    with code.else_():
+        code.raw(f"""
+        TV_THROW_RT_ERR("unknown val {var}, available: {ints}")
+        """)
+
+def _dispatch(code: pccm.FunctionCode, dts: List[dtypes.DType], var: str):
+    for i, dtype in enumerate(dts):
+        if i == 0:
+            with code.if_(f"{var} == tv::DType({dtype.tv_dtype})"):
+                yield dtype 
+        else:
+            with code.else_if_(f"{var} == tv::DType({dtype.tv_dtype})"):
+                yield dtype 
+    with code.else_():
+        code.raw(f"""
+        TV_THROW_RT_ERR("unknown dtype {var}, available: {dts}")
+        """)
 
 
 class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
@@ -107,14 +135,17 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
             with code.else_():
                 code.raw(f"""
                 auto custream = reinterpret_cast<cudaStream_t>(stream);
-                tv::dispatch_int<4, 8>(keys_data.itemsize(), [&](auto IK){{
-                    constexpr int IKV = TV_DECLTYPE(IK)::value;
-                    using K = tv::hash::itemsize_to_unsigned_t<IKV>;
+                """)
+                for k_items in _dispatch_ints(code, [4, 8], "keys_data.itemsize()"):
+                    code.raw(f"""
+                    using K = tv::hash::itemsize_to_unsigned_t<{k_items}>;
                     constexpr K kEmptyKey = std::numeric_limits<K>::max();
+
                     K* key_data_ptr = reinterpret_cast<K*>(keys_data.raw_data());
-                    tv::dispatch_int<4, 8>(values_data.itemsize(), [&](auto IV){{
-                        constexpr int IVV = TV_DECLTYPE(IV)::value;
-                        using V = tv::hash::itemsize_to_unsigned_t<IVV>;
+                    """)
+                    for v_items in _dispatch_ints(code, [4, 8], "values_data.itemsize()"):
+                        code.raw(f"""
+                        using V = tv::hash::itemsize_to_unsigned_t<{v_items}>;
                         V* value_data_ptr = reinterpret_cast<V*>(values_data.raw_data());
                         using table_t =
                             tv::hash::LinearHashTableSplit<K, V, tv::hash::Murmur3Hash<K>,
@@ -122,9 +153,7 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
                         table_t table(key_data_ptr, value_data_ptr, keys_data.dim(0));
                         tv::cuda::Launch launcher(table.size(), custream);
                         launcher(tv::hash::clear_table_split<table_t>, table);
-                    }});
-                }});
-                """)
+                        """)
         return code 
 
 
@@ -174,26 +203,29 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
             with code.else_():
                 code.raw(f"""
                 auto custream = reinterpret_cast<cudaStream_t>(stream);
-                tv::dispatch_int<4, 8>(keys_data.itemsize(), [&](auto IK){{
-                    constexpr int IKV = TV_DECLTYPE(IK)::value;
-                    using K = tv::hash::itemsize_to_unsigned_t<IKV>;
+                """)
+                for k_items in _dispatch_ints(code, [4, 8], "keys_data.itemsize()"):
+                    code.raw(f"""
+                    using K = tv::hash::itemsize_to_unsigned_t<{k_items}>;
                     constexpr K kEmptyKey = std::numeric_limits<K>::max();
+
                     K* key_data_ptr = reinterpret_cast<K*>(keys_data.raw_data());
                     const K* key_ptr = reinterpret_cast<const K*>(keys.raw_data());
-                    tv::dispatch_int<4, 8>(values_data.itemsize(), [&](auto IV){{
-                        constexpr int IVV = TV_DECLTYPE(IV)::value;
-                        using V = tv::hash::itemsize_to_unsigned_t<IVV>;
+
+                    """)
+                    for v_items in _dispatch_ints(code, [4, 8], "values_data.itemsize()"):
+                        code.raw(f"""
+                        using V = tv::hash::itemsize_to_unsigned_t<{v_items}>;
                         V* value_data_ptr = reinterpret_cast<V*>(values_data.raw_data());
                         const V* value_ptr = reinterpret_cast<const V*>(values.raw_data());
+
                         using table_t =
                             tv::hash::LinearHashTableSplit<K, V, tv::hash::Murmur3Hash<K>,
                                                         kEmptyKey, false>;
                         tv::cuda::Launch launcher(N, custream);
                         table_t table(key_data_ptr, value_data_ptr, keys_data.dim(0));
                         launcher(tv::hash::insert_split<table_t>, table, key_ptr, value_ptr, size_t(N));
-                    }});
-                }});
-                """)
+                        """)
         else:
             code.raw(f"""
             TV_THROW_RT_ERR("spconv not compiled with cuda, don't support cuda");
@@ -244,17 +276,18 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
             with code.else_():
                 code.raw(f"""
                 auto custream = reinterpret_cast<cudaStream_t>(stream);
-                tv::dispatch_int<4, 8>(keys_data.itemsize(), [&](auto IK){{
-                    constexpr int IKV = TV_DECLTYPE(IK)::value;
-
-                    using K = tv::hash::itemsize_to_unsigned_t<IKV>;
+                """)
+                for k_items in _dispatch_ints(code, [4, 8], "keys_data.itemsize()"):
+                    code.raw(f"""
+                    using K = tv::hash::itemsize_to_unsigned_t<{k_items}>;
                     constexpr K kEmptyKey = std::numeric_limits<K>::max();
                     K* key_data_ptr = reinterpret_cast<K*>(keys_data.raw_data());
                     K* key_ptr = reinterpret_cast<K*>(keys.raw_data());
-                    tv::dispatch_int<4, 8>(values_data.itemsize(), [&](auto IV){{
-                        constexpr int IVV = TV_DECLTYPE(IV)::value;
 
-                        using V = tv::hash::itemsize_to_unsigned_t<IVV>;
+                    """)
+                    for v_items in _dispatch_ints(code, [4, 8], "values_data.itemsize()"):
+                        code.raw(f"""
+                        using V = tv::hash::itemsize_to_unsigned_t<{v_items}>;
                         V* value_data_ptr = reinterpret_cast<V*>(values_data.raw_data());
                         V* value_ptr = reinterpret_cast<V*>(values.raw_data());
                         using table_t =
@@ -263,9 +296,7 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
                         tv::cuda::Launch launcher(N, custream);
                         table_t table(key_data_ptr, value_data_ptr, keys_data.dim(0));
                         launcher(tv::hash::query_split<table_t>, table, key_ptr, value_ptr, is_empty_ptr, size_t(N));
-                    }});
-                }});
-                """)
+                        """)
         else:
             code.raw(f"""
             TV_THROW_RT_ERR("spconv not compiled with cuda, don't support cuda");
@@ -302,15 +333,19 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
                 code.raw(f"""
                 TV_ASSERT_RT_ERR(count.device() == 0, "count must be cuda");
                 auto custream = reinterpret_cast<cudaStream_t>(stream);
-                tv::dispatch_int<4, 8>(keys_data.itemsize(), [&](auto IK){{
-                    constexpr int IKV = TV_DECLTYPE(IK)::value;
-                    using K = tv::hash::itemsize_to_unsigned_t<IKV>;
+                """)
+                for k_items in _dispatch_ints(code, [4, 8], "keys_data.itemsize()"):
+                    code.raw(f"""
+                    using K = tv::hash::itemsize_to_unsigned_t<{k_items}>;
                     constexpr K kEmptyKey = std::numeric_limits<K>::max();
                     auto count_ptr = count.data_ptr<K>();
 
                     K* key_data_ptr = reinterpret_cast<K*>(keys_data.raw_data());
-                    tv::dispatch<int32_t, int64_t, uint32_t, uint64_t>(values_data.dtype(), [&](auto IV){{
-                        using V = TV_DECLTYPE(IV);
+                    """)
+                    val_dtypes = [dtypes.int32, dtypes.int64, dtypes.uint32, dtypes.uint64]
+                    for v_dtype in _dispatch(code, val_dtypes, "values_data.dtype()"):
+                        code.raw(f"""
+                        using V = {v_dtype};
                         V* value_data_ptr = reinterpret_cast<V*>(values_data.raw_data());
                         using table_t =
                             tv::hash::LinearHashTableSplit<K, V, tv::hash::Murmur3Hash<K>,
@@ -318,9 +353,7 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
                         table_t table(key_data_ptr, value_data_ptr, keys_data.dim(0));
                         tv::cuda::Launch launcher(table.size(), custream);
                         launcher(tv::hash::assign_arange_split<table_t, K>, table, count_ptr);
-                    }});
-                }});
-                """)
+                        """)
         else:
             code.raw(f"""
             TV_THROW_RT_ERR("spconv not compiled with cuda, don't support cuda");
@@ -389,20 +422,20 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
             with code.else_():
                 code.raw(f"""
                 auto custream = reinterpret_cast<cudaStream_t>(stream);
-                tv::dispatch_int<4, 8>(keys_data.itemsize(), [&](auto IK){{
-                    constexpr int IKV = TV_DECLTYPE(IK)::value;
-
-                    using K = tv::hash::itemsize_to_unsigned_t<IKV>;
+                """)
+                for k_items in _dispatch_ints(code, [4, 8], "keys_data.itemsize()"):
+                    code.raw(f"""
+                    using K = tv::hash::itemsize_to_unsigned_t<{k_items}>;
                     auto count_ptr = count.data_ptr<K>();
 
                     constexpr K kEmptyKey = std::numeric_limits<K>::max();
                     K* key_data_ptr = reinterpret_cast<K*>(keys_data.raw_data());
                     K* key_ptr = reinterpret_cast<K*>(keys.raw_data());
-                    tv::dispatch_int<4, 8>(values_data.itemsize(), [&](auto IV){{
-                        constexpr int IVV = TV_DECLTYPE(IV)::value;
 
-                        using V = tv::hash::itemsize_to_unsigned_t<IVV>;
-
+                    """)
+                    for v_items in _dispatch_ints(code, [4, 8], "values_data.itemsize()"):
+                        code.raw(f"""
+                        using V = tv::hash::itemsize_to_unsigned_t<{v_items}>;
                         V* value_data_ptr = reinterpret_cast<V*>(values_data.raw_data());
                         V* value_ptr = reinterpret_cast<V*>(values.raw_data());
                         using table_t =
@@ -411,9 +444,7 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
                         tv::cuda::Launch launcher(N, custream);
                         table_t table(key_data_ptr, value_data_ptr, keys_data.dim(0));
                         launcher(tv::hash::iterate_table_split<table_t, K>, table, key_ptr, value_ptr, size_t(N), count_ptr);
-                    }});
-                }});
-                """)
+                        """)
         else:
             code.raw(f"""
             TV_THROW_RT_ERR("spconv not compiled with cuda, don't support cuda");
