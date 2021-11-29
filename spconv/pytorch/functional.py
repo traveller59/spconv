@@ -29,6 +29,7 @@ from pathlib import Path
 from spconv.pytorch.hash import HashTable
 from cumm.gemm.layout import to_stride
 from typing import List
+from functools import reduce 
 
 _MAX_INT32 = 2147483647
 
@@ -365,7 +366,7 @@ indice_maxpool_implicit_gemm = SparseMaxPoolImplicitGemmFunction.apply
 def _indice_to_scalar(indices: torch.Tensor, shape: List[int]):
     assert indices.shape[1] == len(shape)
     stride = to_stride(np.array(shape, dtype=np.int64))
-    scalar_inds = indices[:, -1]
+    scalar_inds = indices[:, -1].clone()
     for i in range(len(shape) - 1):
         scalar_inds += stride[i] * indices[:, i]
     return scalar_inds.contiguous()
@@ -426,17 +427,34 @@ def sparse_add_hash_based(*tens: SparseConvTensor):
     res.thrust_allocator = first.thrust_allocator
     return res 
 
-def sparse_add(a: SparseConvTensor, b: SparseConvTensor):
-    assert a.spatial_shape == b.spatial_shape
-    assert a.batch_size == b.batch_size
-    assert a.features.shape[1] == a.features.shape[1]
-    res_shape = [a.batch_size, *a.spatial_shape, a.features.shape[1]]
+def sparse_add(*tens: SparseConvTensor):
+    """reuse torch.sparse. the internal is sort + unique 
+    """
+    max_num_indices = 0
+    max_num_indices_idx = 0
+    ten_ths: List[torch.Tensor] = []
+    first = tens[0]
+    res_shape = [first.batch_size, *first.spatial_shape, first.features.shape[1]]
 
-    a_th = torch.sparse_coo_tensor(a.indices.T, a.features, res_shape, requires_grad=True)
-    b_th = torch.sparse_coo_tensor(b.indices.T, b.features, res_shape, requires_grad=True)
-
-    c_th = (a_th + b_th).coalesce()
+    for i, ten in enumerate(tens):
+        assert ten.spatial_shape == tens[0].spatial_shape
+        assert ten.batch_size == tens[0].batch_size
+        assert ten.features.shape[1] == tens[0].features.shape[1]
+        if max_num_indices < ten.features.shape[0]:
+            max_num_indices_idx = i
+            max_num_indices = ten.features.shape[0]
+        ten_ths.append(torch.sparse_coo_tensor(ten.indices.T, ten.features, res_shape, requires_grad=True))
+    
+    c_th = reduce(lambda x, y: x + y, ten_ths).coalesce()
     c_th_inds = c_th.indices().T.contiguous().int()
     c_th_values = c_th.values()
     assert c_th_values.is_contiguous()
-    return SparseConvTensor(c_th_values, c_th_inds, a.spatial_shape, a.batch_size)
+
+    res = SparseConvTensor(c_th_values, c_th_inds, first.spatial_shape, first.batch_size, 
+        benchmark=first.benchmark)
+    if c_th_values.shape[0] == max_num_indices:
+        res.indice_dict = tens[max_num_indices_idx].indice_dict
+    res.benchmark_record = first.benchmark_record
+    res._timer = first._timer 
+    res.thrust_allocator = first.thrust_allocator
+    return res 

@@ -54,6 +54,33 @@ def _dispatch(code: pccm.FunctionCode, dts: List[dtypes.DType], var: str):
         TV_THROW_RT_ERR("unknown dtype {var}, available: {dts}")
         """)
 
+class HashTableKernel(pccm.Class):
+    def __init__(self):
+        super().__init__()
+        self.add_dependency(TensorView, TensorViewHashKernel, TensorViewKernel)
+
+    @pccm.cuda.cuda_global_function
+    def insert_exist_keys_kernel(self):
+        code = pccm.FunctionCode()
+        code.targ("THashTableSplit")
+        code.arg("table", "THashTableSplit")
+        code.arg("key_ptr", "const typename THashTableSplit::key_type *__restrict__")
+        code.arg("value_ptr", "const typename THashTableSplit::mapped_type *__restrict__")
+        code.arg("is_empty_ptr", "uint8_t*")
+        code.arg("size", "size_t")
+
+        code.raw(f"""
+        auto value_data = table.value_ptr();
+        for (size_t i : tv::KernelLoopX<size_t>(size)){{
+            auto key = key_ptr[i];
+            auto offset = table.lookup_offset(key);
+            is_empty_ptr[i] = offset == -1;
+            if (offset != -1){{
+                value_data[offset] = value_ptr[i];
+            }}
+        }}
+        """)
+        return code 
 
 class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
     """a simple hashtable for both cpu and cuda.
@@ -451,6 +478,76 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
             """)
         return code 
 
+    @pccm.pybind.mark 
+    @_member_func
+    def insert_exist_keys(self):
+        """insert v of given k if k exists. won't insert any new key.
+        """
+        code = pccm.FunctionCode()
+        if not CUMM_CPU_ONLY_BUILD:
+            code.add_dependency(TensorViewHashKernel, HashTableKernel)
+        code.arg("keys", "tv::Tensor")
+        code.arg("values", "tv::Tensor")
+        code.arg("is_empty", "tv::Tensor")
+
+        code.arg("stream", "std::uintptr_t")
+
+        code.raw(f"""
+        auto N = keys.dim(0);
+        TV_ASSERT_RT_ERR(keys.itemsize() == key_itemsize_, "keys itemsize not equal to", key_itemsize_);
+        TV_ASSERT_RT_ERR(values.itemsize() == value_itemsize_, "values itemsize not equal to", value_itemsize_);
+        TV_ASSERT_RT_ERR(N == values.dim(0) && is_empty.dim(0) == N, "number of key and value must same");
+        auto is_empty_ptr = is_empty.data_ptr<uint8_t>();
+        """)
+        with code.if_("is_cpu"):
+            map_name = "cpu_map"
+            # here it's safe to use omp in query.
+            for k_type, v_type in self.cpu_map_storage_select("key_itemsize_", "value_itemsize_", map_name, code):
+                code.raw(f"""
+                auto k_ptr = reinterpret_cast<{k_type}*>(keys.raw_data());
+                auto v_ptr = reinterpret_cast<{v_type}*>(values.raw_data());
+                tv::kernel_1d_cpu(keys.device(), N, [&](size_t begin, size_t end, size_t step){{
+                    bool emp;
+                    for (size_t i = begin; i < end; i += step){{
+                        auto iter = {map_name}.find(k_ptr[i]);
+                        emp = iter == {map_name}.end();
+                        if (!emp){{
+                            iter.value() = v_ptr[i];
+                        }}
+                        is_empty_ptr[i] = uint8_t(emp);
+                    }}
+                }});
+                """)
+        if not CUMM_CPU_ONLY_BUILD:
+            with code.else_():
+                code.raw(f"""
+                auto custream = reinterpret_cast<cudaStream_t>(stream);
+                """)
+                for k_items in _dispatch_ints(code, [4, 8], "keys_data.itemsize()"):
+                    code.raw(f"""
+                    using K = tv::hash::itemsize_to_unsigned_t<{k_items}>;
+                    constexpr K kEmptyKey = std::numeric_limits<K>::max();
+                    K* key_data_ptr = reinterpret_cast<K*>(keys_data.raw_data());
+                    const K* key_ptr = reinterpret_cast<const K*>(keys.raw_data());
+
+                    """)
+                    for v_items in _dispatch_ints(code, [4, 8], "values_data.itemsize()"):
+                        code.raw(f"""
+                        using V = tv::hash::itemsize_to_unsigned_t<{v_items}>;
+                        V* value_data_ptr = reinterpret_cast<V*>(values_data.raw_data());
+                        const V* value_ptr = reinterpret_cast<const V*>(values.raw_data());
+                        using table_t =
+                            tv::hash::LinearHashTableSplit<K, V, tv::hash::Murmur3Hash<K>,
+                                                        kEmptyKey, false>;
+                        table_t table(key_data_ptr, value_data_ptr, keys_data.dim(0));
+                        tv::cuda::Launch launcher(N, custream);
+                        launcher(insert_exist_keys_kernel<table_t>, table, key_ptr, value_ptr, is_empty_ptr, size_t(N));
+                        """)
+        else:
+            code.raw(f"""
+            TV_THROW_RT_ERR("spconv not compiled with cuda, don't support cuda");
+            """)
+        return code 
 
     def cpu_map_storage_select(self, k_itemsize: str, v_itemsize: str, res_var: str, code: pccm.FunctionCode):
         different_kvs = [(4, 4), (4, 8), (8, 4), (8, 8)]

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.17] - 2021-11-29
+### Fixed
+- Fix a bug in sparse add.
+### Added
+- Add more wrong usage check
+- Add insert_exist_keys for hash table
+
 ## [2.1.16] - 2021-11-28
 ### Fixed
 - Fix strange compile problem in windows

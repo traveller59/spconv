@@ -16,6 +16,47 @@
 
 # Usage
 
+## Short API description
+
+```Python
+import spconv.pytorch as spconv
+from spconv.pytorch import functional as Fsp
+from torch import nn
+from spconv.pytorch.utils import PointToVoxel
+from spconv.pytorch.hash import HashTable
+```
+
+| Layer APIs                         | Common Usage             |            Dense Version    |Note    |
+|----------------------------------- |:------------------------:|----------------------------:|----------------------------:| 
+| ```spconv.SparseConv3d```          | Downsample               | ```nn.Conv3d```             | Use ```indice_key``` to save data for inverse |
+| ```spconv.SubMConv3d```            | Convolution              | N/A                         | Use ```indice_key``` to save data for reuse |
+| ```spconv.SparseInverseConv3d```   | Upsample                 |  N/A                        | Use pre-saved ```indice_key``` to upsample |
+| ```spconv.SparseConvTranspose3d``` | Upsample (don't use this)|  ```nn.ConvTranspose3d```   | VERY SLOW and CAN'T RECOVER ORIGIN POINT CLOUD |
+| ```spconv.SparseMaxPool3d```       | Downsample               |  ```nn.MaxPool3d```         | Use ```indice_key``` to save data for inverse |
+| ```spconv.SparseSequential```       | Container               |  ```nn.Sequential```         | support layers above and ```nn.ReLU, nn.BatchNorm, ...```|
+
+
+| Functional APIs                    | Usage                    |
+|----------------------------------- |:------------------------:|
+| ```Fsp.sparse_add```               | Add sparse tensors with same shape and different indices    |
+
+| Input APIs                         | Usage                    |
+|----------------------------------- |:------------------------:|
+| ```PointToVoxel```                 | point cloud to voxels    |
+
+| Misc APIs                         | Usage                    |
+|----------------------------------- |:------------------------:|
+| ```HashTable```                   | hash table, one-slot     |
+
+| Layer APIs                         | [torchsparse](https://github.com/mit-han-lab/torchsparse)             |    [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine)             |   
+|----------------------------------- |:------------------------:|:------------------------:|
+| ```spconv.SparseConv3d```          | ```Conv3d(stride!=1, transpose=False)```               |```MinkowskiConvolution(stride!=1)```| 
+| ```spconv.SubMConv3d```            | ```Conv3d(stride=1, transpose=False)```              | ```MinkowskiConvolution(stride=1)```| 
+| ```spconv.SparseInverseConv3d```   | ```Conv3d(stride!=1, transpose=True)```                 |```MinkowskiConvolutionTranspose```| 
+| ```spconv.SparseConvTranspose3d``` | N/A                |```MinkowskiConvolutionTranspose```| 
+| ```spconv.SparseMaxPool3d```       | N/A               | ```MinkowskiMaxPooling```| 
+
+
 ## Concept
 
 * Sparse Conv Tensor: like hybird [torch.sparse_coo_tensor](https://pytorch.org/docs/stable/sparse.html#sparse-coo-docs) but only have two difference: 1. SparseConvTensor only have one dense dim, 2. indice of SparseConvTensor is transposed. see torch doc for more details.
@@ -101,6 +142,29 @@ class ExampleNet(nn.Module):
         x = spconv.SparseConvTensor(features, coors, self.shape, batch_size)
         return self.net(x)
 ```
+
+### Sparse Add
+
+In sematic segmentation network, we may use conv1x3, 3x1 and 3x3 in a block, but it's impossible to sum result from these layers because regular add requires same indices.
+
+spconv >= 2.1.17 provide a operation to add sparse tensors with different indices (shape must same), but with limits:
+
+```Python
+from spconv.pytorch import functional as Fsp
+res_1x3 = conv1x3(x)
+res_3x1 = conv3x1(x)
+# WRONG
+# because we can't "inverse" this operation
+wrong_usage_cant_inverse = Fsp.sparse_add(res_1x3, res_3x1)
+
+# CORRECT
+# res_3x3 already contains all indices of res_1x3 and res_3x1, 
+# so output spatial structure isn't changed, we can "inverse" back.
+res_3x3 = conv3x3(x)
+correct = Fsp.sparse_add(res_1x3, res_3x1, res_3x3)
+```
+
+If you use a network without ```SparseInverseConv```, limits above aren't exists, the only drawback of ```sparse_add``` is that it run slower than simple aligned add.
 
 ### Fast Mixed Percision Training
 

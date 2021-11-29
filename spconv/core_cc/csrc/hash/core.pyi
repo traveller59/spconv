@@ -74,3 +74,14 @@ class HashTable:
             stream: 
         """
         ...
+    def insert_exist_keys(self, keys: Tensor, values: Tensor, is_empty: Tensor, stream: int) -> None: 
+        """
+        insert v of given k if k exists. won't insert any new key.
+                
+        Args:
+            keys: 
+            values: 
+            is_empty: 
+            stream: 
+        """
+        ...

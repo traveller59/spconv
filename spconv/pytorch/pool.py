@@ -26,7 +26,7 @@ from spconv import pytorch as spconv
 from spconv.core import ConvAlgo
 from spconv.pytorch import functional as Fsp
 from spconv.pytorch import ops
-from spconv.pytorch.core import IndiceData, ImplicitGemmIndiceData
+from spconv.pytorch.core import IndiceData, ImplicitGemmIndiceData, expand_nd
 from spconv.pytorch.modules import SparseModule
 from spconv.cppconstants import CPU_ONLY_BUILD
 from spconv.utils import nullcontext
@@ -36,7 +36,7 @@ class SparseMaxPool(SparseModule):
     def __init__(self,
                  ndim,
                  kernel_size: Union[int, List[int], Tuple[int, ...]] = 3,
-                 stride: Union[int, List[int], Tuple[int, ...]] = 1,
+                 stride: Optional[Union[int, List[int], Tuple[int, ...]]] = 1,
                  padding: Union[int, List[int], Tuple[int, ...]] = 0,
                  dilation: Union[int, List[int], Tuple[int, ...]] = 1,
                  indice_key: Optional[str] = None,
@@ -44,22 +44,15 @@ class SparseMaxPool(SparseModule):
                  algo: Optional[ConvAlgo] = None,
                  name=None):
         super(SparseMaxPool, self).__init__(name=name)
-        if not isinstance(kernel_size, (list, tuple)):
-            kernel_size = [kernel_size] * ndim
-        if stride is None:
-            stride = kernel_size.copy()
-        if not isinstance(stride, (list, tuple)):
-            stride = [stride] * ndim
-        if not isinstance(padding, (list, tuple)):
-            padding = [padding] * ndim
-        if not isinstance(dilation, (list, tuple)):
-            dilation = [dilation] * ndim
         self.ndim = ndim
-        self.kernel_size = kernel_size
-        self.stride = stride
-        self.padding = padding
+        self.kernel_size = expand_nd(ndim, kernel_size)
+        if stride is None:
+            self.stride = self.kernel_size.copy()
+        else:
+            self.stride = expand_nd(ndim, stride)
+        self.padding = expand_nd(ndim, padding)
         self.subm = subm
-        self.dilation = dilation
+        self.dilation = expand_nd(ndim, dilation)
         self.indice_key = indice_key
         kv = int(np.prod(kernel_size))
         if algo is None:
@@ -155,7 +148,11 @@ class SparseMaxPool(SparseModule):
                                                  spatial_shape,
                                                  out_spatial_shape,
                                                  is_subm=False,
-                                                 algo=self.algo)
+                                                 algo=self.algo,
+                                                 ksize=self.kernel_size,
+                                                 stride=self.stride,
+                                                 padding=self.padding,
+                                                 dilation=self.dilation)
                         indice_dict[self.indice_key] = indice_data
                     else:
                         raise ValueError(
@@ -204,7 +201,11 @@ class SparseMaxPool(SparseModule):
                         is_subm=self.subm,
                         spatial_shape=spatial_shape,
                         out_spatial_shape=out_spatial_shape,
-                        algo=self.algo)
+                        algo=self.algo,
+                        ksize=self.kernel_size,
+                        stride=self.stride,
+                        padding=self.padding,
+                        dilation=self.dilation)
                     msg = f"your indice key {self.indice_key} already exists in this sparse tensor."
                     assert self.indice_key not in indice_dict, msg
                     indice_dict[self.indice_key] = indice_data
