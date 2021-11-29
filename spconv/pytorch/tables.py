@@ -19,37 +19,68 @@ from torch.autograd import Function
 from spconv.pytorch.modules import SparseModule
 from spconv.pytorch.core import SparseConvTensor
 from typing import List
+from spconv.pytorch import functional as F
 
 
-class JoinTable(SparseModule):  # Module):
+class JoinTable(SparseModule):
     def forward(self, input: List[SparseConvTensor]):
+        msg = "you can't use JoinTable in two sptensor with different indices."
+
+        for ten in input:
+            assert ten.spatial_shape == input[0].spatial_shape, msg
+            assert ten.batch_size == input[0].batch_size, msg
+            assert ten.features.shape[1] == input[0].features.shape[1], msg
+            assert ten.indices.shape[0] == input[0].indices.shape[0], msg
         output = SparseConvTensor(torch.cat([i.features for i in input], 1),
                                   input[0].indices, input[0].spatial_shape,
                                   input[0].batch_size, input[0].grid,
                                   input[0].voxel_num, input[0].indice_dict)
         output.benchmark_record = input[1].benchmark_record
         output.thrust_allocator = input[1].thrust_allocator
+        output._timer = input[1]._timer
+
         return output
 
     def input_spatial_size(self, out_size):
         return out_size
 
 
-class AddTable(SparseModule):  # Module):
+class AddTable(SparseModule): 
     def forward(self, input: List[SparseConvTensor]):
+        msg = "you can't use AddTable in two sptensor with different indices. use AddTableMisaligned instead."
+        for ten in input:
+            assert ten.spatial_shape == input[0].spatial_shape, msg
+            assert ten.batch_size == input[0].batch_size, msg
+            assert ten.features.shape[1] == input[0].features.shape[1], msg
+            assert ten.indices.shape[0] == input[0].indices.shape[0], msg
+
         output = SparseConvTensor(sum([i.features for i in input]),
                                   input[0].indices, input[0].spatial_shape,
                                   input[0].batch_size, input[0].grid,
                                   input[0].voxel_num, input[0].indice_dict)
         output.benchmark_record = input[1].benchmark_record
         output.thrust_allocator = input[1].thrust_allocator
+        output._timer = input[1]._timer
+
         return output
 
     def input_spatial_size(self, out_size):
         return out_size
 
+class AddTableMisaligned(SparseModule):
+    """add sptensors with same shape but different indices.
+    slower than AddTable.
+    WARNING: you shouldn't use this in segmentation network such as U-Net
+    because add misaligned tensors will clear downsample indices and make 
+    SparseInverseConvXd not working.
+    """
+    def forward(self, input: List[SparseConvTensor]):
+        return F.sparse_add_hash_based(*input)
 
-class ConcatTable(SparseModule):  # Module):
+    def input_spatial_size(self, out_size):
+        return out_size
+
+class ConcatTable(SparseModule):
     def forward(self, input):
         return [module(input) for module in self._modules.values()]
 

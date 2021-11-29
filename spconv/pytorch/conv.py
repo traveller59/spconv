@@ -14,6 +14,7 @@
 
 import math
 import time
+import sys
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -25,10 +26,11 @@ from torch.nn.parameter import Parameter
 from spconv import pytorch as spconv
 from spconv import SPCONV_VERSION_NUMBERS
 from spconv.core import ConvAlgo
+from spconv.debug_utils import spconv_save_debug_data
 from spconv.pytorch import functional as Fsp
 from spconv.pytorch import ops
 from spconv.cppconstants import CPU_ONLY_BUILD
-from spconv.pytorch.core import IndiceData, SparseConvTensor, ImplicitGemmIndiceData
+from spconv.pytorch.core import IndiceData, SparseConvTensor, ImplicitGemmIndiceData, expand_nd
 from spconv.pytorch.modules import SparseModule
 from spconv.constants import SAVED_WEIGHT_LAYOUT, ALL_WEIGHT_IS_KRSC
 from spconv.utils import nullcontext
@@ -109,32 +111,22 @@ class SparseConvolution(SparseModule):
                  name=None):
         super(SparseConvolution, self).__init__(name=name)
         assert groups == 1, "don't support groups for now"
-        if not isinstance(kernel_size, (list, tuple)):
-            kernel_size = [kernel_size] * ndim
-        if not isinstance(stride, (list, tuple)):
-            stride = [stride] * ndim
-        if not isinstance(padding, (list, tuple)):
-            padding = [padding] * ndim
-        if not isinstance(dilation, (list, tuple)):
-            dilation = [dilation] * ndim
-        if not isinstance(output_padding, (list, tuple)):
-            output_padding = [output_padding] * ndim
         self.ndim = ndim
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.kernel_size = kernel_size
+        self.kernel_size = expand_nd(ndim, kernel_size)
         kv = int(np.prod(kernel_size))
         kv_stride = int(np.prod(stride))
         self.conv1x1 = kv == 1
         # TODO we should deprecate support for ksize == 1 but stride != 1.
         if not subm:
             self.conv1x1 &= kv_stride == 1
-        self.stride = stride
-        self.padding = padding
-        self.dilation = dilation
+        self.stride = expand_nd(ndim, stride)
+        self.padding = expand_nd(ndim, padding)
+        self.dilation = expand_nd(ndim, dilation)
         self.transposed = transposed
         self.inverse = inverse
-        self.output_padding = output_padding
+        self.output_padding = expand_nd(ndim, output_padding)
         self.groups = groups
         self.subm = subm
         self.indice_key = indice_key
@@ -156,15 +148,15 @@ class SparseConvolution(SparseModule):
             if FILTER_HWIO:
                 # RSCK
                 self.weight = Parameter(
-                    torch.Tensor(*kernel_size, in_channels, out_channels))
+                    torch.Tensor(*self.kernel_size, in_channels, out_channels))
             else:
                 # RSKC
                 self.weight = Parameter(
-                    torch.Tensor(*kernel_size, out_channels, in_channels))
+                    torch.Tensor(*self.kernel_size, out_channels, in_channels))
         else:
             # KRSC
             self.weight = Parameter(
-                torch.Tensor(out_channels, *kernel_size, in_channels))
+                torch.Tensor(out_channels, *self.kernel_size, in_channels))
 
         if bias:
             self.bias = Parameter(torch.Tensor(out_channels))
@@ -338,11 +330,21 @@ class SparseConvolution(SparseModule):
                         if input.benchmark:
                             torch.cuda.synchronize()
                             t = time.time()
-                        outids, indice_pairs, indice_pair_num = ops.get_indice_pairs(
-                            indices, batch_size, spatial_shape, algo,
-                            self.kernel_size, self.stride, self.padding,
-                            self.dilation, self.output_padding, self.subm,
-                            self.transposed)
+                        try:
+                            outids, indice_pairs, indice_pair_num = ops.get_indice_pairs(
+                                indices, batch_size, spatial_shape, algo,
+                                self.kernel_size, self.stride, self.padding,
+                                self.dilation, self.output_padding, self.subm,
+                                self.transposed)
+                        except Exception as e:
+                            msg = "[Exception|native_pair]"
+                            msg += f"indices={indices.shape},bs={batch_size},ss={spatial_shape},"
+                            msg += f"algo={algo},ksize={self.kernel_size},stride={self.stride},"
+                            msg += f"padding={self.padding},dilation={self.dilation},subm={self.subm},"
+                            msg += f"transpose={self.transposed}"
+                            print(msg, file=sys.stderr)
+                            spconv_save_debug_data(indices)
+                            raise e 
                         if input.benchmark:
                             torch.cuda.synchronize()
                             interval = time.time() - t
@@ -356,7 +358,11 @@ class SparseConvolution(SparseModule):
                                                  spatial_shape,
                                                  out_spatial_shape,
                                                  is_subm=self.subm,
-                                                 algo=algo)
+                                                 algo=algo,
+                                                 ksize=self.kernel_size,
+                                                 stride=self.stride,
+                                                 padding=self.padding,
+                                                 dilation=self.dilation)
                         if self.indice_key is not None:
                             msg = f"your indice key {self.indice_key} already exists in this sparse tensor."
                             assert self.indice_key not in indice_dict, msg
@@ -399,10 +405,7 @@ class SparseConvolution(SparseModule):
                     mask_argsort_bwd_splits = datas.mask_argsort_fwd_splits
                     masks = datas.masks
                     out_spatial_shape = datas.spatial_shape
-                    assert datas.pair_fwd.shape[0] == np.prod(
-                        self.kernel_size
-                    ), "inverse conv must have same kernel size as its couple conv"
-
+                    assert datas.ksize == self.kernel_size, "inverse conv must have same kernel size as its couple conv"
                 else:
                     if self.indice_key is not None and datas is not None:
                         outids = datas.out_indices
@@ -413,25 +416,50 @@ class SparseConvolution(SparseModule):
                         mask_argsort_fwd_splits = datas.mask_argsort_fwd_splits
                         mask_argsort_bwd_splits = datas.mask_argsort_bwd_splits
                         masks = datas.masks
+                        assert datas.is_subm, "only support reuse subm indices"
+                        if self.kernel_size != datas.ksize:
+                            raise ValueError(f"subm with same indice_key must have same kernel"
+                                f" size, expect {datas.ksize}, this layer {self.kernel_size}")
+                        if self.dilation != datas.dilation:
+                            raise ValueError(f"subm with same indice_key must have same dilation"
+                                f", expect {datas.dilation}, this layer {self.dilation}")
+                        if input.spatial_shape != datas.spatial_shape:
+                            raise ValueError(f"subm with same indice_key must have same spatial structure"
+                                f", expect {datas.spatial_shape}, input {spatial_shape}")
+                        if input.indices.shape[0] != datas.indices.shape[0]:
+                            raise ValueError(f"subm with same indice_key must have same num of indices"
+                                f", expect {datas.indices.shape[0]}, input {input.indices.shape[0]}")
                     else:
+
                         with input._timer.namespace("gen_pairs"):
                             # we need to gen bwd indices for regular conv
                             # because it may be inversed.
-                            res = ops.get_indice_pairs_implicit_gemm(
-                                indices,
-                                batch_size,
-                                spatial_shape,
-                                algo,
-                                ksize=self.kernel_size,
-                                stride=self.stride,
-                                padding=self.padding,
-                                dilation=self.dilation,
-                                out_padding=self.output_padding,
-                                subm=self.subm,
-                                transpose=self.transposed,
-                                is_train=(not self.subm) or self.training,
-                                alloc=input.thrust_allocator,
-                                timer=input._timer)
+                            try:
+                                res = ops.get_indice_pairs_implicit_gemm(
+                                    indices,
+                                    batch_size,
+                                    spatial_shape,
+                                    algo,
+                                    ksize=self.kernel_size,
+                                    stride=self.stride,
+                                    padding=self.padding,
+                                    dilation=self.dilation,
+                                    out_padding=self.output_padding,
+                                    subm=self.subm,
+                                    transpose=self.transposed,
+                                    is_train=(not self.subm) or self.training,
+                                    alloc=input.thrust_allocator,
+                                    timer=input._timer)
+                            except Exception as e:
+                                msg = "[Exception|implicit_gemm_pair]"
+                                msg += f"indices={indices.shape},bs={batch_size},ss={spatial_shape},"
+                                msg += f"algo={algo},ksize={self.kernel_size},stride={self.stride},"
+                                msg += f"padding={self.padding},dilation={self.dilation},subm={self.subm},"
+                                msg += f"transpose={self.transposed}"
+                                print(msg, file=sys.stderr)
+                                spconv_save_debug_data(indices)
+                                raise e 
+
                         outids = res[0]
                         num_inds_per_loc = res[1]
                         pair_fwd = res[2]
@@ -455,7 +483,11 @@ class SparseConvolution(SparseModule):
                                 is_subm=self.subm,
                                 spatial_shape=spatial_shape,
                                 out_spatial_shape=out_spatial_shape,
-                                algo=algo)
+                                algo=algo,
+                                ksize=self.kernel_size,
+                                stride=self.stride,
+                                padding=self.padding,
+                                dilation=self.dilation)
                             msg = f"your indice key {self.indice_key} already exists in this sparse tensor."
                             assert self.indice_key not in indice_dict, msg
                             indice_dict[self.indice_key] = indice_data

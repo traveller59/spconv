@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from spconv.pytorch.core import SparseConvTensor
 from spconv.pytorch import functional, ops
 from spconv.pytorch.conv import (SparseConv1d, SparseConv2d, SparseConv3d,
                                  SparseConv4d, SparseConvTranspose1d,
@@ -11,7 +12,6 @@ from spconv.pytorch.conv import (SparseConv1d, SparseConv2d, SparseConv3d,
                                  SparseInverseConv2d, SparseInverseConv3d,
                                  SparseInverseConv4d, SubMConv1d, SubMConv2d,
                                  SubMConv3d, SubMConv4d)
-from spconv.pytorch.core import SparseConvTensor
 from spconv.pytorch.identity import Identity
 from spconv.pytorch.modules import (SparseModule, SparseSequential,
                                     assign_name_for_sparse_modules)

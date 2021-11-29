@@ -56,6 +56,9 @@ def torch_tensor_to_tv(ten: torch.Tensor,
             return tv.from_blob(ptr, shape, dtype, tv_device)
     return tv.from_blob_strided(ptr, shape, stride, dtype, tv_device)
 
+def torch_tensors_to_tv(*tens: torch.Tensor):
+    return (torch_tensor_to_tv(t) for t in tens)
+
 
 def get_current_stream():
     return torch.cuda.current_stream().cuda_stream

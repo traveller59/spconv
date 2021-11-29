@@ -156,6 +156,9 @@ if disable_jit is not None and disable_jit == "1":
     from cumm.conv.main import ConvMainUnitTest
     from cumm.constants import CUMM_CPU_ONLY_BUILD
     from spconv.csrc.sparse.all import SpconvOps
+    from spconv.csrc.utils import BoxOps
+    from spconv.csrc.hash.core import HashTable
+
     cu = GemmMainUnitTest(SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS)
     convcu = ConvMainUnitTest(IMPLGEMM_SIMT_PARAMS + IMPLGEMM_VOLTA_PARAMS + IMPLGEMM_TURING_PARAMS)
     convcu.namespace = "cumm.conv.main"
@@ -168,9 +171,9 @@ if disable_jit is not None and disable_jit == "1":
             std = "c++14" 
         else:
             std = "c++17"
-    cus = [cu, convcu, SpconvOps()]
+    cus = [cu, convcu, SpconvOps(), BoxOps(), HashTable()]
     if CUMM_CPU_ONLY_BUILD:
-        cus = [SpconvOps()]
+        cus = [SpconvOps(), BoxOps(), HashTable()]
     ext_modules: List[Extension] = [
         PCCMExtension(cus,
                       "spconv/core_cc",

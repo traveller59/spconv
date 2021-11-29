@@ -22,6 +22,7 @@ import numpy as np
 import spconv
 from spconv.core import AlgoHint, ConvAlgo
 from typing import List, Optional, Union
+from spconv.pytorch.core import ThrustSortAllocator
 from spconv.pytorch.cppcore import torch_tensor_to_tv, get_current_stream
 from spconv.core_cc.csrc.sparse.all import SpconvOps
 import spconv.core_cc as _ext
@@ -41,24 +42,6 @@ from cumm.gemm import codeops
 from spconv.tools import CUDAKernelTimer
 
 DEBUG = False
-
-
-class ThrustSortAllocator:
-    def __init__(self, device: torch.device) -> None:
-        super().__init__()
-        self.alloced_objs = {}
-
-        self.device = device
-
-    def alloc(self, n: int):
-        if n in self.alloced_objs:
-            return self.alloced_objs[n].data_ptr()
-        for n_cur, ten in self.alloced_objs.items():
-            if n < n_cur:
-                return ten.data_ptr()
-        ten = torch.empty([n], dtype=torch.uint8, device=self.device)
-        self.alloced_objs[n] = ten
-        return ten.data_ptr()
 
 
 def get_conv_output_size(input_size, kernel_size, stride, padding, dilation):
@@ -1531,3 +1514,4 @@ def indice_maxpool_implicit_gemm_backward(features, out_features, out_bp,
                                              out_bp_tv, din_tv,
                                              indice_pairs_tv, stream)
     return din
+

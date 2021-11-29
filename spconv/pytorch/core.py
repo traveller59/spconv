@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 from spconv.core import ConvAlgo
 from spconv.pytorch.constants import PYTORCH_VERSION
-from spconv.pytorch.ops import ThrustSortAllocator
 from spconv.tools import CUDAKernelTimer
 
 if PYTORCH_VERSION >= [1, 8, 0]:
@@ -39,9 +38,28 @@ else:
         pass
 
 
+class ThrustSortAllocator:
+    def __init__(self, device: torch.device) -> None:
+        super().__init__()
+        self.alloced_objs = {}
+
+        self.device = device
+
+    def alloc(self, n: int):
+        if n in self.alloced_objs:
+            return self.alloced_objs[n].data_ptr()
+        for n_cur, ten in self.alloced_objs.items():
+            if n < n_cur:
+                return ten.data_ptr()
+        ten = torch.empty([n], dtype=torch.uint8, device=self.device)
+        self.alloced_objs[n] = ten
+        return ten.data_ptr()
+
+
 class IndiceData(object):
     def __init__(self, out_indices, indices, indice_pairs, indice_pair_num,
-                 spatial_shape, out_spatial_shape, is_subm: bool, algo: ConvAlgo):
+                 spatial_shape, out_spatial_shape, is_subm: bool, algo: ConvAlgo,
+                 ksize: List[int], stride: List[int], dilation: List[int], padding: List[int]):
         self.out_indices = out_indices
         self.indices = indices
         self.indice_pairs = indice_pairs
@@ -50,6 +68,10 @@ class IndiceData(object):
         self.out_spatial_shape = out_spatial_shape
         self.is_subm = is_subm
         self.algo = algo
+        self.ksize = ksize
+        self.stride = stride
+        self.dilation = dilation
+        self.padding = padding
 
 
 class ImplicitGemmIndiceData(object):
@@ -60,7 +82,8 @@ class ImplicitGemmIndiceData(object):
                  mask_argsort_fwd_splits: List[torch.Tensor],
                  mask_argsort_bwd_splits: List[torch.Tensor],
                  masks: List[np.ndarray], spatial_shape, 
-                 out_spatial_shape, is_subm: bool, algo: ConvAlgo):
+                 out_spatial_shape, is_subm: bool, algo: ConvAlgo,
+                 ksize: List[int], stride: List[int], dilation: List[int], padding: List[int]):
         self.out_indices = out_indices
         self.indices = indices
         self.pair_fwd = pair_fwd
@@ -74,6 +97,10 @@ class ImplicitGemmIndiceData(object):
         self.out_spatial_shape = out_spatial_shape
         self.is_subm = is_subm
         self.algo = algo
+        self.ksize = ksize
+        self.stride = stride
+        self.dilation = dilation
+        self.padding = padding
 
 
 def scatter_nd(indices, updates, shape):
@@ -225,3 +252,13 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
         tensor._timer = self._timer
         tensor.force_algo = self.force_algo
         return tensor
+
+def expand_nd(ndim: int, val: Union[int, List[int], Tuple[int, ...]]) -> List[int]:
+    if isinstance(val, int):
+        res = [val] * ndim 
+    elif isinstance(val, tuple):
+        res = list(val)
+    else:
+        res = val
+    assert len(res) == ndim
+    return res 

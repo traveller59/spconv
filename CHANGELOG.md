@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.1.17] - 2021-11-29
+### Fixed
+- Fix a bug in sparse add.
+### Added
+- Add more wrong usage check
+- Add insert_exist_keys for hash table
+
+## [2.1.16] - 2021-11-28
+### Fixed
+- Fix strange compile problem in windows
+
+## [2.1.15] - 2021-11-28
+### Fixed
+- Fix missing pccm.Class in setup.py
+
+## [2.1.14] - 2021-11-28
+### Added 
+- Add hash table
+- update cumm version
+- Add AddTableMisaligned for sptensors with same shape but different indices.
+### Fixed
+- Fix a bug already fixed in 2.1.10 but introduced in 2.1.12 again.
+
+## [2.1.13] - 2021-?-?
+### Added 
+- Add some ops from spconv 1.x, see spconv.utils for more details.
+- Add some debug tool for users to attach more info in issue.
+
 ## [2.1.12] - 2021-11-23
 ### Added 
 - Add a method for voxel generator to get pc_voxel_id, which is usually used in semantic segmentation
