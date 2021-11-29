@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import cumm
 from cumm.common import TensorView, TensorViewCPU, TensorViewKernel, ThrustLib
 from cumm.conv.bases import ConvOpType, NHWC
 from cumm.conv.params import ConvProblem
 from cumm import dtypes
 from cumm.constants import CUMM_CPU_ONLY_BUILD
 import pccm
+from pccm.__version__ import __version__ as pccm_version
 from ccimport import compat
 from .pointops import Point2Voxel, Point2VoxelCPU
 from .indices import SparseConvIndicesKernel, CudaCommonKernel, SparseConvIndicesCPU
@@ -98,6 +100,28 @@ class SpconvOps(pccm.Class):
                 self.add_impl_only_param_class(cuda_funcs, f"ops{ndim}d",
                                                indices,
                                                f"SpconvIndices{ndim}D")
+    
+    @pccm.pybind.mark
+    @pccm.static_function
+    def cumm_version(self):
+        """get cumm version when build spconv.
+        """
+        code = pccm.FunctionCode()
+        code.raw(f"""
+        return \"{cumm.__version__}\";
+        """)
+        return code.ret("std::string")
+
+    @pccm.pybind.mark
+    @pccm.static_function
+    def pccm_version(self):
+        """get pccm version when build spconv.
+        """
+        code = pccm.FunctionCode()
+        code.raw(f"""
+        return \"{pccm_version}\";
+        """)
+        return code.ret("std::string")
 
     @pccm.pybind.mark
     @pccm.cuda.static_function

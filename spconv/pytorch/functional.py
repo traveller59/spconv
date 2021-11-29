@@ -16,6 +16,7 @@ import torch
 from torch import nn
 from torch.autograd import Function
 from typing import Optional, TypeVar
+from spconv.pytorch.core import SparseConvTensor
 from spconv.tools import CUDAKernelTimer
 from spconv.pytorch import ops
 from spconv.pytorch.constants import PYTORCH_VERSION
@@ -287,3 +288,18 @@ indice_inverse_conv = SparseInverseConvFunction.apply
 indice_subm_conv = SubMConvFunction.apply
 indice_maxpool = SparseMaxPoolFunction.apply
 indice_maxpool_implicit_gemm = SparseMaxPoolImplicitGemmFunction.apply
+
+
+def sparse_add(a: SparseConvTensor, b: SparseConvTensor):
+    a_th = torch.sparse_coo_tensor(a.indices.T, a.features)
+    b_th = torch.sparse_coo_tensor(b.indices.T, b.features)
+    a_shape = a.spatial_shape
+    b_shape = b.spatial_shape
+
+    res_shape = []
+    for sa, sb in zip(a_shape, b_shape):
+        res_shape.append(max(sa, sb))
+    c_th = a_th + b_th 
+    c_th_inds = c_th.indices().T.contiguous()
+    assert c_th.is_contiguous()
+    return SparseConvTensor(c_th.values(), c_th_inds, res_shape, max(a.batch_size, b.batch_size))

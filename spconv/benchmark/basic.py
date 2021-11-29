@@ -135,10 +135,6 @@ class Net(nn.Module):
             # spconv.SparseInverseConv3d(128, 64, 2, indice_key="m4", bias=False, algo=algo),
         )
         max_batch_size = 1
-        # grid (dense map) is used for indice generation. use pre-allocated grid can run faster.
-        self.grid = torch.full([max_batch_size, *shape], -1,
-                               dtype=torch.int32).cuda()
-        # self.grid = None
         self.shape = shape
 
     def forward(self, features, coors, batch_size, enable_timer: bool = False):
@@ -146,7 +142,6 @@ class Net(nn.Module):
                                     coors,
                                     self.shape,
                                     batch_size,
-                                    self.grid,
                                     enable_timer=enable_timer)
         return self.net(x)
 
@@ -176,24 +171,24 @@ def bench_basic(dtype_str: str):
         dout_t = torch.from_numpy(dout).to(device).to(torch_dtype)
         times = []
         with torch.no_grad():
-            for i in range(20):
+            for i in range(100):
                 torch.cuda.synchronize()
                 t = time.time()
                 out_nograd = net(voxels_th, coors_th, 1, False)
                 timer = out_nograd._timer
                 torch.cuda.synchronize()
                 times.append(time.time() - t)
-        print(f"basic[{dtype_str}|{algo}|forward]", np.mean(times[10:]))
+        print(f"basic[{dtype_str}|{algo}|forward]", np.mean(times[50:]))
         times = []
 
-        for i in range(10):
+        for i in range(50):
             out = net(voxels_th, coors_th, 1)
             torch.cuda.synchronize()
             t = time.time()
             out.features.backward(dout_t)
             torch.cuda.synchronize()
             times.append(time.time() - t)
-        print(f"basic[{dtype_str}|{algo}|backward]", np.mean(times[5:]))
+        print(f"basic[{dtype_str}|{algo}|backward]", np.mean(times[25:]))
 
 if __name__ == "__main__":
     bench_basic("f16")

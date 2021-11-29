@@ -77,7 +77,7 @@ class SparseConvTester:
         self.kv: int = np.prod(self.ksize)
         self.num_split = 1 if algo == ConvAlgo.MaskImplicitGemm else 2
 
-        sparse_dict = generate_sparse_data(shape, [1500] * bs, C)
+        sparse_dict = generate_sparse_data(shape, [N] * bs, C)
 
         voxels_np = np.ascontiguousarray(sparse_dict["features"]).astype(
             np.float32)
@@ -241,7 +241,13 @@ def _test_impgemm_conv_cuda(subm: bool):
     for shape, bs, C, K, k, s, p, d, algo, dtype in tqdm.tqdm(params_grid(
             shapes, batchsizes, in_channels, out_channels, ksizes,
             strides, paddings, dilations, algos, dtypes)):
-        tester = SparseConvTester(algo, subm, shape, bs, dtype, 1500, K, C, k, s, p, d)
+        shape_prod = np.prod(shape)
+        num_batch = np.random.randint(int(0.2 * shape_prod), int(0.7 * shape_prod))
+        C = np.random.randint(int(0.3 * C), int(0.7 * C))
+        K = np.random.randint(int(0.3 * K), int(0.7 * K))
+
+        # print(num_batch)
+        tester = SparseConvTester(algo, subm, shape, bs, dtype, num_batch, K, C, k, s, p, d)
         atol, rtol = dtype_to_tol[dtype]
         mask_width_to_mask_out_fwd: Dict[int, torch.Tensor] = {}
         mask_width_to_mask_out_bwd: Dict[int, torch.Tensor] = {}
@@ -364,7 +370,9 @@ def _test_impgemm_conv_cuda(subm: bool):
                         test_case.assertAllClose(out_ref, out_my, atol=atol, rtol=rtol)
                     else:
                         error_norm = np.linalg.norm(out_ref.reshape(-1) - out_my.reshape(-1))
-                        assert error_norm < 5
+                        if (error_norm > 5):
+                            print(f"{desp}, Error={error_norm}")
+                        assert error_norm < 10
                     # print(desp, )
                 else:
                     din_my = inp_tv.cpu().numpy()
@@ -441,7 +449,9 @@ def _test_impgemm_conv_cuda(subm: bool):
                     else:
                         error_norm = np.linalg.norm(dw_ref.reshape(-1) - dw_my.reshape(-1))
                         # print(desp, error_norm)
-                        assert error_norm < 5
+                        if (error_norm > 5):
+                            print(f"{desp}, Error={error_norm}")
+                        assert error_norm < 10
 
 def _test_native_conv_cuda(subm: bool):
     ndim = 3
@@ -653,6 +663,7 @@ def _test_native_conv_cuda(subm: bool):
 
 
 def test_all_algo_unit():
+    # for i in range(5):
     _test_impgemm_conv_cuda(True)
     _test_impgemm_conv_cuda(False)
     _test_native_conv_cuda(True)

@@ -37,3 +37,15 @@ if SAVED_WEIGHT_LAYOUT != "":
     assert SAVED_WEIGHT_LAYOUT in ["KRSC", "RSKC", "RSCK"], "please set SAVED_WEIGHT_LAYOUT to KRSC, RSKC or RSCK"
 
 ALL_WEIGHT_IS_KRSC = True
+
+SPCONV_DEBUG_SAVE_PATH = os.getenv("SPCONV_DEBUG_SAVE_PATH", "")
+
+
+_BOOST_ROOT = os.getenv("BOOST_ROOT", None)
+
+if _BOOST_ROOT is None:
+    BOOST_ROOT = None 
+else:
+    BOOST_ROOT = Path(_BOOST_ROOT)
+    assert BOOST_ROOT.exists(), "you provide BOOST_ROOT, but it not exists"
+    assert (BOOST_ROOT / "boost" / "geometry").exists(), "you provide BOOST_ROOT, but BOOST_ROOT/boost/geometry not exists"
