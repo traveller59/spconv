@@ -153,8 +153,8 @@ class PointToVoxel(object):
                                                 clear_voxels)
                 num_voxels = res[0].shape[0]
 
-            return (self.voxels[:num_voxels], self.indices[:num_voxels],
-                    self.num_per_voxel[:num_voxels], pc_voxel_id)
+            return (self.voxels[:num_voxels].clone(), self.indices[:num_voxels].clone(),
+                    self.num_per_voxel[:num_voxels].clone(), pc_voxel_id)
 
 
 def gather_features_by_pc_voxel_id(seg_res_features: torch.Tensor, pc_voxel_id: torch.Tensor, invalid_value: Union[int, float] = 0):

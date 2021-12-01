@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.1.18] - 2021-11-29
+### Fixed
+- Fix a small bug of spatial_shape.
+- Fix a bug in PointToVoxel, we must always return a clone instead of a view.
+
 ## [2.1.17] - 2021-11-29
 ### Fixed
 - Fix a bug in sparse add.
