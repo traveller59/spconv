@@ -3,6 +3,7 @@
 ## [2.1.17] - 2021-11-29
 ### Fixed
 - Fix a bug in sparse add.
+- Fix a serious bug in conv weight init.
 ### Added
 - Add more wrong usage check
 - Add insert_exist_keys for hash table

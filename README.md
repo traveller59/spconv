@@ -48,7 +48,7 @@
 
 Check [spconv 2.x algorithm introduction](docs/spconv2_algo.pdf) to understand sparse convolution algorithm in spconv 2.x!
 
-**WARNING** spconv < 2.1.4 users need to upgrade your version to 2.1.4, it fix a serious bug in SparseInverseConvXd.
+**WARNING** spconv < 2.1.17 users need to upgrade your version to 2.1.17, it fix a bug in conv weight init which cause std of inited weight too large.
 
 ## Breaking changes in Spconv 2.x
 

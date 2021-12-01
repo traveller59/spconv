@@ -33,41 +33,9 @@ from spconv.pytorch.core import IndiceData, SparseConvTensor, ImplicitGemmIndice
 from spconv.pytorch.modules import SparseModule
 from spconv.constants import FILTER_HWIO
 from spconv.utils import nullcontext
+from torch.nn.init import calculate_gain
 
 
-def _calculate_fan_in_and_fan_out_hwio(tensor, algo: ConvAlgo):
-    dimensions = tensor.ndimension()
-    if dimensions < 2:
-        raise ValueError(
-            "Fan in and fan out can not be computed for tensor with fewer than 2 dimensions"
-        )
-
-    if dimensions == 2:  # Linear
-        fan_in = tensor.size(-2)
-        fan_out = tensor.size(-1)
-    else:
-        if algo == ConvAlgo.Native:
-            if FILTER_HWIO:
-                num_input_fmaps = tensor.size(-2)
-                num_output_fmaps = tensor.size(-1)
-            else:
-                num_input_fmaps = tensor.size(-1)
-                num_output_fmaps = tensor.size(-2)
-
-            receptive_field_size = 1
-            if tensor.dim() > 2:
-                receptive_field_size = tensor[..., 0, 0].numel()
-        else:
-            num_input_fmaps = tensor.size(-1)
-            num_output_fmaps = tensor.size(0)
-            receptive_field_size = 1
-            if tensor.dim() > 2:
-                receptive_field_size = int(np.prod(tensor.shape[1:-1]))
-
-        fan_in = num_input_fmaps * receptive_field_size
-        fan_out = num_output_fmaps * receptive_field_size
-
-    return fan_in, fan_out
 
 
 class SparseConvolution(SparseModule):
@@ -99,15 +67,18 @@ class SparseConvolution(SparseModule):
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.kernel_size = expand_nd(ndim, kernel_size)
-        kv = int(np.prod(kernel_size))
-        kv_stride = int(np.prod(stride))
+        self.stride = expand_nd(ndim, stride)
+        kv = int(np.prod(self.kernel_size))
+        kv_stride = int(np.prod(self.stride))
+        self.dilation = expand_nd(ndim, dilation)
+        self.padding = expand_nd(ndim, padding)
+
         self.conv1x1 = kv == 1
         # TODO we should deprecate support for ksize == 1 but stride != 1.
         if not subm:
             self.conv1x1 &= kv_stride == 1
-        self.stride = expand_nd(ndim, stride)
-        self.padding = expand_nd(ndim, padding)
-        self.dilation = expand_nd(ndim, dilation)
+            if self.conv1x1:
+                assert self.padding == [0] * ndim, "padding must be zero for 1x1 conv (k=1,s=1)"
         self.transposed = transposed
         self.inverse = inverse
         self.output_padding = expand_nd(ndim, output_padding)
@@ -165,20 +136,39 @@ class SparseConvolution(SparseModule):
             s += f', algo={self.algo}'
         return s.format(**self.__dict__)
 
+    def _calculate_fan_in_and_fan_out(self):
+        receptive_field_size = 1
+        # math.prod is not always available, accumulate the product manually
+        # we could use functools.reduce but that is not supported by TorchScript
+        for s in self.kernel_size:
+            receptive_field_size *= s
+        fan_in = self.in_channels * receptive_field_size
+        fan_out = self.out_channels * receptive_field_size
+        return fan_in, fan_out
+
+    def _calculate_correct_fan(self, mode):
+        mode = mode.lower()
+        valid_modes = ['fan_in', 'fan_out']
+        if mode not in valid_modes:
+            raise ValueError("Mode {} not supported, please use one of {}".format(mode, valid_modes))
+
+        fan_in, fan_out = self._calculate_fan_in_and_fan_out()
+        return fan_in if mode == 'fan_in' else fan_out
+
+    def _custom_kaiming_uniform_(self, tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
+        r"""same as torch.init.kaiming_uniform_, with KRSC layout support
+        """
+        fan = self._calculate_correct_fan(mode)
+        gain = calculate_gain(nonlinearity, a)
+        std = gain / math.sqrt(fan)
+        bound = math.sqrt(3.0) * std  # Calculate uniform bounds from standard deviation
+        with torch.no_grad():
+            return tensor.uniform_(-bound, bound)
+
     def reset_parameters(self):
-        n = self.in_channels
-        # following commented code is used to make weight different layout have same value
-        # if self.algo != ConvAlgo.Native:
-        #     weight2 = self.weight.data.permute(1, 2, 3, 0,
-        #                                        4).contiguous().clone()
-        #     init.uniform_(weight2, 0, 0.001)
-        #     self.weight.data[:] = weight2.permute(3, 0, 1, 2, 4)
-        # else:
-        #     init.uniform_(self.weight, 0, 0.001)
-        init.kaiming_uniform_(self.weight, a=math.sqrt(0.005))
+        self._custom_kaiming_uniform_(self.weight, a=math.sqrt(5))
         if self.bias is not None:
-            fan_in, _ = _calculate_fan_in_and_fan_out_hwio(
-                self.weight, self.algo)
+            fan_in, _ = self._calculate_fan_in_and_fan_out()
             bound = 1 / math.sqrt(fan_in)
             init.uniform_(self.bias, -bound, bound)
 
@@ -271,14 +261,14 @@ class SparseConvolution(SparseModule):
                     indice_pairs = datas.indice_pairs
                     indice_pair_num = datas.indice_pair_num
                     out_spatial_shape = datas.spatial_shape
-                    assert indice_pair_num.shape[0] == np.prod(
-                        self.kernel_size
-                    ), "inverse conv must have same kernel size as its couple conv"
+                    assert datas.ksize == self.kernel_size, "inverse conv must have same kernel size as its couple conv"
                 else:
                     if self.indice_key is not None and datas is not None:
                         outids = datas.out_indices
                         indice_pairs = datas.indice_pairs
                         indice_pair_num = datas.indice_pair_num
+                        assert self.subm, "only support reuse subm indices"
+                        self._check_subm_reuse_valid(input, spatial_shape, datas)
                     else:
                         if input.benchmark:
                             torch.cuda.synchronize()
@@ -369,19 +359,8 @@ class SparseConvolution(SparseModule):
                         mask_argsort_fwd_splits = datas.mask_argsort_fwd_splits
                         mask_argsort_bwd_splits = datas.mask_argsort_bwd_splits
                         masks = datas.masks
-                        assert datas.is_subm, "only support reuse subm indices"
-                        if self.kernel_size != datas.ksize:
-                            raise ValueError(f"subm with same indice_key must have same kernel"
-                                f" size, expect {datas.ksize}, this layer {self.kernel_size}")
-                        if self.dilation != datas.dilation:
-                            raise ValueError(f"subm with same indice_key must have same dilation"
-                                f", expect {datas.dilation}, this layer {self.dilation}")
-                        if input.spatial_shape != datas.spatial_shape:
-                            raise ValueError(f"subm with same indice_key must have same spatial structure"
-                                f", expect {datas.spatial_shape}, input {spatial_shape}")
-                        if input.indices.shape[0] != datas.indices.shape[0]:
-                            raise ValueError(f"subm with same indice_key must have same num of indices"
-                                f", expect {datas.indices.shape[0]}, input {input.indices.shape[0]}")
+                        assert self.subm, "only support reuse subm indices"
+                        self._check_subm_reuse_valid(input, spatial_shape, datas)
                     else:
 
                         with input._timer.namespace("gen_pairs"):
@@ -469,6 +448,22 @@ class SparseConvolution(SparseModule):
         out_tensor.indice_dict = indice_dict
         out_tensor.spatial_shape = out_spatial_shape
         return out_tensor
+
+
+    def _check_subm_reuse_valid(self, inp: SparseConvTensor, spatial_shape: List[int], datas: Union[ImplicitGemmIndiceData, IndiceData]):
+        assert datas.is_subm, "only support reuse subm indices"
+        if self.kernel_size != datas.ksize:
+            raise ValueError(f"subm with same indice_key must have same kernel"
+                f" size, expect {datas.ksize}, this layer {self.kernel_size}")
+        if self.dilation != datas.dilation:
+            raise ValueError(f"subm with same indice_key must have same dilation"
+                f", expect {datas.dilation}, this layer {self.dilation}")
+        if inp.spatial_shape != datas.spatial_shape:
+            raise ValueError(f"subm with same indice_key must have same spatial structure"
+                f", expect {datas.spatial_shape}, input {spatial_shape}")
+        if inp.indices.shape[0] != datas.indices.shape[0]:
+            raise ValueError(f"subm with same indice_key must have same num of indices"
+                f", expect {datas.indices.shape[0]}, input {inp.indices.shape[0]}")
 
 
 class SparseConv1d(SparseConvolution):
