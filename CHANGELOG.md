@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.1.19] - 2021-12-3
+### Fixed
+- Fix wrong arch assert in all kernels for old GPUs to make spconv work in sm_50 GPUs
+
 ## [2.1.18] - 2021-11-29
 ### Fixed
 - Fix a small bug of spatial_shape.
