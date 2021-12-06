@@ -124,7 +124,7 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
     def __init__(self,
                  features: torch.Tensor,
                  indices: torch.Tensor,
-                 spatial_shape: List[int],
+                 spatial_shape: Union[List[int], np.ndarray],
                  batch_size: int,
                  grid: Optional[torch.Tensor] = None,
                  voxel_num: Optional[torch.Tensor] = None,
@@ -154,7 +154,7 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
         assert batch_size > 0
         self._features = features
         self.indices = indices
-        self.spatial_shape = spatial_shape
+        self.spatial_shape = [int(v) for v in spatial_shape]
         self.batch_size = batch_size
         if indice_dict is None:
             indice_dict = {}
@@ -253,12 +253,14 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
         tensor.force_algo = self.force_algo
         return tensor
 
-def expand_nd(ndim: int, val: Union[int, List[int], Tuple[int, ...]]) -> List[int]:
+def expand_nd(ndim: int, val: Union[int, List[int], Tuple[int, ...], np.ndarray]) -> List[int]:
     if isinstance(val, int):
         res = [val] * ndim 
     elif isinstance(val, tuple):
         res = list(val)
+    elif isinstance(val, np.ndarray):
+        res = list(val)
     else:
         res = val
     assert len(res) == ndim
-    return res 
+    return [int(v) for v in res] 

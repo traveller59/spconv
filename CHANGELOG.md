@@ -1,8 +1,18 @@
 # Changelog
 
+## [2.1.19] - 2021-12-3
+### Fixed
+- Fix wrong arch assert in all kernels for old GPUs to make spconv work in sm_50 GPUs
+
+## [2.1.18] - 2021-11-29
+### Fixed
+- Fix a small bug of spatial_shape.
+- Fix a bug in PointToVoxel, we must always return a clone instead of a view.
+
 ## [2.1.17] - 2021-11-29
 ### Fixed
 - Fix a bug in sparse add.
+- Fix a serious bug in conv weight init.
 ### Added
 - Add more wrong usage check
 - Add insert_exist_keys for hash table
