@@ -18,7 +18,7 @@
 
 ## Short Guide
 
-* If you train without Tensor Core (i.e. FP32 training), set all ```algo``` in convolution/maxpool to ```ConvAlgo.Native``` manually. Default Algorithm is ```ConvAlgo.MaskImplicitGemm```, which is **SLOWER** than ```ConvAlgo.Native``` when use float32. this will be fixed in spconv 2.2.
+* If you train without Tensor Core (i.e. FP32 training or FP16 training for Pascal or older GPUS), set all ```algo``` in convolution/maxpool to ```ConvAlgo.Native``` manually. Default Algorithm is ```ConvAlgo.MaskImplicitGemm```, which is **SLOWER** than ```ConvAlgo.Native``` when use float32. this will be fixed in spconv 2.2.
 * If your GPU support Tensor Core, use FP16 (mixed precision training) if possible. 
 * If you train with mixed precision training (use Tensor Core), you don't need to set algorithm manually.
 * Currently fast algorithm only support kernel volume (prod of kernel size) <= 32, so don't use large kernel size.

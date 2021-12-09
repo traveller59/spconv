@@ -26,6 +26,7 @@ if project_is_installed(PACKAGE_NAME) and project_is_editable(
 
     from cumm.gemm.main import GemmMainUnitTest
     from cumm.conv.main import ConvMainUnitTest
+    from cumm.common import CompileInfo
 
     from spconv.csrc.sparse.all import SpconvOps
     from spconv.csrc.utils import BoxOps
@@ -41,7 +42,7 @@ if project_is_installed(PACKAGE_NAME) and project_is_editable(
     if InWindows:
         # windows have command line limit, so we use objects_folder to reduce command size.
         objects_folder = "objects"
-    pccm.builder.build_pybind([cu, convcu, SpconvOps(), BoxOps(), HashTable()],
+    pccm.builder.build_pybind([cu, convcu, SpconvOps(), BoxOps(), HashTable(), CompileInfo()],
                               PACKAGE_ROOT / "core_cc",
                               namespace_root=PACKAGE_ROOT,
                               objects_folder=objects_folder,

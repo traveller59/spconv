@@ -180,14 +180,16 @@ class SparseImplicitGemmFunction(Function):
                 masks: List[np.ndarray],
                 is_train: bool,
                 is_subm: bool,
-                timer: CUDAKernelTimer = CUDAKernelTimer(False)):
+                timer: CUDAKernelTimer = CUDAKernelTimer(False),
+                fp32_accum: Optional[bool] = None):
         try:
             out, mask_out, mask_width = ops.implicit_gemm(features, filters,
                                                         pair_fwd,
                                                         pair_mask_fwd_splits,
                                                         mask_argsort_fwd_splits,
                                                         num_activate_out, masks,
-                                                        is_train, is_subm, timer)
+                                                        is_train, is_subm, timer,
+                                                        fp32_accum)
         except Exception as e:
             msg = "[Exception|implicit_gemm]"
             msg += f"feat={features.shape},w={filters.shape},pair={pair_fwd.shape},"
@@ -209,6 +211,7 @@ class SparseImplicitGemmFunction(Function):
         # ctx.num_activate_out = num_activate_out
         ctx.masks = masks
         ctx.is_subm = is_subm
+        ctx.fp32_accum = fp32_accum
         return out
 
     @staticmethod
@@ -226,6 +229,8 @@ class SparseImplicitGemmFunction(Function):
         masks = ctx.masks
         is_subm = ctx.is_subm
         timer = ctx.timer
+        fp32_accum = ctx.fp32_accum
+
         try:
             input_bp, filters_bp = ops.implicit_gemm_backward(
                 features,
@@ -241,7 +246,8 @@ class SparseImplicitGemmFunction(Function):
                 masks=masks,
                 mask_width=mask_width,
                 is_subm=is_subm,
-                timer=timer)
+                timer=timer,
+                fp32_accum=fp32_accum)
         except Exception as e:
             msg = "[Exception|implicit_gemm_backward]"
             msg += f"feat={features.shape},w={filters.shape},pair={pair_fwd.shape},"
@@ -252,7 +258,7 @@ class SparseImplicitGemmFunction(Function):
                 masks))
             raise e 
 
-        None_9 = [None] * 11
+        None_9 = [None] * 12
         return (input_bp, filters_bp, *None_9)
 
 

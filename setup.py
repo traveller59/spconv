@@ -38,9 +38,9 @@ if cuda_ver:
     cuda_ver = cuda_ver.replace(".", "") # 10.2 to 102
 
     RELEASE_NAME += "-cu{}".format(cuda_ver)
-    deps = ["cumm-cu{}>=0.2.6".format(cuda_ver)]
+    deps = ["cumm-cu{}>=0.2.8".format(cuda_ver)]
 else:
-    deps = ["cumm>=0.2.6"]
+    deps = ["cumm>=0.2.8"]
 
 
 
@@ -158,6 +158,7 @@ if disable_jit is not None and disable_jit == "1":
     from spconv.csrc.sparse.all import SpconvOps
     from spconv.csrc.utils import BoxOps
     from spconv.csrc.hash.core import HashTable
+    from cumm.common import CompileInfo
 
     cu = GemmMainUnitTest(SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS)
     convcu = ConvMainUnitTest(IMPLGEMM_SIMT_PARAMS + IMPLGEMM_VOLTA_PARAMS + IMPLGEMM_TURING_PARAMS)
@@ -171,9 +172,9 @@ if disable_jit is not None and disable_jit == "1":
             std = "c++14" 
         else:
             std = "c++17"
-    cus = [cu, convcu, SpconvOps(), BoxOps(), HashTable()]
+    cus = [cu, convcu, SpconvOps(), BoxOps(), HashTable(), CompileInfo()]
     if CUMM_CPU_ONLY_BUILD:
-        cus = [SpconvOps(), BoxOps(), HashTable()]
+        cus = [SpconvOps(), BoxOps(), HashTable(), CompileInfo()]
     ext_modules: List[Extension] = [
         PCCMExtension(cus,
                       "spconv/core_cc",
