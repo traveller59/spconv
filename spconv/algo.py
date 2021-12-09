@@ -20,7 +20,7 @@ from spconv.core_cc.cumm.conv.main import ConvAlgoDesp, ConvMainUnitTest, ConvPa
 from cumm.conv.bases import ConvLayout, ConvLayoutType, ConvOpType
 from cumm.gemm.algospec.core import GemmAlgo, ShuffleStrideType, get_min_arch_of_algo_str, get_available_algo_str_from_arch
 from cumm.gemm.codeops import group_by, div_up
-from spconv.constants import NDIM_DONT_CARE
+from spconv.constants import NDIM_DONT_CARE, SPCONV_BWD_SPLITK
 from typing import Optional
 import time
 from threading import Lock
@@ -345,7 +345,7 @@ class SimpleGemm:
             params.beta = beta
             params.stream = stream
             if desp.split_k_serial and hint & AlgoHint.BackwardWeight.value:
-                splitk_tests = [1, 2, 4, 8, 16, 32, 64]
+                splitk_tests = SPCONV_BWD_SPLITK
             else:
                 splitk_tests = [1]
             spk_speeds = []
@@ -646,7 +646,7 @@ class SimpleConv:
                 params.reverse_mask = reverse_mask
             params.mask_filter = mask_filter
             if desp.split_k_serial and op_type == ConvOpType.kBackwardWeight:
-                splitk_tests = [1, 2, 4, 8, 16, 32, 64]
+                splitk_tests = SPCONV_BWD_SPLITK
                 # splitk_tests = [1]
             else:
                 splitk_tests = [1]

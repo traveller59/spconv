@@ -4,6 +4,7 @@
 ### Added
 - add sm_37
 - add fp16 kernels witl fp32 accumulator (run slower, but can avoid nan if channel size is too large)
+- add SPCONV_BWD_SPLITK env to control splitk candidates.
 
 ## [2.1.20] - 2021-12-6
 ### Added

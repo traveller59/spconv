@@ -39,3 +39,7 @@ else:
     BOOST_ROOT = Path(_BOOST_ROOT)
     assert BOOST_ROOT.exists(), "you provide BOOST_ROOT, but it not exists"
     assert (BOOST_ROOT / "boost" / "geometry").exists(), "you provide BOOST_ROOT, but BOOST_ROOT/boost/geometry not exists"
+
+# for f16 backward weight, larger splitk, larger compute error.
+# so we use this env to control maximum splitk.
+SPCONV_BWD_SPLITK = list(map(int, os.getenv("SPCONV_BWD_SPLITK", "1,2,4,8,16,32,64").split(",")))
