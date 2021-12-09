@@ -289,7 +289,7 @@ def main():
     voxels_th = torch.from_numpy(voxels).to(device).to(dtype)
     coors_th = torch.from_numpy(coors).to(device).int()
     voxels_th.requires_grad = True
-    algo = spconv.ConvAlgo.Native
+    algo = spconv.ConvAlgo.MaskImplicitGemm
     # 3080 Laptop
     # MaskImpGemm: 11.2ms
     # MaskSplitImpGemm: 12.2ms

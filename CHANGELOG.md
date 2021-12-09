@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.1.21] - 2021-12-9
+### Added
+- add sm_37
+- add fp16 kernels witl fp32 accumulator (run slower, but can avoid nan if channel size is too large)
+
 ## [2.1.20] - 2021-12-6
 ### Added
 - Add fp16 conv simt kernels for mixed-training in pascal or older GPUS. WARNING: not optimized for TESLA P100 which has 2x throughput in half.

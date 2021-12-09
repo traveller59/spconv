@@ -15,6 +15,8 @@
 from cumm import tensorview as tv
 import torch
 from typing import Optional, List
+from spconv.cppconstants import COMPILED_CUDA_ARCHS
+import sys 
 
 _TORCH_DTYPE_TO_TV = {
     torch.float32: tv.float32,
@@ -53,7 +55,14 @@ def torch_tensors_to_tv(*tens: torch.Tensor):
 def get_current_stream():
     return torch.cuda.current_stream().cuda_stream
 
-
+def get_arch():
+    arch = torch.cuda.get_device_capability()
+    if arch not in COMPILED_CUDA_ARCHS:
+        print(f"[WARNING]your gpu arch {arch} isn't compiled in prebuilt, "
+                f"may cause invalid device function. "
+                f"available: {COMPILED_CUDA_ARCHS}", file=sys.stderr)
+    return arch
+    
 if __name__ == "__main__":
     a = torch.rand(2, 2)
     atv = torch_tensor_to_tv(a)

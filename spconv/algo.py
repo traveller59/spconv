@@ -77,12 +77,12 @@ class SimpleGemm:
                 if tile_key not in tile_shape_to_algos:
                     tile_shape_to_algos[tile_key] = []
                 tile_shape_to_algos[tile_key].append(i)
-                tile_ms_list = list(tile_ms)
-                tile_ns_list = list(tile_ns)
-                tile_ks_list = list(tile_ks)
-                tile_ms_list.sort()
-                tile_ns_list.sort()
-                tile_ks_list.sort()
+            tile_ms_list = list(tile_ms)
+            tile_ns_list = list(tile_ns)
+            tile_ks_list = list(tile_ks)
+            tile_ms_list.sort()
+            tile_ns_list.sort()
+            tile_ks_list.sort()
             self.static_key_to_meta[k] = SimpleGemmAlgoMeta(
                 tile_ms_list, tile_ns_list, tile_ks_list, tile_shape_to_algos)
 
@@ -482,12 +482,12 @@ class SimpleConv:
                 if tile_key not in tile_shape_to_algos:
                     tile_shape_to_algos[tile_key] = []
                 tile_shape_to_algos[tile_key].append(i)
-                tile_ms_list = list(tile_ms)
-                tile_ns_list = list(tile_ns)
-                tile_ks_list = list(tile_ks)
-                tile_ms_list.sort()
-                tile_ns_list.sort()
-                tile_ks_list.sort()
+            tile_ms_list = list(tile_ms)
+            tile_ns_list = list(tile_ns)
+            tile_ks_list = list(tile_ks)
+            tile_ms_list.sort()
+            tile_ns_list.sort()
+            tile_ks_list.sort()
             self.static_key_to_meta[k] = SimpleGemmAlgoMeta(
                 tile_ms_list, tile_ns_list, tile_ks_list, tile_shape_to_algos)
 
@@ -514,10 +514,23 @@ class SimpleConv:
                           out: tv.Tensor, layout_i: ConvLayout,
                           layout_w: ConvLayout, layout_o: ConvLayout,
                           arch: Tuple[int, int], op_type: ConvOpType,
-                          mask_width: int):
+                          mask_width: int, fp32_accum: Optional[bool] = None):
 
         avail_algos = get_available_algo_str_from_arch(arch)
         finally_algos: List[ConvAlgoDesp] = []
+        is_fp16 = inp.dtype == tv.float16 and weight.dtype == tv.float16 and out.dtype == tv.float16
+        use_f32_as_accum = False
+        kv = int(np.prod(weight.shape[1:-1]))
+        # for 3d conv, if reduce axis is too large, may cause nan during 
+        # forward.
+        if is_fp16:
+            if fp32_accum is None:
+                if op_type == ConvOpType.kForward:
+                    use_f32_as_accum = weight.dim(-1) * kv > 128 * 27
+                elif op_type == ConvOpType.kBackwardInput:
+                    use_f32_as_accum = weight.dim(0) * kv > 128 * 27
+            else:
+                use_f32_as_accum = fp32_accum
         for algo in avail_algos:
             static_key = (layout_i.layout_type.value,
                           layout_w.layout_type.value,
@@ -531,6 +544,14 @@ class SimpleConv:
                 # skip volta tensor op since it is very slow in architectures except volta.
                 if arch >= (7, 5) and desp.algo == GemmAlgo.Volta.value:
                     continue
+                if arch >= (7, 0) and is_fp16:
+                    # skip simt fp16 kernels if we have tensor core
+                    if desp.algo == GemmAlgo.Simt:
+                        continue
+                    if use_f32_as_accum:
+                        if desp.dacc == tv.float16:
+                            continue
+                        
                 ldi = inp.dim(-1)
                 ldw = weight.dim(-1)
                 ldo = out.dim(-1)
@@ -589,9 +610,11 @@ class SimpleConv:
                        mask_output: tv.Tensor = tv.Tensor(),
                        alpha: float = 1.0,
                        beta: float = 0.0,
-                       stream: int = 0):
+                       stream: int = 0,
+                       fp32_accum: Optional[bool] = None):
         avail = self.get_all_available(inp, weight, output, layout_i, layout_w,
-                                       layout_o, arch, op_type, mask_width)
+                                       layout_o, arch, op_type, mask_width, 
+                                       fp32_accum)
         inp = inp.clone()
         weight = weight.clone()
         output = output.clone()

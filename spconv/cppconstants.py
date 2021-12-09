@@ -20,5 +20,7 @@ else:
     CPU_ONLY_BUILD = True
 
 from spconv.core_cc.csrc.utils.boxops import BoxOps
-
+from spconv.core_cc.cumm.common import CompileInfo
 HAS_BOOST = BoxOps.has_boost()
+
+COMPILED_CUDA_ARCHS = set(CompileInfo.get_compiled_cuda_arch())

@@ -36,8 +36,6 @@ from spconv.utils import nullcontext
 from torch.nn.init import calculate_gain
 
 
-
-
 class SparseConvolution(SparseModule):
     __constants__ = [
         'stride', 'padding', 'dilation', 'groups', 'bias', 'subm', 'inverse',
@@ -60,6 +58,7 @@ class SparseConvolution(SparseModule):
                  inverse: bool = False,
                  indice_key: Optional[str] = None,
                  algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
                  name=None):
         super(SparseConvolution, self).__init__(name=name)
         assert groups == 1, "don't support groups for now"
@@ -78,7 +77,9 @@ class SparseConvolution(SparseModule):
         if not subm:
             self.conv1x1 &= kv_stride == 1
             if self.conv1x1:
-                assert self.padding == [0] * ndim, "padding must be zero for 1x1 conv (k=1,s=1)"
+                assert self.padding == [
+                    0
+                ] * ndim, "padding must be zero for 1x1 conv (k=1,s=1)"
         self.transposed = transposed
         self.inverse = inverse
         self.output_padding = expand_nd(ndim, output_padding)
@@ -98,6 +99,7 @@ class SparseConvolution(SparseModule):
         if CPU_ONLY_BUILD:
             assert algo == ConvAlgo.Native, "cpu only build only support native algorithm"
         self.algo = algo
+        self.fp32_accum = fp32_accum
         # self.algo = ConvAlgo.Native
         if self.algo == ConvAlgo.Native:
             if FILTER_HWIO:
@@ -150,18 +152,25 @@ class SparseConvolution(SparseModule):
         mode = mode.lower()
         valid_modes = ['fan_in', 'fan_out']
         if mode not in valid_modes:
-            raise ValueError("Mode {} not supported, please use one of {}".format(mode, valid_modes))
+            raise ValueError(
+                "Mode {} not supported, please use one of {}".format(
+                    mode, valid_modes))
 
         fan_in, fan_out = self._calculate_fan_in_and_fan_out()
         return fan_in if mode == 'fan_in' else fan_out
 
-    def _custom_kaiming_uniform_(self, tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
+    def _custom_kaiming_uniform_(self,
+                                 tensor,
+                                 a=0,
+                                 mode='fan_in',
+                                 nonlinearity='leaky_relu'):
         r"""same as torch.init.kaiming_uniform_, with KRSC layout support
         """
         fan = self._calculate_correct_fan(mode)
         gain = calculate_gain(nonlinearity, a)
         std = gain / math.sqrt(fan)
-        bound = math.sqrt(3.0) * std  # Calculate uniform bounds from standard deviation
+        bound = math.sqrt(
+            3.0) * std  # Calculate uniform bounds from standard deviation
         with torch.no_grad():
             return tensor.uniform_(-bound, bound)
 
@@ -268,7 +277,8 @@ class SparseConvolution(SparseModule):
                         indice_pairs = datas.indice_pairs
                         indice_pair_num = datas.indice_pair_num
                         assert self.subm, "only support reuse subm indices"
-                        self._check_subm_reuse_valid(input, spatial_shape, datas)
+                        self._check_subm_reuse_valid(input, spatial_shape,
+                                                     datas)
                     else:
                         if input.benchmark:
                             torch.cuda.synchronize()
@@ -287,7 +297,7 @@ class SparseConvolution(SparseModule):
                             msg += f"transpose={self.transposed}"
                             print(msg, file=sys.stderr)
                             spconv_save_debug_data(indices)
-                            raise e 
+                            raise e
                         if input.benchmark:
                             torch.cuda.synchronize()
                             interval = time.time() - t
@@ -360,7 +370,8 @@ class SparseConvolution(SparseModule):
                         mask_argsort_bwd_splits = datas.mask_argsort_bwd_splits
                         masks = datas.masks
                         assert self.subm, "only support reuse subm indices"
-                        self._check_subm_reuse_valid(input, spatial_shape, datas)
+                        self._check_subm_reuse_valid(input, spatial_shape,
+                                                     datas)
                     else:
 
                         with input._timer.namespace("gen_pairs"):
@@ -390,7 +401,7 @@ class SparseConvolution(SparseModule):
                                 msg += f"transpose={self.transposed}"
                                 print(msg, file=sys.stderr)
                                 spconv_save_debug_data(indices)
-                                raise e 
+                                raise e
 
                         outids = res[0]
                         num_inds_per_loc = res[1]
@@ -432,7 +443,7 @@ class SparseConvolution(SparseModule):
                     pair_mask_fwd_splits, pair_mask_bwd_splits,
                     mask_argsort_fwd_splits, mask_argsort_bwd_splits,
                     num_activate_out, masks, self.training, self.subm,
-                    input._timer)
+                    input._timer, self.fp32_accum)
         if self.bias is not None:
             out_features += self.bias
         if input.benchmark:
@@ -449,21 +460,28 @@ class SparseConvolution(SparseModule):
         out_tensor.spatial_shape = out_spatial_shape
         return out_tensor
 
-
-    def _check_subm_reuse_valid(self, inp: SparseConvTensor, spatial_shape: List[int], datas: Union[ImplicitGemmIndiceData, IndiceData]):
+    def _check_subm_reuse_valid(self, inp: SparseConvTensor,
+                                spatial_shape: List[int],
+                                datas: Union[ImplicitGemmIndiceData,
+                                             IndiceData]):
         assert datas.is_subm, "only support reuse subm indices"
         if self.kernel_size != datas.ksize:
-            raise ValueError(f"subm with same indice_key must have same kernel"
+            raise ValueError(
+                f"subm with same indice_key must have same kernel"
                 f" size, expect {datas.ksize}, this layer {self.kernel_size}")
         if self.dilation != datas.dilation:
-            raise ValueError(f"subm with same indice_key must have same dilation"
+            raise ValueError(
+                f"subm with same indice_key must have same dilation"
                 f", expect {datas.dilation}, this layer {self.dilation}")
         if inp.spatial_shape != datas.spatial_shape:
-            raise ValueError(f"subm with same indice_key must have same spatial structure"
+            raise ValueError(
+                f"subm with same indice_key must have same spatial structure"
                 f", expect {datas.spatial_shape}, input {spatial_shape}")
         if inp.indices.shape[0] != datas.indices.shape[0]:
-            raise ValueError(f"subm with same indice_key must have same num of indices"
-                f", expect {datas.indices.shape[0]}, input {inp.indices.shape[0]}")
+            raise ValueError(
+                f"subm with same indice_key must have same num of indices"
+                f", expect {datas.indices.shape[0]}, input {inp.indices.shape[0]}"
+            )
 
 
 class SparseConv1d(SparseConvolution):
@@ -478,6 +496,7 @@ class SparseConv1d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
                  name=None):
         super(SparseConv1d, self).__init__(1,
                                            in_channels,
@@ -490,6 +509,7 @@ class SparseConv1d(SparseConvolution):
                                            bias,
                                            indice_key=indice_key,
                                            algo=algo,
+                                           fp32_accum=fp32_accum,
                                            name=name)
 
 
@@ -505,6 +525,7 @@ class SparseConv2d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
                  name=None):
         super(SparseConv2d, self).__init__(2,
                                            in_channels,
@@ -517,6 +538,7 @@ class SparseConv2d(SparseConvolution):
                                            bias,
                                            indice_key=indice_key,
                                            algo=algo,
+                                           fp32_accum=fp32_accum,
                                            name=name)
 
 
@@ -532,6 +554,7 @@ class SparseConv3d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
                  name=None):
         super(SparseConv3d, self).__init__(3,
                                            in_channels,
@@ -544,6 +567,7 @@ class SparseConv3d(SparseConvolution):
                                            bias,
                                            indice_key=indice_key,
                                            algo=algo,
+                                           fp32_accum=fp32_accum,
                                            name=name)
 
 
@@ -559,6 +583,7 @@ class SparseConv4d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
                  name=None):
         super(SparseConv4d, self).__init__(4,
                                            in_channels,
@@ -571,6 +596,7 @@ class SparseConv4d(SparseConvolution):
                                            bias,
                                            indice_key=indice_key,
                                            algo=algo,
+                                           fp32_accum=fp32_accum,
                                            name=name)
 
 
@@ -586,6 +612,7 @@ class SparseConvTranspose1d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
                  name=None):
         super(SparseConvTranspose1d, self).__init__(1,
                                                     in_channels,
@@ -599,6 +626,7 @@ class SparseConvTranspose1d(SparseConvolution):
                                                     transposed=True,
                                                     indice_key=indice_key,
                                                     algo=algo,
+                                                    fp32_accum=fp32_accum,
                                                     name=name)
 
 
@@ -614,6 +642,7 @@ class SparseConvTranspose2d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
                  name=None):
         super(SparseConvTranspose2d, self).__init__(2,
                                                     in_channels,
@@ -627,6 +656,7 @@ class SparseConvTranspose2d(SparseConvolution):
                                                     transposed=True,
                                                     indice_key=indice_key,
                                                     algo=algo,
+                                                    fp32_accum=fp32_accum,
                                                     name=name)
 
 
@@ -642,6 +672,7 @@ class SparseConvTranspose3d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
                  name=None):
         super(SparseConvTranspose3d, self).__init__(3,
                                                     in_channels,
@@ -655,6 +686,7 @@ class SparseConvTranspose3d(SparseConvolution):
                                                     transposed=True,
                                                     indice_key=indice_key,
                                                     algo=algo,
+                                                    fp32_accum=fp32_accum,
                                                     name=name)
 
 
@@ -670,6 +702,7 @@ class SparseConvTranspose4d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
                  name=None):
         super(SparseConvTranspose4d, self).__init__(4,
                                                     in_channels,
@@ -683,6 +716,7 @@ class SparseConvTranspose4d(SparseConvolution):
                                                     transposed=True,
                                                     indice_key=indice_key,
                                                     algo=algo,
+                                                    fp32_accum=fp32_accum,
                                                     name=name)
 
 
@@ -694,6 +728,7 @@ class SparseInverseConv1d(SparseConvolution):
                  indice_key,
                  bias=True,
                  algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
                  name=None):
         super(SparseInverseConv1d, self).__init__(1,
                                                   in_channels,
@@ -703,6 +738,7 @@ class SparseInverseConv1d(SparseConvolution):
                                                   inverse=True,
                                                   indice_key=indice_key,
                                                   algo=algo,
+                                                  fp32_accum=fp32_accum,
                                                   name=name)
 
 
@@ -714,6 +750,7 @@ class SparseInverseConv2d(SparseConvolution):
                  indice_key,
                  bias=True,
                  algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
                  name=None):
         super(SparseInverseConv2d, self).__init__(2,
                                                   in_channels,
@@ -723,6 +760,7 @@ class SparseInverseConv2d(SparseConvolution):
                                                   inverse=True,
                                                   indice_key=indice_key,
                                                   algo=algo,
+                                                  fp32_accum=fp32_accum,
                                                   name=name)
 
 
@@ -734,6 +772,7 @@ class SparseInverseConv3d(SparseConvolution):
                  indice_key,
                  bias=True,
                  algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
                  name=None):
         super(SparseInverseConv3d, self).__init__(3,
                                                   in_channels,
@@ -743,6 +782,7 @@ class SparseInverseConv3d(SparseConvolution):
                                                   inverse=True,
                                                   indice_key=indice_key,
                                                   algo=algo,
+                                                  fp32_accum=fp32_accum,
                                                   name=name)
 
 
@@ -754,6 +794,7 @@ class SparseInverseConv4d(SparseConvolution):
                  indice_key,
                  bias=True,
                  algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
                  name=None):
         super(SparseInverseConv4d, self).__init__(4,
                                                   in_channels,
@@ -763,6 +804,7 @@ class SparseInverseConv4d(SparseConvolution):
                                                   inverse=True,
                                                   indice_key=indice_key,
                                                   algo=algo,
+                                                  fp32_accum=fp32_accum,
                                                   name=name)
 
 
@@ -778,6 +820,7 @@ class SubMConv1d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
                  name=None):
         super(SubMConv1d, self).__init__(1,
                                          in_channels,
@@ -791,6 +834,7 @@ class SubMConv1d(SparseConvolution):
                                          True,
                                          indice_key=indice_key,
                                          algo=algo,
+                                         fp32_accum=fp32_accum,
                                          name=name)
 
 
@@ -806,6 +850,7 @@ class SubMConv2d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
                  name=None):
         super(SubMConv2d, self).__init__(2,
                                          in_channels,
@@ -819,6 +864,7 @@ class SubMConv2d(SparseConvolution):
                                          True,
                                          indice_key=indice_key,
                                          algo=algo,
+                                         fp32_accum=fp32_accum,
                                          name=name)
 
 
@@ -834,6 +880,7 @@ class SubMConv3d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
                  name=None):
         super(SubMConv3d, self).__init__(3,
                                          in_channels,
@@ -847,6 +894,7 @@ class SubMConv3d(SparseConvolution):
                                          True,
                                          indice_key=indice_key,
                                          algo=algo,
+                                         fp32_accum=fp32_accum,
                                          name=name)
 
 
@@ -862,6 +910,7 @@ class SubMConv4d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
                  name=None):
         super(SubMConv4d, self).__init__(4,
                                          in_channels,
@@ -875,4 +924,5 @@ class SubMConv4d(SparseConvolution):
                                          True,
                                          indice_key=indice_key,
                                          algo=algo,
+                                         fp32_accum=fp32_accum,
                                          name=name)
