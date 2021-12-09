@@ -32,7 +32,7 @@ from spconv.pytorch import ops
 from spconv.cppconstants import CPU_ONLY_BUILD
 from spconv.pytorch.core import IndiceData, SparseConvTensor, ImplicitGemmIndiceData, expand_nd
 from spconv.pytorch.modules import SparseModule
-from spconv.constants import SAVED_WEIGHT_LAYOUT, ALL_WEIGHT_IS_KRSC
+from spconv.constants import SAVED_WEIGHT_LAYOUT, ALL_WEIGHT_IS_KRSC, SPCONV_DEBUG_WEIGHT
 from spconv.utils import nullcontext
 from torch.nn.init import calculate_gain
 
@@ -222,7 +222,11 @@ class SparseConvolution(SparseModule):
             return tensor.uniform_(-bound, bound)
 
     def reset_parameters(self):
-        self._custom_kaiming_uniform_(self.weight, a=math.sqrt(5))
+        if SPCONV_DEBUG_WEIGHT:
+            self._custom_kaiming_uniform_(self.weight, a=math.sqrt(0.005))
+        else:
+            self._custom_kaiming_uniform_(self.weight, a=math.sqrt(5))
+
         if self.bias is not None:
             fan_in, _ = self._calculate_fan_in_and_fan_out()
             bound = 1 / math.sqrt(fan_in)

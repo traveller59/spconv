@@ -49,3 +49,5 @@ else:
     BOOST_ROOT = Path(_BOOST_ROOT)
     assert BOOST_ROOT.exists(), "you provide BOOST_ROOT, but it not exists"
     assert (BOOST_ROOT / "boost" / "geometry").exists(), "you provide BOOST_ROOT, but BOOST_ROOT/boost/geometry not exists"
+
+SPCONV_DEBUG_WEIGHT = False
