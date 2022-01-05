@@ -29,7 +29,6 @@ class JoinTable(SparseModule):
         for ten in input:
             assert ten.spatial_shape == input[0].spatial_shape, msg
             assert ten.batch_size == input[0].batch_size, msg
-            assert ten.features.shape[1] == input[0].features.shape[1], msg
             assert ten.indices.shape[0] == input[0].indices.shape[0], msg
         output = SparseConvTensor(torch.cat([i.features for i in input], 1),
                                   input[0].indices, input[0].spatial_shape,
