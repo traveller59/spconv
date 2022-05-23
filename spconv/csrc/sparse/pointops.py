@@ -662,7 +662,7 @@ class Point2VoxelCPU(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
                 if TV_IF_CONSTEXPR ({pccm.boolean(mean)}){{
                     num = num_points_per_voxel_rw(i);
                     if (num > 0){{
-                        mean_value.clear();
+                        memset(&mean_value[0], 0, mean_value.size() * sizeof mean_value[0]);
                         for (int j = 0; j < num; ++j) {{
                             for (int k = 0; k < num_features; ++k) {{
                                 mean_value[k] += voxels_rw(i, j, k);
