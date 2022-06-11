@@ -31,7 +31,7 @@ class CustomThrustLib(pccm.Class):
         self.add_dependency(ThrustLib)
         # https://github.com/NVIDIA/thrust/issues/1401#issuecomment-806403746
         if compat.InLinux:
-            self.build_meta.add_cflags("nvcc", "-Xcompiler", "-fno-gnu-unique")
+            self.build_meta.add_cflags("nvcc", "-Xcompiler", "-fvisibility=hidden")
 
 
 class ThrustCustomAllocatorV2(pccm.Class, pccm.pybind.PybindClassMixin):
@@ -566,7 +566,7 @@ class SpconvOps(pccm.Class):
         }}
 
         """
-        code.add_dependency(ThrustLib, TensorViewKernel)
+        code.add_dependency(CustomThrustLib, TensorViewKernel)
         code.add_param_class("cudakers", CudaCommonKernel())
         code.raw(f"""
         cudaStream_t stream_cu = reinterpret_cast<cudaStream_t>(stream);
@@ -614,7 +614,7 @@ class SpconvOps(pccm.Class):
             }}
         }}
         """
-        code.add_dependency(ThrustLib, TensorViewKernel)
+        code.add_dependency(CustomThrustLib, TensorViewKernel)
         code.add_param_class("cudakers", CudaCommonKernel())
         code.raw(f"""
         ThrustCustomAllocatorV2 allocator{{alloc_func}};
