@@ -373,7 +373,9 @@ class SparseConvolution(SparseModule):
                         self._check_subm_reuse_valid(input, spatial_shape,
                                                      datas)
                     else:
-
+                        if input.benchmark:
+                            torch.cuda.synchronize()
+                            t = time.time()
                         with input._timer.namespace("gen_pairs"):
                             # we need to gen bwd indices for regular conv
                             # because it may be inversed.
@@ -402,6 +404,11 @@ class SparseConvolution(SparseModule):
                                 print(msg, file=sys.stderr)
                                 spconv_save_debug_data(indices)
                                 raise e
+                        if input.benchmark:
+                            torch.cuda.synchronize()
+                            interval = time.time() - t
+                            out_tensor.benchmark_record[
+                                self.name]["indice_gen_time"].append(interval)
 
                         outids = res[0]
                         num_inds_per_loc = res[1]
