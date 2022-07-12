@@ -23,13 +23,8 @@ class OMPLib(pccm.Class):
         self.add_dependency(TensorView)
         self.add_include("tensorview/parallel/all.h")
         if compat.InWindows:
-            self.build_meta.add_cflags("cl", "/openmp")
+            self.build_meta.add_public_cflags("cl", "/openmp")
         else:
-            self.build_meta.add_cflags("g++", "-fopenmp")
-            self.build_meta.add_cflags("clang++", "-fopenmp")
-            if "g++" not in self.build_meta.compiler_to_ldflags:
-                self.build_meta.compiler_to_ldflags["g++"] = []
-            self.build_meta.compiler_to_ldflags["g++"].extend(["-fopenmp"])
-            if "clang++" not in self.build_meta.compiler_to_ldflags:
-                self.build_meta.compiler_to_ldflags["clang++"] = []
-            self.build_meta.compiler_to_ldflags["clang++"].extend(["-fopenmp"])
+            self.build_meta.add_public_cflags("g++", "-fopenmp")
+            self.build_meta.add_public_cflags("clang++", "-fopenmp")
+            self.build_meta.add_ldflags("g++,clang++", "-fopenmp")

@@ -23,7 +23,7 @@ class BoostGeometryLib(pccm.Class):
     def __init__(self):
         super().__init__()
         assert BOOST_ROOT is not None 
-        self.build_meta.add_includes(BOOST_ROOT)
+        self.build_meta.add_public_includes(BOOST_ROOT)
         self.add_include("boost/geometry.hpp")
 
 class BoxOps(pccm.Class):

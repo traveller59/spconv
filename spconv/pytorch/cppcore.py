@@ -14,9 +14,10 @@
 
 from cumm import tensorview as tv
 import torch
-from typing import Optional, List
+from typing import Dict, Optional, List, Union
 from spconv.cppconstants import COMPILED_CUDA_ARCHS
 import sys 
+from spconv.core_cc.csrc.sparse.alloc import ExternalAllocator
 
 _TORCH_DTYPE_TO_TV = {
     torch.float32: tv.float32,
@@ -28,7 +29,10 @@ _TORCH_DTYPE_TO_TV = {
     torch.int16: tv.int16,
     torch.uint8: tv.uint8,
 }
+_TV_DTYPE_TO_TORCH = {v: k for k, v in _TORCH_DTYPE_TO_TV.items()}
 
+_TORCH_UINT_WORKAROUNDS = {tv.uint32: tv.int32, tv.uint16: tv.int16, tv.uint64: tv.int64}
+_ALL_INTS = {tv.int32, tv.int16, tv.int8, tv.int64, tv.uint64, tv.uint8, tv.uint32, tv.uint16}
 
 def torch_tensor_to_tv(ten: torch.Tensor,
                        dtype: Optional[int] = None,
@@ -46,7 +50,8 @@ def torch_tensor_to_tv(ten: torch.Tensor,
         shape = list(ten.shape)
     if dtype is None:
         dtype = _TORCH_DTYPE_TO_TV[ten.dtype]
-    return tv.from_blob(ptr, shape, dtype, tv_device)
+    stride = ten.stride()
+    return tv.from_blob_strided(ptr, shape, list(stride), dtype, tv_device)
 
 def torch_tensors_to_tv(*tens: torch.Tensor):
     return (torch_tensor_to_tv(t) for t in tens)
@@ -62,7 +67,119 @@ def get_arch():
                 f"may cause invalid device function. "
                 f"available: {COMPILED_CUDA_ARCHS}", file=sys.stderr)
     return arch
-    
+
+class TorchAllocator(ExternalAllocator):
+    def __init__(self, gpudevice: torch.device) -> None:
+        super().__init__()
+        self.gpudevice = gpudevice
+        self.cpudevice = torch.device("cpu:0")
+        self.allocated: Dict[Union[str, int], torch.Tensor] = {}
+
+    def zeros(self, name: str, shape: List[int], dtype: int, device: int) -> tv.Tensor:
+        # provide a name if you want to access it after c++ function exit.
+        torch_uint_workaround = dtype in _TORCH_UINT_WORKAROUNDS
+        dtype_bkp = dtype
+        if dtype in _TORCH_UINT_WORKAROUNDS:
+            assert name == "", "must be temp memory for uint dtypes"
+            dtype = _TORCH_UINT_WORKAROUNDS[dtype]        
+        th_dtype = _TV_DTYPE_TO_TORCH[dtype]
+        if device == -1:
+            dev = self.cpudevice
+        else:
+            dev = self.gpudevice
+        ten = torch.zeros(shape, dtype=th_dtype, device=dev)
+        ten_tv = torch_tensor_to_tv(ten)
+        self.allocated[ten.data_ptr()] = ten
+        if name:
+            self.allocated[name] = ten
+        if torch_uint_workaround:
+            return ten_tv.type_view(dtype_bkp)
+        return ten_tv
+
+    def empty(self, name: str, shape: List[int], dtype: int, device: int) -> tv.Tensor:
+        torch_uint_workaround = dtype in _TORCH_UINT_WORKAROUNDS
+        dtype_bkp = dtype
+        if dtype in _TORCH_UINT_WORKAROUNDS:
+            assert name == "", "must be temp memory for uint dtypes"
+            dtype = _TORCH_UINT_WORKAROUNDS[dtype]        
+        th_dtype = _TV_DTYPE_TO_TORCH[dtype]
+        if device == -1:
+            dev = self.cpudevice
+        else:
+            dev = self.gpudevice
+        ten = torch.empty(shape, dtype=th_dtype, device=dev)
+        ten_tv = torch_tensor_to_tv(ten)
+        self.allocated[ten.data_ptr()] = ten
+        if name:
+            self.allocated[name] = ten
+        if torch_uint_workaround:
+            return ten_tv.type_view(dtype_bkp)
+        return ten_tv
+
+    def full_int(self, name: str, shape: List[int], value: int, dtype: int, device: int) -> tv.Tensor:
+        if dtype in _TORCH_UINT_WORKAROUNDS and value < 0:
+            raise NotImplementedError("you can't use full for unsigned dtypes")
+        torch_uint_workaround = dtype in _TORCH_UINT_WORKAROUNDS
+        dtype_bkp = dtype
+        if dtype in _TORCH_UINT_WORKAROUNDS:
+            assert name == "", "must be temp memory for uint dtypes"
+            dtype = _TORCH_UINT_WORKAROUNDS[dtype]        
+
+        th_dtype = _TV_DTYPE_TO_TORCH[dtype]
+        if device == -1:
+            dev = self.cpudevice
+        else:
+            dev = self.gpudevice
+        ten = torch.full(shape, value, dtype=th_dtype, device=dev)
+        ten_tv = torch_tensor_to_tv(ten)
+        self.allocated[ten.data_ptr()] = ten
+        if name:
+            self.allocated[name] = ten
+        if name:
+            self.allocated[name] = ten
+        if torch_uint_workaround:
+            return ten_tv.type_view(dtype_bkp)
+        return ten_tv
+
+    def full_float(self, name: str, shape: List[int], value: float, dtype: int, device: int) -> tv.Tensor:
+        if dtype in _TORCH_UINT_WORKAROUNDS and value < 0:
+            raise NotImplementedError("you can't use full for unsigned dtypes")
+        torch_uint_workaround = dtype in _TORCH_UINT_WORKAROUNDS
+        dtype_bkp = dtype
+        if dtype in _TORCH_UINT_WORKAROUNDS:
+            assert name == "", "must be temp memory for uint dtypes"
+            dtype = _TORCH_UINT_WORKAROUNDS[dtype]        
+        th_dtype = _TV_DTYPE_TO_TORCH[dtype]
+        if device == -1:
+            dev = self.cpudevice
+        else:
+            dev = self.gpudevice
+        ten = torch.full(shape, value, dtype=th_dtype, device=dev)
+        ten_tv = torch_tensor_to_tv(ten)
+        self.allocated[ten.data_ptr()] = ten
+        if name:
+            self.allocated[name] = ten
+        if torch_uint_workaround:
+            return ten_tv.type_view(dtype_bkp)
+        return ten_tv
+
+    def free(self, ten: tv.Tensor):
+        if ten.storage_bytesize() != ten.bytesize():
+            raise ValueError("you can't free a sliced tensor.")
+        if ten.byte_pointer() in self.allocated:
+            self.allocated.pop(ten.byte_pointer())
+            return
+        raise ValueError("can't find your tensor in cache.")
+
+    def free_noexcept(self, ten: tv.Tensor):
+        # for c++ scope guard, free will be called in c++ destructor
+        if ten.storage_bytesize() != ten.bytesize():
+            return
+        if ten.byte_pointer() in self.allocated:
+            self.allocated.pop(ten.byte_pointer())
+            return
+
+
 if __name__ == "__main__":
     a = torch.rand(2, 2)
     atv = torch_tensor_to_tv(a)

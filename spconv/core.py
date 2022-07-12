@@ -15,17 +15,17 @@ from enum import Enum
 from cumm.gemm.main import gen_shuffle_params_v2 as gen_shuffle_params, GemmAlgoParams
 from cumm.gemm import kernel
 from typing import List
-from cumm.gemm.algospec.core import TensorOpParams
+from cumm.gemm.algospec.core import TensorOp
 from cumm.conv.main import gen_gemm_params as gen_conv_params, ConvFwdAndBwdInput, ConvBwdWeight, ConvIterAlgo, GemmAlgo
-from cumm.conv.bases import (NCHW, NHWC, ConvEnum, ConvIterAlgo, ConvLayout,
+from cumm.conv.bases import (NCHW, NHWC, ConvIterAlgo, ConvLayout,
                              ConvLayoutType, ConvMode, ConvOpType)
 from spconv.constants import NDIM_DONT_CARE
 
 
 class ConvAlgo(Enum):
-    Native = "Native"
-    MaskImplicitGemm = "MaskImplicitGemm"
-    MaskSplitImplicitGemm = "MaskSplitImplicitGemm"
+    Native = 0
+    MaskImplicitGemm = 1
+    MaskSplitImplicitGemm = 2
 
 
 class AlgoHint(Enum):
@@ -40,17 +40,17 @@ class AlgoHint(Enum):
 
 SHUFFLE_SIMT_PARAMS: List[GemmAlgoParams] = [
     *gen_shuffle_params((64, 128, 32), (32, 64, 32), ["s8,s8,s32,s32,s32"], "",
-                        2, kernel.GemmAlgo.SimtDP4A, None),
+                        2, kernel.GemmAlgo.SimtDP4A, None, is_nvrtc=True),
     *gen_shuffle_params((128, 64, 32), (64, 32, 32), ["s8,s8,s32,s32,s32"], "",
-                        2, kernel.GemmAlgo.SimtDP4A, None),
+                        2, kernel.GemmAlgo.SimtDP4A, None, is_nvrtc=True),
     *gen_shuffle_params((128, 128, 32), (32, 64, 32), ["s8,s8,s32,s32,s32"],
-                        "", 2, kernel.GemmAlgo.SimtDP4A, None),
+                        "", 2, kernel.GemmAlgo.SimtDP4A, None, is_nvrtc=True),
     *gen_shuffle_params(
         (128, 128, 32),
         (64, 32, 32), ["s8,s8,s8,s32,s32", "s8,s8,s32,s32,s32"], "", 2,
-        kernel.GemmAlgo.SimtDP4A, None),
+        kernel.GemmAlgo.SimtDP4A, None, is_nvrtc=True),
     *gen_shuffle_params((64, 64, 32), (32, 32, 32), ["s8,s8,s32,s32,s32"], "",
-                        2, kernel.GemmAlgo.SimtDP4A, None),
+                        2, kernel.GemmAlgo.SimtDP4A, None, is_nvrtc=True),
     *gen_shuffle_params((64, 256, 8), (32, 64, 8), ["f32,f32,f32,f32,f32"],
                         "f32,f32,f32,f32,f32", 2, kernel.GemmAlgo.Simt, None),
     # *gen_shuffle_params(
@@ -104,88 +104,88 @@ SHUFFLE_VOLTA_PARAMS: List[GemmAlgoParams] = [
     *gen_shuffle_params(
         (64, 64, 32),
         (32, 32, 32), ["f16,f16,f16,f16,f16"], "f16,f16,f16,f32,f32", 2,
-        kernel.GemmAlgo.Volta, TensorOpParams((8, 8, 4))),
+        kernel.GemmAlgo.Volta, TensorOp((8, 8, 4))),
     # *gen_shuffle_params(
     #     (128, 128, 32),
     #     (64, 64, 32), ["f16,f16,f16,f16,f16"], "f16,f16,f16,f32,f32", 2,
-    #     kernel.GemmAlgo.Volta, TensorOpParams((8, 8, 4))),
+    #     kernel.GemmAlgo.Volta, TensorOp((8, 8, 4))),
     *gen_shuffle_params(
         (128, 256, 32),
         (64, 64, 32), ["f16,f16,f16,f16,f16"], "f16,f16,f16,f32,f32", 2,
-        kernel.GemmAlgo.Volta, TensorOpParams((8, 8, 4))),
+        kernel.GemmAlgo.Volta, TensorOp((8, 8, 4))),
     *gen_shuffle_params(
         (256, 128, 32),
         (64, 64, 32), ["f16,f16,f16,f16,f16"], "f16,f16,f16,f32,f32", 2,
-        kernel.GemmAlgo.Volta, TensorOpParams((8, 8, 4))),
+        kernel.GemmAlgo.Volta, TensorOp((8, 8, 4))),
     *gen_shuffle_params(
         (128, 64, 32),
         (64, 32, 32), ["f16,f16,f16,f16,f16"], "f16,f16,f16,f32,f32", 2,
-        kernel.GemmAlgo.Volta, TensorOpParams((8, 8, 4))),
+        kernel.GemmAlgo.Volta, TensorOp((8, 8, 4))),
     *gen_shuffle_params(
         (64, 128, 32),
         (32, 64, 32), ["f16,f16,f16,f16,f16"], "f16,f16,f16,f32,f32", 2,
-        kernel.GemmAlgo.Volta, TensorOpParams((8, 8, 4))),
+        kernel.GemmAlgo.Volta, TensorOp((8, 8, 4))),
 ]
 # SHUFFLE_VOLTA_PARAMS = []
 SHUFFLE_TURING_PARAMS: List[GemmAlgoParams] = [
     *gen_shuffle_params(
         (64, 64, 32),
         (32, 32, 32), ["f16,f16,f16,f16,f16"], "f16,f16,f16,f32,f32", 2,
-        kernel.GemmAlgo.Turing, TensorOpParams((16, 8, 8))),
+        kernel.GemmAlgo.Turing, TensorOp((16, 8, 8))),
     *gen_shuffle_params(
         (128, 128, 32),
         (32, 64, 32), ["f16,f16,f16,f16,f16"], "f16,f16,f16,f32,f32", 2,
-        kernel.GemmAlgo.Turing, TensorOpParams((16, 8, 8))),
+        kernel.GemmAlgo.Turing, TensorOp((16, 8, 8))),
     # *gen_shuffle_params(
     #     (128, 128, 32),
     #     (64, 32, 32), ["f16,f16,f16,f16,f16"], "f16,f16,f16,f32,f32", 2,
-    #     kernel.GemmAlgo.Turing, TensorOpParams((16, 8, 8))),
+    #     kernel.GemmAlgo.Turing, TensorOp((16, 8, 8))),
     *gen_shuffle_params(
         (64, 64, 64),
         (32, 32, 32), ["f16,f16,f16,f16,f16"], "f16,f16,f16,f32,f32", 2,
-        kernel.GemmAlgo.Turing, TensorOpParams((16, 8, 8))),
+        kernel.GemmAlgo.Turing, TensorOp((16, 8, 8))),
     *gen_shuffle_params(
         (64, 128, 64),
         (32, 64, 32), ["f16,f16,f16,f16,f16"], "f16,f16,f16,f32,f32", 2,
-        kernel.GemmAlgo.Turing, TensorOpParams((16, 8, 8))),
+        kernel.GemmAlgo.Turing, TensorOp((16, 8, 8))),
     *gen_shuffle_params(
         (128, 256, 32),
         (64, 64, 32), ["f16,f16,f16,f16,f16"], "f16,f16,f16,f32,f32", 2,
-        kernel.GemmAlgo.Turing, TensorOpParams((16, 8, 8))),
+        kernel.GemmAlgo.Turing, TensorOp((16, 8, 8))),
     *gen_shuffle_params(
         (256, 128, 32),
         (64, 64, 32), ["f16,f16,f16,f16,f16"], "f16,f16,f16,f32,f32", 2,
-        kernel.GemmAlgo.Turing, TensorOpParams((16, 8, 8))),
+        kernel.GemmAlgo.Turing, TensorOp((16, 8, 8))),
     *gen_shuffle_params(
         (128, 64, 32),
         (64, 32, 32), ["f16,f16,f16,f16,f16"], "f16,f16,f16,f32,f32", 2,
-        kernel.GemmAlgo.Turing, TensorOpParams((16, 8, 8))),
+        kernel.GemmAlgo.Turing, TensorOp((16, 8, 8))),
     *gen_shuffle_params(
         (64, 128, 32),
         (32, 64, 32), ["f16,f16,f16,f16,f16"], "f16,f16,f16,f32,f32", 2,
-        kernel.GemmAlgo.Turing, TensorOpParams((16, 8, 8))),
+        kernel.GemmAlgo.Turing, TensorOp((16, 8, 8))),
     *gen_shuffle_params((64, 64, 32), (32, 32, 32), ["s8,s8,s32,s32,s32"], "",
-                        2, kernel.GemmAlgo.Turing, TensorOpParams((8, 8, 16))),
+                        2, kernel.GemmAlgo.Turing, TensorOp((8, 8, 16)), is_nvrtc=True),
     *gen_shuffle_params(
         (128, 128, 32),
         (32, 64, 32), ["s8,s8,s32,s32,s32"], "", 2, kernel.GemmAlgo.Turing,
-        TensorOpParams((8, 8, 16))),
+        TensorOp((8, 8, 16)), is_nvrtc=True),
     # *gen_shuffle_params(
     #     (128, 128, 32),
     #     (64, 32, 32), ["s8,s8,s8,s32,s32", "s8,s8,s32,s32,s32"], "", 2,
-    #     kernel.GemmAlgo.Turing, TensorOpParams((8, 8, 16))),
+    #     kernel.GemmAlgo.Turing, TensorOp((8, 8, 16))),
     *gen_shuffle_params(
         (128, 256, 32),
         (64, 64, 32), ["s8,s8,s32,s32,s32"], "", 2, kernel.GemmAlgo.Turing,
-        TensorOpParams((8, 8, 16))),
+        TensorOp((8, 8, 16)), is_nvrtc=True),
     *gen_shuffle_params(
         (256, 128, 32),
         (64, 64, 32), ["s8,s8,s32,s32,s32"], "", 2, kernel.GemmAlgo.Turing,
-        TensorOpParams((8, 8, 16))),
+        TensorOp((8, 8, 16)), is_nvrtc=True),
     *gen_shuffle_params((128, 64, 32), (64, 32, 32), ["s8,s8,s32,s32,s32"], "",
-                        2, kernel.GemmAlgo.Turing, TensorOpParams((8, 8, 16))),
+                        2, kernel.GemmAlgo.Turing, TensorOp((8, 8, 16)), is_nvrtc=True),
     *gen_shuffle_params((64, 128, 32), (32, 64, 32), ["s8,s8,s32,s32,s32"], "",
-                        2, kernel.GemmAlgo.Turing, TensorOpParams((8, 8, 16))),
+                        2, kernel.GemmAlgo.Turing, TensorOp((8, 8, 16)), is_nvrtc=True),
 ]
 
 # SHUFFLE_TURING_PARAMS = []
@@ -399,6 +399,34 @@ IMPLGEMM_SIMT_PARAMS = [
                      increment_k_first=True,
                      access_per_vector=1),
 ]
+IMPLGEMM_SIMT_PARAMS = [
+    *gen_conv_params(ConvFwdAndBwdInput, (64, 32, 16), (32, 32, 8),
+                     NDIM_DONT_CARE,
+                     ConvIterAlgo.Optimized,
+                     2, ["f32,f32,f32,f32,f32", "f16,f16,f16,f32,f32"],
+                     NHWC,
+                     NHWC,
+                     NHWC,
+                     GemmAlgo.Simt,
+                     None,
+                     mask_sparse=True,
+                     increment_k_first=True,
+                     access_per_vector=1),
+    *gen_conv_params(ConvBwdWeight, (64, 32, 16), (32, 32, 8),
+                     NDIM_DONT_CARE,
+                     ConvIterAlgo.Optimized,
+                     2, ["f32,f32,f32,f32,f32", "f16,f16,f16,f32,f32"],
+                     NHWC,
+                     NHWC,
+                     NHWC,
+                     GemmAlgo.Simt,
+                     None,
+                     mask_sparse=True,
+                     increment_k_first=True,
+                     access_per_vector=1),
+]
+
+
 IMPLGEMM_VOLTA_PARAMS = [
     *gen_conv_params(ConvFwdAndBwdInput, (64, 64, 32), (32, 32, 32),
                      NDIM_DONT_CARE,
@@ -408,7 +436,7 @@ IMPLGEMM_VOLTA_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Volta,
-                     TensorOpParams((8, 8, 4)),
+                     TensorOp((8, 8, 4)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=1),
@@ -420,7 +448,7 @@ IMPLGEMM_VOLTA_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Volta,
-                     TensorOpParams((8, 8, 4)),
+                     TensorOp((8, 8, 4)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=0),
@@ -432,7 +460,7 @@ IMPLGEMM_VOLTA_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Volta,
-                     TensorOpParams((8, 8, 4)),
+                     TensorOp((8, 8, 4)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=1),
@@ -444,7 +472,7 @@ IMPLGEMM_VOLTA_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Volta,
-                     TensorOpParams((8, 8, 4)),
+                     TensorOp((8, 8, 4)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=1),
@@ -456,7 +484,7 @@ IMPLGEMM_VOLTA_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Volta,
-                     TensorOpParams((8, 8, 4)),
+                     TensorOp((8, 8, 4)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=1),
@@ -468,7 +496,7 @@ IMPLGEMM_VOLTA_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Volta,
-                     TensorOpParams((8, 8, 4)),
+                     TensorOp((8, 8, 4)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=0),
@@ -480,7 +508,7 @@ IMPLGEMM_VOLTA_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Volta,
-                     TensorOpParams((8, 8, 4)),
+                     TensorOp((8, 8, 4)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=1),
@@ -495,7 +523,7 @@ IMPLGEMM_TURING_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Turing,
-                     TensorOpParams((16, 8, 8)),
+                     TensorOp((16, 8, 8)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=0),
@@ -507,7 +535,7 @@ IMPLGEMM_TURING_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Turing,
-                     TensorOpParams((16, 8, 8)),
+                     TensorOp((16, 8, 8)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=1),
@@ -519,7 +547,7 @@ IMPLGEMM_TURING_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Turing,
-                     TensorOpParams((16, 8, 8)),
+                     TensorOp((16, 8, 8)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=1),
@@ -531,7 +559,7 @@ IMPLGEMM_TURING_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Turing,
-                     TensorOpParams((16, 8, 8)),
+                     TensorOp((16, 8, 8)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=1),
@@ -543,7 +571,7 @@ IMPLGEMM_TURING_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Turing,
-                     TensorOpParams((16, 8, 8)),
+                     TensorOp((16, 8, 8)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=1),
@@ -555,7 +583,7 @@ IMPLGEMM_TURING_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Turing,
-                     TensorOpParams((16, 8, 8)),
+                     TensorOp((16, 8, 8)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=1),
@@ -567,7 +595,7 @@ IMPLGEMM_TURING_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Turing,
-                     TensorOpParams((16, 8, 8)),
+                     TensorOp((16, 8, 8)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=1),
@@ -579,7 +607,7 @@ IMPLGEMM_TURING_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Turing,
-                     TensorOpParams((16, 8, 8)),
+                     TensorOp((16, 8, 8)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=1),
@@ -591,7 +619,7 @@ IMPLGEMM_TURING_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Turing,
-                     TensorOpParams((16, 8, 8)),
+                     TensorOp((16, 8, 8)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=1),
@@ -603,7 +631,7 @@ IMPLGEMM_TURING_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Turing,
-                     TensorOpParams((16, 8, 8)),
+                     TensorOp((16, 8, 8)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=1),
@@ -615,7 +643,7 @@ IMPLGEMM_TURING_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Turing,
-                     TensorOpParams((16, 8, 8)),
+                     TensorOp((16, 8, 8)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=1),
@@ -628,7 +656,7 @@ IMPLGEMM_TURING_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Turing,
-                     TensorOpParams((16, 8, 8)),
+                     TensorOp((16, 8, 8)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=0),
@@ -641,7 +669,7 @@ IMPLGEMM_TURING_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Turing,
-                     TensorOpParams((16, 8, 8)),
+                     TensorOp((16, 8, 8)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=1),
@@ -654,12 +682,16 @@ IMPLGEMM_TURING_PARAMS = [
                      NHWC,
                      NHWC,
                      GemmAlgo.Turing,
-                     TensorOpParams((16, 8, 8)),
+                     TensorOp((16, 8, 8)),
                      mask_sparse=True,
                      increment_k_first=True,
                      access_per_vector=1),
     # *gen_conv_params(ConvBwdWeight, (32, 64, 32), (32, 32, 16), NDIM_DONT_CARE, ConvIterAlgo.Optimized, 2, "f16,f16,f16,f32,f32",
-    #     NHWC, NHWC, NHWC, GemmAlgo.Turing, TensorOpParams((16, 8, 8)), mask_sparse=True, increment_k_first=True, access_per_vector=1),
+    #     NHWC, NHWC, NHWC, GemmAlgo.Turing, TensorOp((16, 8, 8)), mask_sparse=True, increment_k_first=True, access_per_vector=1),
 
     # gen_conv_params(ConvFwdAndBwdInput, )
 ]
+
+ALL_NATIVE_PARAMS = SHUFFLE_SIMT_PARAMS + SHUFFLE_TURING_PARAMS + SHUFFLE_VOLTA_PARAMS
+
+ALL_IMPGEMM_PARAMS = IMPLGEMM_SIMT_PARAMS + IMPLGEMM_TURING_PARAMS + IMPLGEMM_VOLTA_PARAMS

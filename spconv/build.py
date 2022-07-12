@@ -29,21 +29,20 @@ if project_is_installed(PACKAGE_NAME) and project_is_editable(
     from cumm.common import CompileInfo
 
     from spconv.csrc.sparse.all import SpconvOps
+    from spconv.csrc.sparse.alloc import ExternalAllocator
     from spconv.csrc.utils import BoxOps
     from spconv.csrc.hash.core import HashTable
-
-    cu = GemmMainUnitTest(SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS +
-                          SHUFFLE_TURING_PARAMS)
+    all_shuffle = SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS
+    all_shuffle = list(filter(lambda x: not x.is_nvrtc, all_shuffle))
+    cu = GemmMainUnitTest(all_shuffle)
     cu.namespace = "cumm.gemm.main"
-    convcu = ConvMainUnitTest(IMPLGEMM_SIMT_PARAMS + IMPLGEMM_VOLTA_PARAMS +
+    all_imp = (IMPLGEMM_SIMT_PARAMS + IMPLGEMM_VOLTA_PARAMS +
                               IMPLGEMM_TURING_PARAMS)
+    all_imp = list(filter(lambda x: not x.is_nvrtc, all_imp))
+    convcu = ConvMainUnitTest(all_imp)
     convcu.namespace = "cumm.conv.main"
-    objects_folder = None
-    if InWindows:
-        # windows have command line limit, so we use objects_folder to reduce command size.
-        objects_folder = "objects"
-    pccm.builder.build_pybind([cu, convcu, SpconvOps(), BoxOps(), HashTable(), CompileInfo()],
+    pccm.builder.build_pybind([cu, convcu, SpconvOps(), BoxOps(), HashTable(), CompileInfo(), ExternalAllocator()],
                               PACKAGE_ROOT / "core_cc",
                               namespace_root=PACKAGE_ROOT,
-                              objects_folder=objects_folder,
                               load_library=False)
+

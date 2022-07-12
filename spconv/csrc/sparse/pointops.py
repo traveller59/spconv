@@ -126,6 +126,7 @@ class Point2VoxelKernel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         super().__init__()
         self.add_dependency(TensorView, TensorViewHashKernel)
         self.add_param_class("layout_ns", layout, "Layout")
+        self.add_include("tensorview/hash/ops.h")
         self.dtype = dtype
         self.ndim = ndim
         self.zyx = zyx
@@ -447,7 +448,7 @@ class Point2Voxel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         TV_ASSERT_RT_ERR(point_indice_data.dim(0) >= points.dim(0), "point_indice_data too small")
         num_per_voxel.zero_(ctx);
         table_t hash = table_t(hashdata.data_ptr<pair_t>(), expected_hash_data_num);
-        hash.clear(custream);
+        tv::hash::clear_map(hash, custream);
         auto launcher = tv::cuda::Launch(points.dim(0), custream);
         launcher(kernel::build_hash_table<table_t>, hash, points.data_ptr<const {self.dtype}>(),
                 point_indice_data.data_ptr<int64_t>(),

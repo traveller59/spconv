@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import contextlib
-from cumm.conv.bases import ConvEnum
 from cumm.gemm.core.metaarray import MetaArray, seq
 from cumm import dtypes
 import pccm
@@ -202,14 +201,14 @@ class IndiceMaxPool(pccm.Class):
                 // if a value is found, other value won't be executed.
                 int NumFeatures = TV_DECLTYPE(V)::value;
                 int Num0 = MaxThreads / NumFeatures;
-                dim3 blocks(tv::div_up(out.dim(1), NumFeatures), tv::div_up(nhot, Num0));
+                dim3 blocks(tv::div_up(out.dim(1), int64_t(NumFeatures)), tv::div_up(nhot, int64_t(Num0)));
                 dim3 threads(NumFeatures, Num0);
                 launcher = tv::cuda::Launch(blocks, threads, cudastream);
             }});
             if (!found){{
                 int NumFeatures = 16;
                 int Num0 = MaxThreads / NumFeatures;
-                dim3 blocks(tv::div_up(out.dim(1), NumFeatures), tv::div_up(nhot, Num0));
+                dim3 blocks(tv::div_up(out.dim(1), int64_t(NumFeatures)), tv::div_up(nhot, int64_t(Num0)));
                 dim3 threads(NumFeatures, Num0);
                 launcher = tv::cuda::Launch(blocks, threads, cudastream);
             }}
@@ -244,14 +243,14 @@ class IndiceMaxPool(pccm.Class):
                 // if a value is found, other value won't be executed.
                 int NumFeatures = TV_DECLTYPE(V)::value;
                 int Num0 = MaxThreads / NumFeatures;
-                dim3 blocks(tv::div_up(out.dim(1), NumFeatures), tv::div_up(nhot, Num0));
+                dim3 blocks(tv::div_up(out.dim(1), int64_t(NumFeatures)), tv::div_up(nhot, int64_t(Num0)));
                 dim3 threads(NumFeatures, Num0);
                 launcher = tv::cuda::Launch(blocks, threads, cudastream);
             }});
             if (!found){{
                 int NumFeatures = 16;
                 int Num0 = MaxThreads / NumFeatures;
-                dim3 blocks(tv::div_up(out.dim(1), NumFeatures), tv::div_up(nhot, Num0));
+                dim3 blocks(tv::div_up(out.dim(1), int64_t(NumFeatures)), tv::div_up(nhot, int64_t(Num0)));
                 dim3 threads(NumFeatures, Num0);
                 launcher = tv::cuda::Launch(blocks, threads, cudastream);
             }}
@@ -287,14 +286,14 @@ class IndiceMaxPool(pccm.Class):
                 // if a value is found, other value won't be executed.
                 int NumFeatures = TV_DECLTYPE(V)::value;
                 int Num0 = MaxThreads / NumFeatures;
-                dim3 blocks(tv::div_up(out.dim(1), NumFeatures), tv::div_up(nhot, Num0));
+                dim3 blocks(tv::div_up(out.dim(1), int64_t(NumFeatures)), tv::div_up(nhot, int64_t(Num0)));
                 dim3 threads(NumFeatures, Num0);
                 launcher = tv::cuda::Launch(blocks, threads, cudastream);
             }});
             if (!found){{
                 int NumFeatures = 16;
                 int Num0 = MaxThreads / NumFeatures;
-                dim3 blocks(tv::div_up(out.dim(1), NumFeatures), tv::div_up(nhot, Num0));
+                dim3 blocks(tv::div_up(out.dim(1), int64_t(NumFeatures)), tv::div_up(nhot, int64_t(Num0)));
                 dim3 threads(NumFeatures, Num0);
                 launcher = tv::cuda::Launch(blocks, threads, cudastream);
             }}
@@ -331,14 +330,14 @@ class IndiceMaxPool(pccm.Class):
                 // if a value is found, other value won't be executed.
                 int NumFeatures = TV_DECLTYPE(V)::value;
                 int Num0 = MaxThreads / NumFeatures;
-                dim3 blocks(tv::div_up(out.dim(1), NumFeatures), tv::div_up(nhot, Num0));
+                dim3 blocks(tv::div_up(out.dim(1), int64_t(NumFeatures)), tv::div_up(nhot, int64_t(Num0)));
                 dim3 threads(NumFeatures, Num0);
                 launcher = tv::cuda::Launch(blocks, threads, cudastream);
             }});
             if (!found){{
                 int NumFeatures = 16;
                 int Num0 = MaxThreads / NumFeatures;
-                dim3 blocks(tv::div_up(out.dim(1), NumFeatures), tv::div_up(nhot, Num0));
+                dim3 blocks(tv::div_up(out.dim(1), int64_t(NumFeatures)), tv::div_up(nhot, int64_t(Num0)));
                 dim3 threads(NumFeatures, Num0);
                 launcher = tv::cuda::Launch(blocks, threads, cudastream);
             }}

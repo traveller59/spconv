@@ -30,6 +30,7 @@ class HashTable:
     """simple hash table for 32 and 64 bit data. support both cpu and cuda.
     for cuda, it's a fixed-size table, you must provide maximum size 
     (recommend 2 * num).
+    key must be int32/int64.
     see spconv/pytorch/functional/sparse_add_hash_based, a real example
     that show how to use hash table to implement 
     sparse add (same shape, different indices)
@@ -91,7 +92,7 @@ class HashTable:
         is_empty = torch.empty([keys.shape[0]], dtype=torch.uint8, device=keys.device)
         is_empty_tv = torch_tensor_to_tv(is_empty)
         self._table.query(keys_tv, values_tv, is_empty_tv, stream)
-        return values, is_empty
+        return values, is_empty > 0
 
     def insert_exist_keys(self, keys: torch.Tensor, values: torch.Tensor):
         """insert kv that k exists in table. return a uint8 tensor that
@@ -105,7 +106,7 @@ class HashTable:
         is_success = torch.empty([keys.shape[0]], dtype=torch.uint8, device=keys.device)
         is_success_tv = torch_tensor_to_tv(is_success)
         self._table.insert_exist_keys(keys_tv, values_tv, is_success_tv, stream)
-        return is_success
+        return is_success > 0
 
     def assign_arange_(self):
         """iterate table, assign values with "arange" value.

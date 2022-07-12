@@ -34,13 +34,15 @@ class SpconvOps:
         """
         ...
     @staticmethod
-    def generate_conv_inds_stage2(indices: Tensor, hashdata: Tensor, indice_pairs: Tensor, indice_pairs_uniq: Tensor, out_inds: Tensor, num_out_act: int, batch_size: int, output_dims: List[int], input_dims: List[int], ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], transposed: bool = False, stream_int: int = 0) -> int: 
+    def generate_conv_inds_stage2(indices: Tensor, hashdata_k: Tensor, hashdata_v: Tensor, indice_pairs: Tensor, indice_pairs_uniq: Tensor, indice_pairs_uniq_before_sort: Tensor, out_inds: Tensor, num_out_act: int, batch_size: int, output_dims: List[int], input_dims: List[int], ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], transposed: bool = False, stream_int: int = 0) -> int: 
         """
         Args:
             indices: 
-            hashdata: 
+            hashdata_k: 
+            hashdata_v: 
             indice_pairs: 
             indice_pairs_uniq: 
+            indice_pairs_uniq_before_sort: 
             out_inds: 
             num_out_act: 
             batch_size: 
@@ -74,14 +76,16 @@ class SpconvOps:
         """
         ...
     @staticmethod
-    def generate_conv_inds_mask_stage2(indices: Tensor, hashdata: Tensor, indice_pairs_fwd: Tensor, indice_pairs_bwd: Tensor, indice_pairs_uniq: Tensor, out_inds: Tensor, mask_fwd: Tensor, mask_bwd: Tensor, num_out_act: int, batch_size: int, output_dims: List[int], input_dims: List[int], ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], transposed: bool = False, stream_int: int = 0) -> int: 
+    def generate_conv_inds_mask_stage2(indices: Tensor, hashdata_k: Tensor, hashdata_v: Tensor, indice_pairs_fwd: Tensor, indice_pairs_bwd: Tensor, indice_pairs_uniq: Tensor, indice_pairs_uniq_before_sort: Tensor, out_inds: Tensor, mask_fwd: Tensor, mask_bwd: Tensor, num_out_act: int, batch_size: int, output_dims: List[int], input_dims: List[int], ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], transposed: bool = False, stream_int: int = 0) -> int: 
         """
         Args:
             indices: 
-            hashdata: 
+            hashdata_k: 
+            hashdata_v: 
             indice_pairs_fwd: 
             indice_pairs_bwd: 
             indice_pairs_uniq: 
+            indice_pairs_uniq_before_sort: 
             out_inds: 
             mask_fwd: 
             mask_bwd: 
@@ -98,11 +102,12 @@ class SpconvOps:
         """
         ...
     @staticmethod
-    def generate_subm_conv_inds(indices: Tensor, hashdata: Tensor, indice_pairs: Tensor, out_inds: Tensor, indice_num_per_loc: Tensor, batch_size: int, input_dims: List[int], ksize: List[int], dilation: List[int], indice_pair_mask: Tensor =  Tensor(), backward: bool = False, stream_int: int =  0) -> int: 
+    def generate_subm_conv_inds(indices: Tensor, hashdata_k: Tensor, hashdata_v: Tensor, indice_pairs: Tensor, out_inds: Tensor, indice_num_per_loc: Tensor, batch_size: int, input_dims: List[int], ksize: List[int], dilation: List[int], indice_pair_mask: Tensor =  Tensor(), backward: bool = False, stream_int: int =  0) -> int: 
         """
         Args:
             indices: 
-            hashdata: 
+            hashdata_k: 
+            hashdata_v: 
             indice_pairs: 
             out_inds: 
             indice_num_per_loc: 
@@ -276,6 +281,18 @@ class SpconvOps:
         """
         ...
     @staticmethod
+    def sort_1d_by_key_split_allocator_v2(data: Tensor, allocator, mask: Tensor, indices: Tensor =  Tensor(), stream: int = 0, mask_output: bool = False) -> Tensor: 
+        """
+        Args:
+            data: 
+            allocator: 
+            mask: 
+            indices: 
+            stream: 
+            mask_output: 
+        """
+        ...
+    @staticmethod
     def count_bits(a: Tensor) -> Tensor: 
         """
         Args:
@@ -326,5 +343,53 @@ class SpconvOps:
             empty_mean: 
             clear_voxels: 
             stream_int: 
+        """
+        ...
+    @staticmethod
+    def get_int32_max() -> int: ...
+    @staticmethod
+    def get_indice_pairs_implicit_gemm(allocator, indices: Tensor, batch_size: int, input_dims: List[int], algo: int, ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], out_padding: List[int], subm: bool, transposed: bool, is_train: bool, stream_int: int = 0) -> Tensor: 
+        """
+        Args:
+            allocator: 
+            indices: 
+            batch_size: 
+            input_dims: 
+            algo: 
+            ksize: 
+            stride: 
+            padding: 
+            dilation: 
+            out_padding: 
+            subm: 
+            transposed: 
+            is_train: 
+            stream_int: 
+        """
+        ...
+    @staticmethod
+    def get_indice_pairs(allocator, indices: Tensor, batch_size: int, input_dims: List[int], algo: int, ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], out_padding: List[int], subm: bool, transposed: bool, stream_int: int = 0) -> None: 
+        """
+        Args:
+            allocator: 
+            indices: 
+            batch_size: 
+            input_dims: 
+            algo: 
+            ksize: 
+            stride: 
+            padding: 
+            dilation: 
+            out_padding: 
+            subm: 
+            transposed: 
+            stream_int: 
+        """
+        ...
+    @staticmethod
+    def test_allocator(allocator) -> None: 
+        """
+        Args:
+            allocator: 
         """
         ...

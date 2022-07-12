@@ -352,32 +352,36 @@ def scatter_nd(indices, updates, shape):
 
 class TestSpConv(TestCase):
     def testSpConv3d(self):
-        np.random.seed(484)
-        torch.manual_seed(48848)
+        np.random.seed(71)
+        torch.manual_seed(705)
         devices = ["cuda:0"]
-        shapes = [[19, 18, 17]]
+        shapes = [[4, 4, 4]]
         batchsizes = [1, 2]
 
-        in_channels = [32]
+        in_channels = [4]
         out_channels = [32, 48, 64]
         ksizes = [2, 3]
         strides = [1, 2, 3]
         paddings = [0, 1, 2]
         dilations = [1, 2, 3]
+        ksizes = [3]
+        strides = [1]
+        paddings = [0]
+        dilations = [1]
+
         algos = [
-            ConvAlgo.Native, ConvAlgo.MaskImplicitGemm,
-            ConvAlgo.MaskSplitImplicitGemm
+            ConvAlgo.MaskImplicitGemm,
+            # ConvAlgo.MaskSplitImplicitGemm
         ]
-        algos = [ConvAlgo.MaskSplitImplicitGemm]
+        # algos = [ConvAlgo.MaskSplitImplicitGemm]
 
         for dev, shape, bs, IC, OC, k, s, p, d, al in params_grid(
                 devices, shapes, batchsizes, in_channels, out_channels, ksizes,
                 strides, paddings, dilations, algos):
             if all([s > 1, d > 1]):
                 continue  # don't support this.
-            print(k, s, p, d)
             device = torch.device(dev)
-            num_points = [1000] * bs
+            num_points = [10] * bs
             dtype = torch.float32
             net = SparseConv3dTestTorch(1,
                                         3,
@@ -398,6 +402,9 @@ class TestSpConv(TestCase):
                 np.float32)
             indices = np.ascontiguousarray(
                 sparse_dict["indices"][:, [3, 0, 1, 2]]).astype(np.int32)
+            # print(k, s, p, d, features.mean(), indices.mean())
+            # if k == 2 and s == 2 and p == 0 and d == 1:
+            #     breakpoint()
             features_dense = sparse_dict["features_dense"].astype(np.float32)
             indices_t = torch.from_numpy(indices).int().to(device)
             features_t = torch.from_numpy(features).to(device).to(dtype)
@@ -829,4 +836,4 @@ if __name__ == '__main__':
     # main(algo=spconv.ConvAlgo.SparseConvNet, dtype=torch.float32)
     # TestCase().assertAllClose(out_my, out_ref)
     # unittest.main()
-    TestSpConv().testSpMaxPool3d()
+    TestSpConv().testSpConv3d()

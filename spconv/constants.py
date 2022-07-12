@@ -16,6 +16,8 @@ import os
 from pathlib import Path
 from typing import List
 from pccm.utils import project_is_editable, project_is_installed
+from cumm.gemm.constants import NVRTCMode
+import enum 
 
 PACKAGE_NAME = "spconv"
 PACKAGE_ROOT = Path(__file__).parent.resolve()
@@ -43,3 +45,21 @@ else:
 # for f16 backward weight, larger splitk, larger compute error.
 # so we use this env to control maximum splitk.
 SPCONV_BWD_SPLITK = list(map(int, os.getenv("SPCONV_BWD_SPLITK", "1,2,4,8,16,32,64").split(",")))
+
+SPCONV_NVRTC_MODE = NVRTCMode.ConstantMemory
+SPCONV_DEBUG_NVRTC_KERNELS = False
+
+
+class SpconvAllocatorKeys:
+    Pair = "Pair"
+    IndiceNumPerLoc = "IndiceNumPerLoc"
+    PairMask = "PairMask"
+    MaskArgSort = "MaskArgSort"
+    OutIndices = "OutIndices"
+    PairFwd = "PairFwd"
+    # PairMaskFwd = "PairMaskFwd"
+    PairMaskBwd = "PairMaskBwd"
+    # MaskArgSortFwd = "MaskArgSortFwd"
+    MaskArgSortBwd = "MaskArgSortBwd"
+
+    OutFeatures = "OutFeatures"

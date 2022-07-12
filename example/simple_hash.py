@@ -56,7 +56,7 @@ def main():
         is_empty = table.insert_exist_keys(keys, values)
         ks, vs, cnt = table.items()
         cnt_item = cnt.item()
-        print(cnt, ks[:cnt_item], vs[:cnt_item])
+        print(cnt, ks[:cnt_item], vs[:cnt_item], is_empty.dtype)
 
 
 if __name__ == "__main__":

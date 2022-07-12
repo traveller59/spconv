@@ -104,6 +104,8 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
         self.add_member("map_8_8", "tsl::robin_map<uint64_t, uint64_t>")
         self.add_pybind_member("insert_count_", "int64_t", prop_name="insert_count", readwrite=False)
 
+        self.valid_hash_key_types = [dtypes.int32, dtypes.int64, dtypes.uint32, dtypes.uint64]
+
     @pccm.pybind.mark 
     @pccm.constructor
     def ctor(self):
@@ -163,11 +165,9 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
                 code.raw(f"""
                 auto custream = reinterpret_cast<cudaStream_t>(stream);
                 """)
-                for k_items in _dispatch_ints(code, [4, 8], "keys_data.itemsize()"):
+                for k_items in _dispatch(code, self.valid_hash_key_types, "keys_data.dtype()"):
                     code.raw(f"""
-                    using K = tv::hash::itemsize_to_unsigned_t<{k_items}>;
-                    constexpr K kEmptyKey = std::numeric_limits<K>::max();
-
+                    using K = {k_items};
                     K* key_data_ptr = reinterpret_cast<K*>(keys_data.raw_data());
                     """)
                     for v_items in _dispatch_ints(code, [4, 8], "values_data.itemsize()"):
@@ -176,10 +176,10 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
                         V* value_data_ptr = reinterpret_cast<V*>(values_data.raw_data());
                         using table_t =
                             tv::hash::LinearHashTableSplit<K, V, tv::hash::Murmur3Hash<K>,
-                                                        kEmptyKey, false>;
+                                                        tv::hash::default_empty_key_v<K>, false>;
                         table_t table(key_data_ptr, value_data_ptr, keys_data.dim(0));
                         tv::cuda::Launch launcher(table.size(), custream);
-                        launcher(tv::hash::clear_table_split<table_t>, table);
+                        launcher(tv::hash::clear_map_kernel_split<table_t>, table);
                         """)
         return code 
 
@@ -201,9 +201,9 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
             int64_t value_after_insert = keys.dim(0) + insert_count_;
             TV_ASSERT_RT_ERR(value_after_insert < keys_data.dim(0), "inserted count exceed maximum hash size");
             insert_count_ += keys.dim(0);
+            TV_ASSERT_RT_ERR(keys.dtype() == keys_data.dtype(), "keys dtype not equal to", keys_data.dtype());
         }}
         auto N = keys.dim(0);
-        TV_ASSERT_RT_ERR(keys.itemsize() == key_itemsize_, "keys itemsize not equal to", key_itemsize_);
         if (!values.empty()){{
             TV_ASSERT_RT_ERR(values.itemsize() == value_itemsize_, "values itemsize not equal to", value_itemsize_);
             TV_ASSERT_RT_ERR(keys.dim(0) == values.dim(0), "number of key and value must same");
@@ -231,10 +231,9 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
                 code.raw(f"""
                 auto custream = reinterpret_cast<cudaStream_t>(stream);
                 """)
-                for k_items in _dispatch_ints(code, [4, 8], "keys_data.itemsize()"):
+                for k_items in _dispatch(code, self.valid_hash_key_types, "keys_data.dtype()"):
                     code.raw(f"""
-                    using K = tv::hash::itemsize_to_unsigned_t<{k_items}>;
-                    constexpr K kEmptyKey = std::numeric_limits<K>::max();
+                    using K = {k_items};
 
                     K* key_data_ptr = reinterpret_cast<K*>(keys_data.raw_data());
                     const K* key_ptr = reinterpret_cast<const K*>(keys.raw_data());
@@ -248,7 +247,7 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
 
                         using table_t =
                             tv::hash::LinearHashTableSplit<K, V, tv::hash::Murmur3Hash<K>,
-                                                        kEmptyKey, false>;
+                                                        tv::hash::default_empty_key_v<K>, false>;
                         tv::cuda::Launch launcher(N, custream);
                         table_t table(key_data_ptr, value_data_ptr, keys_data.dim(0));
                         launcher(tv::hash::insert_split<table_t>, table, key_ptr, value_ptr, size_t(N));
@@ -279,6 +278,9 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
         TV_ASSERT_RT_ERR(values.itemsize() == value_itemsize_, "values itemsize not equal to", value_itemsize_);
         TV_ASSERT_RT_ERR(N == values.dim(0) && is_empty.dim(0) == N, "number of key and value must same");
         auto is_empty_ptr = is_empty.data_ptr<uint8_t>();
+        if (!is_cpu){{
+            TV_ASSERT_RT_ERR(keys.dtype() == keys_data.dtype(), "keys dtype not equal to", keys_data.dtype());
+        }}
         """)
         with code.if_("is_cpu"):
             map_name = "cpu_map"
@@ -304,10 +306,9 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
                 code.raw(f"""
                 auto custream = reinterpret_cast<cudaStream_t>(stream);
                 """)
-                for k_items in _dispatch_ints(code, [4, 8], "keys_data.itemsize()"):
+                for k_items in _dispatch(code, self.valid_hash_key_types, "keys_data.dtype()"):
                     code.raw(f"""
-                    using K = tv::hash::itemsize_to_unsigned_t<{k_items}>;
-                    constexpr K kEmptyKey = std::numeric_limits<K>::max();
+                    using K = {k_items};
                     K* key_data_ptr = reinterpret_cast<K*>(keys_data.raw_data());
                     K* key_ptr = reinterpret_cast<K*>(keys.raw_data());
 
@@ -319,7 +320,7 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
                         V* value_ptr = reinterpret_cast<V*>(values.raw_data());
                         using table_t =
                             tv::hash::LinearHashTableSplit<K, V, tv::hash::Murmur3Hash<K>,
-                                                        kEmptyKey, false>;
+                                                        tv::hash::default_empty_key_v<K>, false>;
                         tv::cuda::Launch launcher(N, custream);
                         table_t table(key_data_ptr, value_data_ptr, keys_data.dim(0));
                         launcher(tv::hash::query_split<table_t>, table, key_ptr, value_ptr, is_empty_ptr, size_t(N));
@@ -361,11 +362,12 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
                 TV_ASSERT_RT_ERR(count.device() == 0, "count must be cuda");
                 auto custream = reinterpret_cast<cudaStream_t>(stream);
                 """)
-                for k_items in _dispatch_ints(code, [4, 8], "keys_data.itemsize()"):
+                for k_items in _dispatch(code, self.valid_hash_key_types, "keys_data.dtype()"):
                     code.raw(f"""
-                    using K = tv::hash::itemsize_to_unsigned_t<{k_items}>;
-                    constexpr K kEmptyKey = std::numeric_limits<K>::max();
-                    auto count_ptr = count.data_ptr<K>();
+                    using K = {k_items};
+                    using Kunsigned = tv::hash::itemsize_to_unsigned_t<sizeof(K)>;
+
+                    auto count_ptr = count.data_ptr<Kunsigned>();
 
                     K* key_data_ptr = reinterpret_cast<K*>(keys_data.raw_data());
                     """)
@@ -376,10 +378,10 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
                         V* value_data_ptr = reinterpret_cast<V*>(values_data.raw_data());
                         using table_t =
                             tv::hash::LinearHashTableSplit<K, V, tv::hash::Murmur3Hash<K>,
-                                                        kEmptyKey, false>;
+                                                        tv::hash::default_empty_key_v<K>, false>;
                         table_t table(key_data_ptr, value_data_ptr, keys_data.dim(0));
                         tv::cuda::Launch launcher(table.size(), custream);
-                        launcher(tv::hash::assign_arange_split<table_t, K>, table, count_ptr);
+                        launcher(tv::hash::assign_arange_split<table_t, Kunsigned>, table, count_ptr);
                         """)
         else:
             code.raw(f"""
@@ -426,7 +428,9 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
         TV_ASSERT_RT_ERR(keys.itemsize() == key_itemsize_, "keys itemsize not equal to", key_itemsize_);
         TV_ASSERT_RT_ERR(values.itemsize() == value_itemsize_, "values itemsize not equal to", value_itemsize_);
         TV_ASSERT_RT_ERR(N == values.dim(0), "number of key and value must same");
-        
+        if (!is_cpu){{
+            TV_ASSERT_RT_ERR(keys.dtype() == keys_data.dtype(), "keys dtype not equal to", keys_data.dtype());
+        }}
         """)
         with code.if_("is_cpu"):
             map_name = "cpu_map"
@@ -450,12 +454,12 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
                 code.raw(f"""
                 auto custream = reinterpret_cast<cudaStream_t>(stream);
                 """)
-                for k_items in _dispatch_ints(code, [4, 8], "keys_data.itemsize()"):
+                for k_items in _dispatch(code, self.valid_hash_key_types, "keys_data.dtype()"):
                     code.raw(f"""
-                    using K = tv::hash::itemsize_to_unsigned_t<{k_items}>;
-                    auto count_ptr = count.data_ptr<K>();
+                    using K = {k_items};
+                    using Kunsigned = tv::hash::itemsize_to_unsigned_t<sizeof(K)>;
+                    auto count_ptr = count.data_ptr<Kunsigned>();
 
-                    constexpr K kEmptyKey = std::numeric_limits<K>::max();
                     K* key_data_ptr = reinterpret_cast<K*>(keys_data.raw_data());
                     K* key_ptr = reinterpret_cast<K*>(keys.raw_data());
 
@@ -467,10 +471,10 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
                         V* value_ptr = reinterpret_cast<V*>(values.raw_data());
                         using table_t =
                             tv::hash::LinearHashTableSplit<K, V, tv::hash::Murmur3Hash<K>,
-                                                        kEmptyKey, false>;
+                                                        tv::hash::default_empty_key_v<K>, false>;
                         tv::cuda::Launch launcher(N, custream);
                         table_t table(key_data_ptr, value_data_ptr, keys_data.dim(0));
-                        launcher(tv::hash::iterate_table_split<table_t, K>, table, key_ptr, value_ptr, size_t(N), count_ptr);
+                        launcher(tv::hash::iterate_table_split<table_t, Kunsigned>, table, key_ptr, value_ptr, size_t(N), count_ptr);
                         """)
         else:
             code.raw(f"""
@@ -523,10 +527,9 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
                 code.raw(f"""
                 auto custream = reinterpret_cast<cudaStream_t>(stream);
                 """)
-                for k_items in _dispatch_ints(code, [4, 8], "keys_data.itemsize()"):
+                for k_items in _dispatch(code, self.valid_hash_key_types, "keys_data.dtype()"):
                     code.raw(f"""
-                    using K = tv::hash::itemsize_to_unsigned_t<{k_items}>;
-                    constexpr K kEmptyKey = std::numeric_limits<K>::max();
+                    using K = {k_items};
                     K* key_data_ptr = reinterpret_cast<K*>(keys_data.raw_data());
                     const K* key_ptr = reinterpret_cast<const K*>(keys.raw_data());
 
@@ -538,7 +541,7 @@ class HashTable(pccm.Class, pccm.pybind.PybindClassMixin):
                         const V* value_ptr = reinterpret_cast<const V*>(values.raw_data());
                         using table_t =
                             tv::hash::LinearHashTableSplit<K, V, tv::hash::Murmur3Hash<K>,
-                                                        kEmptyKey, false>;
+                                                        tv::hash::default_empty_key_v<K>, false>;
                         table_t table(key_data_ptr, value_data_ptr, keys_data.dim(0));
                         tv::cuda::Launch launcher(N, custream);
                         launcher(insert_exist_keys_kernel<table_t>, table, key_ptr, value_ptr, is_empty_ptr, size_t(N));
