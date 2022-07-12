@@ -34,7 +34,7 @@ class CustomThrustLib(pccm.Class):
         self.add_dependency(ThrustLib)
         # https://github.com/NVIDIA/thrust/issues/1401#issuecomment-806403746
         if compat.InLinux:
-            self.build_meta.add_public_cflags("nvcc", "-Xcompiler", "-fno-gnu-unique")
+            self.build_meta.add_public_cflags("nvcc", "-Xcompiler", "-fno-gnu-unique", "-Xcompiler", "-fvisibility=hidden")
 
 
 class ThrustCustomAllocatorV2(pccm.Class, pccm.pybind.PybindClassMixin):

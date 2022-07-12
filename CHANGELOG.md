@@ -1,4 +1,7 @@
 # Changelog
+## [2.1.22] - 2022-6-11
+### Fixed
+- Fix thrust problem by adding -fvisibility=hidden
 
 ## [2.1.22] - 2022-4-14
 ### Added
