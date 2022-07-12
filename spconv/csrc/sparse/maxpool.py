@@ -17,7 +17,7 @@ from cumm.gemm.core.metaarray import MetaArray, seq
 from cumm import dtypes
 import pccm
 from cumm.gemm.layout import TensorGeneric, to_stride
-from cumm.common import TensorView, TensorViewHashKernel, TensorViewKernel, ThrustLib, GemmBasic
+from cumm.common import TensorView, GemmDTypes, TensorViewKernel, ThrustLib, GemmBasic
 from cumm.gemm import codeops
 from typing import List
 from cumm.conv.params import ConvProblem
@@ -352,7 +352,7 @@ class IndiceMaxPool(pccm.Class):
 class IndiceMaxPoolCPU(pccm.Class):
     def __init__(self):
         super().__init__()
-        self.add_dependency(TensorView)
+        self.add_dependency(TensorView, GemmDTypes)
         if CUMM_CPU_ONLY_BUILD:
             self.add_dependency(OMPLib)
         self.add_include("tensorview/parallel/all.h")
@@ -369,7 +369,7 @@ class IndiceMaxPoolCPU(pccm.Class):
         code.raw(f"""
         int nhot = out_inds.dim(0);
         int num_features = in.dim(1);
-        tv::dispatch<float, double>(out.dtype(), [&](auto I){{
+        tv::dispatch<float, double, tv::half_t, tv::bfloat16_t>(out.dtype(), [&](auto I){{
             using T = TV_DECLTYPE(I);
             auto out_features = out.data_ptr<T>();
             auto in_features = in.data_ptr<const T>();
@@ -409,7 +409,7 @@ class IndiceMaxPoolCPU(pccm.Class):
         code.raw(f"""
         int nhot = out_inds.dim(0);
         int num_features = in.dim(1);
-        tv::dispatch<float, double>(out.dtype(), [&](auto I){{
+        tv::dispatch<float, double, tv::half_t, tv::bfloat16_t>(out.dtype(), [&](auto I){{
             using T = TV_DECLTYPE(I);
             auto out_features = out.data_ptr<const T>();
             auto in_features = in.data_ptr<const T>();

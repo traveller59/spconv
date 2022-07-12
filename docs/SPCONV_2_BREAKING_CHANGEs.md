@@ -24,4 +24,4 @@
 * VoxelGenerator has been replaced by ```spconv.pytorch.utils.PointToVoxel``` (torch API) or Point2VoxelGPU[1-4]d/Point2VoxelCPU[1-4]d (tv.Tensor API).
 * spconv < 2.1 don't support CPU. spconv 2.1+ support cpu for debug usage.
 
-* test spconv 1.x model in spconv 2.x: Firstly set environment variable before run program, Then set all ```algo``` in conv/pool to ```ConvAlgo.Native```. Linux: ```export SPCONV_FILTER_HWIO="1"```, Windows powershell: ```$Env:SPCONV_FILTER_HWIO = "1"```. **WARNING** test spconv 1.x model don't support implicit gemm algorithm.
+* test spconv 1.x model in spconv 2.x: Linux: ```export SPCONV_SAVED_WEIGHT_LAYOUT="RSCK"```, Windows powershell: ```$Env:SPCONV_SAVED_WEIGHT_LAYOUT = "RSCK"```. 

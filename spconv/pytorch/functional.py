@@ -19,6 +19,7 @@ import torch
 from torch import nn
 from torch.autograd import Function
 from typing import Optional, TypeVar
+from spconv.pytorch.core import SparseConvTensor
 from spconv.tools import CUDAKernelTimer
 from spconv.pytorch import ops, SparseConvTensor
 from spconv.pytorch.constants import PYTORCH_VERSION

@@ -36,8 +36,9 @@ _ALL_INTS = {tv.int32, tv.int16, tv.int8, tv.int64, tv.uint64, tv.uint8, tv.uint
 
 def torch_tensor_to_tv(ten: torch.Tensor,
                        dtype: Optional[int] = None,
-                       shape: Optional[List[int]] = None):
-    assert ten.is_contiguous(), "must be contiguous tensor"
+                       shape: Optional[List[int]] = None,
+                       stride: Optional[List[int]] = None):
+    # assert ten.is_contiguous(), "must be contiguous tensor"
     ptr = ten.data_ptr()
     device = ten.device
     if device.type == "cpu":
@@ -46,12 +47,20 @@ def torch_tensor_to_tv(ten: torch.Tensor,
         tv_device = 0
     else:
         raise NotImplementedError
-    if shape is None:
-        shape = list(ten.shape)
     if dtype is None:
         dtype = _TORCH_DTYPE_TO_TV[ten.dtype]
-    stride = ten.stride()
-    return tv.from_blob_strided(ptr, shape, list(stride), dtype, tv_device)
+    if stride is None:
+        stride = list(ten.stride())
+    if shape is None:
+        shape = list(ten.shape)
+    else:
+        if not ten.is_contiguous():
+            msg = "if you provide custom shape for non-contig tensor, stride must not None"
+            assert stride is not None, msg
+        else:
+            # custom shape, if tensor is contiguous, we use from_blob and calc strides
+            return tv.from_blob(ptr, shape, dtype, tv_device)
+    return tv.from_blob_strided(ptr, shape, stride, dtype, tv_device)
 
 def torch_tensors_to_tv(*tens: torch.Tensor):
     return (torch_tensor_to_tv(t) for t in tens)

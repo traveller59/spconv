@@ -19,6 +19,10 @@ if hasattr(_ext, "cumm"):
 else:
     CPU_ONLY_BUILD = True
 
+from spconv.core_cc.csrc.sparse.all import SpconvOps
+
+BUILD_CUMM_VERSION = SpconvOps.cumm_version()
+BUILD_PCCM_VERSION = SpconvOps.pccm_version()
 from spconv.core_cc.csrc.utils.boxops import BoxOps
 from spconv.core_cc.cumm.common import CompileInfo
 HAS_BOOST = BoxOps.has_boost()

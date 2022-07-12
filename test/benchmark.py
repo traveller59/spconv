@@ -24,7 +24,7 @@ from spconv.core import ConvAlgo
 import spconv.pytorch as spconv
 from spconv.utils import Point2VoxelCPU3d
 
-
+# torch.backends.cudnn.enabled = False
 def waymo_data(batch_size=1):
     gen = Point2VoxelCPU3d([0.1, 0.1, 0.1], [-80, -80, -2, 80, 80, 6], 3,
                            150000, 1)
@@ -168,8 +168,8 @@ class Net(nn.Module):
             # nn.ReLU(),
 
             # spconv.SparseInverseConv3d(256, 128, 2, indice_key="m5", bias=False, algo=algo),
-            # # nn.BatchNorm1d(128),
-            # # nn.ReLU(),
+            # # # nn.BatchNorm1d(128),
+            # # # nn.ReLU(),
 
             # spconv.SparseInverseConv3d(128, 64, 2, indice_key="m4", bias=False, algo=algo),
         )
@@ -312,7 +312,8 @@ def main():
     # MaskImpGemm: 51.0ms
     # MaskSplitImpGemm: 41.1ms
     # algo = None
-    net = Net(spatial_shape, algo).to(device).eval().to(dtype).train()
+    net = Net(spatial_shape, algo).to(device).eval().to(dtype)# .train()
+    # net.load_state_dict(net.state_dict())
     spconv.assign_name_for_sparse_modules(net)
     print(coors_th.shape)
     out = net(voxels_th, coors_th, 1)
@@ -329,12 +330,12 @@ def main():
             print("------------")
             torch.cuda.synchronize()
             t = time.time()
-            out_nograd = net(voxels_th, coors_th, 1, True)
+            out_nograd = net(voxels_th, coors_th, 1, False)
             timer = out_nograd._timer
-            res = timer.collect_by_name("forward", timer.get_all_pair_time())
-            res2 = timer.collect_by_name("forward0", timer.get_all_pair_time())
+            # res = timer.collect_by_name("forward", timer.get_all_pair_time())
+            # res2 = timer.collect_by_name("forward0", timer.get_all_pair_time())
 
-            print(sum(res.values()) + sum(res2.values()))
+            # print(sum(res.values()) + sum(res2.values()))
             # print(timer.get_all_pair_time())
 
             # print(sum(timer.get_all_pair_time().values()))
@@ -342,7 +343,7 @@ def main():
             # sort_bench()
             times.append(time.time() - t)
     print("spconv time", np.mean(times[10:]))
-    # times = []
+    times = []
 
     # for i in range(10):
     #     out = net(voxels_th, coors_th, 1)

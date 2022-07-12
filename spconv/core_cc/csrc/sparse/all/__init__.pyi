@@ -5,6 +5,20 @@ class ThrustCustomAllocatorV2:
     alloc_func: Callable[int, int]
 class SpconvOps:
     @staticmethod
+    def cumm_version() -> str: 
+        """
+        get cumm version when build spconv.
+                
+        """
+        ...
+    @staticmethod
+    def pccm_version() -> str: 
+        """
+        get pccm version when build spconv.
+                
+        """
+        ...
+    @staticmethod
     def generate_conv_inds_stage1(indices: Tensor, indice_pairs: Tensor, indice_pairs_uniq: Tensor, indice_num_per_loc: Tensor, batch_size: int, output_dims: List[int], input_dims: List[int], ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], transposed: bool = False, stream_int: int = 0) -> None: 
         """
         Args:
@@ -294,6 +308,13 @@ class SpconvOps:
         ...
     @staticmethod
     def count_bits(a: Tensor) -> Tensor: 
+        """
+        Args:
+            a: 
+        """
+        ...
+    @staticmethod
+    def reverse_bits(a: Tensor) -> Tensor: 
         """
         Args:
             a: 

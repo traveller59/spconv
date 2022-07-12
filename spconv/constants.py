@@ -25,10 +25,20 @@ PACKAGE_ROOT = Path(__file__).parent.resolve()
 EDITABLE_INSTALLED = project_is_installed(
     PACKAGE_NAME) and project_is_editable(PACKAGE_NAME)
 
-_filter_hwio_env = os.getenv("SPCONV_FILTER_HWIO", "0")
-FILTER_HWIO = _filter_hwio_env == "1"
+_filter_hwio_env = os.getenv("SPCONV_FILTER_HWIO", None)
+if _filter_hwio_env is not None:
+    raise NotImplementedError("SPCONV_FILTER_HWIO is deprecated. use SPCONV_SAVED_WEIGHT_LAYOUT instead.")
+
 DISABLE_JIT = os.getenv("SPCONV_DISABLE_JIT", "0") == "1"
 NDIM_DONT_CARE = 3
+FILTER_HWIO = False
+
+SAVED_WEIGHT_LAYOUT = os.getenv("SPCONV_SAVED_WEIGHT_LAYOUT", "")
+
+if SAVED_WEIGHT_LAYOUT != "":
+    assert SAVED_WEIGHT_LAYOUT in ["KRSC", "RSKC", "RSCK"], "please set SAVED_WEIGHT_LAYOUT to KRSC, RSKC or RSCK"
+
+ALL_WEIGHT_IS_KRSC = True
 
 SPCONV_DEBUG_SAVE_PATH = os.getenv("SPCONV_DEBUG_SAVE_PATH", "")
 
@@ -63,3 +73,4 @@ class SpconvAllocatorKeys:
     MaskArgSortBwd = "MaskArgSortBwd"
 
     OutFeatures = "OutFeatures"
+SPCONV_DEBUG_WEIGHT = False

@@ -83,6 +83,9 @@ SHUFFLE_SIMT_PARAMS: List[GemmAlgoParams] = [
                         "f32,f32,f32,f32,f32", 2, kernel.GemmAlgo.Simt, None),
     *gen_shuffle_params((32, 32, 32), (32, 32, 8), ["f32,f32,f32,f32,f32"],
                         "f32,f32,f32,f32,f32", 2, kernel.GemmAlgo.Simt, None),
+    *gen_shuffle_params((16, 32, 8), (16, 16, 8), ["f32,f32,f32,f32,f32"],
+                        "f32,f32,f32,f32,f32", 2, kernel.GemmAlgo.Simt, None),
+
     # fall back kernels if mat is misaligned for half
     # TODO use access-per-vector kernel instead of simt kernel for fallback
     *gen_shuffle_params((128, 128, 8), (32, 64, 8), ["f16,f16,f16,f32,f32"],

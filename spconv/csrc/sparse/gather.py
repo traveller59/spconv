@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import pccm
-from cumm.common import TensorView
+from cumm.common import TensorView, GemmDTypes
 from cumm.constants import CUMM_CPU_ONLY_BUILD
 from spconv.csrc.sparse.cpu_core import OMPLib
 from typing import List
@@ -24,7 +24,7 @@ class GatherCPU(pccm.Class):
         super().__init__()
         if CUMM_CPU_ONLY_BUILD:
             self.add_dependency(OMPLib)
-        self.add_dependency(TensorView)
+        self.add_dependency(TensorView, GemmDTypes)
         self.add_include("tensorview/parallel/all.h")
 
     @pccm.static_function
@@ -39,7 +39,7 @@ class GatherCPU(pccm.Class):
 
         auto nhot = inds.dim(0);
         int channel = in.dim(1);
-        tv::dispatch<float, double>(out.dtype(), [&](auto I){{
+        tv::dispatch<float, double, tv::bfloat16_t, tv::half_t>(out.dtype(), [&](auto I){{
             auto indices_data = inds.data_ptr<const int>();
             using T = TV_DECLTYPE(I);
             T *buffer_data = out.data_ptr<T>();
@@ -65,7 +65,7 @@ class GatherCPU(pccm.Class):
         // tv::check_shape(inds, {{in.dim(0)}});
         auto nhot = inds.dim(0);
         int channel = in.dim(1);
-        tv::dispatch<float, double>(out.dtype(), [&](auto I){{
+        tv::dispatch<float, double, tv::bfloat16_t, tv::half_t>(out.dtype(), [&](auto I){{
             using T = TV_DECLTYPE(I);
             auto indices_data = inds.data_ptr<const int>();
             const T *buffer_data = in.data_ptr<const T>();
