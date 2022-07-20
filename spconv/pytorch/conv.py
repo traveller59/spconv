@@ -38,20 +38,6 @@ from torch.nn.init import calculate_gain
 
 FILTER_HWIO = False
 
-
-def expand_nd(val: Union[int, List[int], Tuple[int, ...]], ndim: int) -> List[int]:
-    if isinstance(val, int):
-        val = [val] * ndim
-    elif isinstance(val, list):
-        assert len(val) == ndim
-    elif isinstance(val, tuple):
-        assert len(val) == ndim
-        return [*val]
-    else:
-        raise NotImplementedError
-    return val
-
-
 class SparseConvolution(SparseModule):
     __constants__ = [
         'stride', 'padding', 'dilation', 'groups', 'bias', 'subm', 'inverse',
@@ -82,6 +68,7 @@ class SparseConvolution(SparseModule):
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.kernel_size = expand_nd(ndim, kernel_size)
+
         self.stride = expand_nd(ndim, stride)
         kv = int(np.prod(self.kernel_size))
         kv_stride = int(np.prod(self.stride))
@@ -130,7 +117,6 @@ class SparseConvolution(SparseModule):
             # KRSC
             self.weight = Parameter(
                 torch.Tensor(out_channels, *self.kernel_size, in_channels))
-
         if bias:
             self.bias = Parameter(torch.Tensor(out_channels))
         else:

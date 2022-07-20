@@ -24,8 +24,8 @@ from cumm.tensorview.gemm import ConvLayoutType as ConvLayoutTypeCpp
 from cumm.tensorview.gemm import ShuffleStrideType as ShuffleStrideTypeCpp
 
 from cumm.tensorview.gemm import ConvParams, GemmAlgoDesp, GemmParams
-from cumm.gemm.main import GemmAlgoParams
-from cumm.conv.main import ConvAlgoParams, ConvIterAlgo
+from cumm.gemm.main import GemmAlgoParams, gen_gemm_kernels
+from cumm.conv.main import ConvAlgoParams, ConvIterAlgo, gen_gemm_kernels as gen_conv_kernels
 from cumm import dtypes
 from cumm.conv.bases import (NCHW, NHWC, ConvIterAlgo, ConvLayout,
                              ConvLayoutType, ConvMode, ConvOpType)
@@ -56,10 +56,15 @@ def _assign_gemm_desp_props(desp: Union[ConvAlgoDesp, GemmAlgoDesp],
     desp.access_per_vector = p.access_per_vector
     desp.is_nvrtc = p.is_nvrtc
 
-
 def get_gemm_algo_desp_from_param(p: GemmAlgoParams):
     desp = GemmAlgoDesp()
     _assign_gemm_desp_props(desp, p)
+    # here we must generate kernel for element-per-access data
+    ker = gen_gemm_kernels(p)
+    desp.element_per_access_a = ker.input_spec.input_iter_a.element_per_acc
+    desp.element_per_access_b = ker.input_spec.input_iter_b.element_per_acc
+    desp.element_per_access_c = ker.output_spec.out_iter.element_per_acc
+
     return desp
 
 
@@ -78,6 +83,10 @@ def get_conv_algo_desp_from_param(p: ConvAlgoParams):
     desp.interleave_o = p.layout_desp_output.interleave
     desp.mask_sparse = p.mask_sparse
     desp.increment_k_first = p.increment_k_first
+    ker = gen_conv_kernels(p)
+    desp.element_per_access_a = ker.input_spec.input_iter_a.element_per_acc
+    desp.element_per_access_b = ker.input_spec.input_iter_b.element_per_acc
+    desp.element_per_access_c = ker.output_spec.out_iter.element_per_acc
     return desp
 
 
@@ -104,6 +113,7 @@ def _assign_gemm_params(desp: Union[ConvAlgoDesp, GemmAlgoDesp],
     p.shuffle_stride = ShuffleStrideType(desp.shuffle_type.value)
     p.access_per_vector = desp.access_per_vector
     p.is_nvrtc = desp.is_nvrtc
+
 
 
 def get_gemm_param_from_desp(desp: GemmAlgoDesp):

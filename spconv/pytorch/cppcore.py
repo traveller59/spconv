@@ -15,9 +15,13 @@
 from cumm import tensorview as tv
 import torch
 from typing import Dict, Optional, List, Union
+from spconv.constants import AllocKeys
 from spconv.cppconstants import COMPILED_CUDA_ARCHS
-import sys 
+import sys
 from spconv.core_cc.csrc.sparse.alloc import ExternalAllocator
+from spconv.core_cc.csrc.sparse.convops import ExternalSpconvMatmul
+
+import numpy as np
 
 _TORCH_DTYPE_TO_TV = {
     torch.float32: tv.float32,
@@ -31,8 +35,16 @@ _TORCH_DTYPE_TO_TV = {
 }
 _TV_DTYPE_TO_TORCH = {v: k for k, v in _TORCH_DTYPE_TO_TV.items()}
 
-_TORCH_UINT_WORKAROUNDS = {tv.uint32: tv.int32, tv.uint16: tv.int16, tv.uint64: tv.int64}
-_ALL_INTS = {tv.int32, tv.int16, tv.int8, tv.int64, tv.uint64, tv.uint8, tv.uint32, tv.uint16}
+_TORCH_UINT_WORKAROUNDS = {
+    tv.uint32: tv.int32,
+    tv.uint16: tv.int16,
+    tv.uint64: tv.int64
+}
+_ALL_INTS = {
+    tv.int32, tv.int16, tv.int8, tv.int64, tv.uint64, tv.uint8, tv.uint32,
+    tv.uint16
+}
+
 
 def torch_tensor_to_tv(ten: torch.Tensor,
                        dtype: Optional[int] = None,
@@ -62,6 +74,7 @@ def torch_tensor_to_tv(ten: torch.Tensor,
             return tv.from_blob(ptr, shape, dtype, tv_device)
     return tv.from_blob_strided(ptr, shape, stride, dtype, tv_device)
 
+
 def torch_tensors_to_tv(*tens: torch.Tensor):
     return (torch_tensor_to_tv(t) for t in tens)
 
@@ -69,28 +82,35 @@ def torch_tensors_to_tv(*tens: torch.Tensor):
 def get_current_stream():
     return torch.cuda.current_stream().cuda_stream
 
+
 def get_arch():
     arch = torch.cuda.get_device_capability()
     if arch not in COMPILED_CUDA_ARCHS:
-        print(f"[WARNING]your gpu arch {arch} isn't compiled in prebuilt, "
-                f"may cause invalid device function. "
-                f"available: {COMPILED_CUDA_ARCHS}", file=sys.stderr)
+        print(
+            f"[WARNING]your gpu arch {arch} isn't compiled in prebuilt, "
+            f"may cause invalid device function. "
+            f"available: {COMPILED_CUDA_ARCHS}",
+            file=sys.stderr)
     return arch
 
+
 class TorchAllocator(ExternalAllocator):
+
     def __init__(self, gpudevice: torch.device) -> None:
         super().__init__()
         self.gpudevice = gpudevice
-        self.cpudevice = torch.device("cpu:0")
+        self.cpudevice = torch.device("cpu")
         self.allocated: Dict[Union[str, int], torch.Tensor] = {}
 
-    def zeros(self, name: str, shape: List[int], dtype: int, device: int) -> tv.Tensor:
+    def zeros(self, name: str, shape: List[int], dtype: int,
+              device: int, is_temp_memory: bool = False, stream: int = 0) -> tv.Tensor:
+        # TODO free memory by name if its already free by pointer.
         # provide a name if you want to access it after c++ function exit.
         torch_uint_workaround = dtype in _TORCH_UINT_WORKAROUNDS
         dtype_bkp = dtype
         if dtype in _TORCH_UINT_WORKAROUNDS:
-            assert name == "", "must be temp memory for uint dtypes"
-            dtype = _TORCH_UINT_WORKAROUNDS[dtype]        
+            # assert name == "", "must be temp memory for uint dtypes"
+            dtype = _TORCH_UINT_WORKAROUNDS[dtype]
         th_dtype = _TV_DTYPE_TO_TORCH[dtype]
         if device == -1:
             dev = self.cpudevice
@@ -99,18 +119,19 @@ class TorchAllocator(ExternalAllocator):
         ten = torch.zeros(shape, dtype=th_dtype, device=dev)
         ten_tv = torch_tensor_to_tv(ten)
         self.allocated[ten.data_ptr()] = ten
-        if name:
+        if name and not is_temp_memory:
             self.allocated[name] = ten
         if torch_uint_workaround:
             return ten_tv.type_view(dtype_bkp)
         return ten_tv
 
-    def empty(self, name: str, shape: List[int], dtype: int, device: int) -> tv.Tensor:
+    def empty(self, name: str, shape: List[int], dtype: int,
+              device: int, is_temp_memory: bool = False, stream: int = 0) -> tv.Tensor:
         torch_uint_workaround = dtype in _TORCH_UINT_WORKAROUNDS
         dtype_bkp = dtype
         if dtype in _TORCH_UINT_WORKAROUNDS:
-            assert name == "", "must be temp memory for uint dtypes"
-            dtype = _TORCH_UINT_WORKAROUNDS[dtype]        
+            # assert name == "", "must be temp memory for uint dtypes"
+            dtype = _TORCH_UINT_WORKAROUNDS[dtype]
         th_dtype = _TV_DTYPE_TO_TORCH[dtype]
         if device == -1:
             dev = self.cpudevice
@@ -119,20 +140,21 @@ class TorchAllocator(ExternalAllocator):
         ten = torch.empty(shape, dtype=th_dtype, device=dev)
         ten_tv = torch_tensor_to_tv(ten)
         self.allocated[ten.data_ptr()] = ten
-        if name:
+        if name and not is_temp_memory:
             self.allocated[name] = ten
         if torch_uint_workaround:
             return ten_tv.type_view(dtype_bkp)
         return ten_tv
 
-    def full_int(self, name: str, shape: List[int], value: int, dtype: int, device: int) -> tv.Tensor:
+    def full_int(self, name: str, shape: List[int], value: int, dtype: int,
+                 device: int, is_temp_memory: bool = False, stream: int = 0) -> tv.Tensor:
         if dtype in _TORCH_UINT_WORKAROUNDS and value < 0:
             raise NotImplementedError("you can't use full for unsigned dtypes")
         torch_uint_workaround = dtype in _TORCH_UINT_WORKAROUNDS
         dtype_bkp = dtype
         if dtype in _TORCH_UINT_WORKAROUNDS:
             assert name == "", "must be temp memory for uint dtypes"
-            dtype = _TORCH_UINT_WORKAROUNDS[dtype]        
+            dtype = _TORCH_UINT_WORKAROUNDS[dtype]
 
         th_dtype = _TV_DTYPE_TO_TORCH[dtype]
         if device == -1:
@@ -142,22 +164,21 @@ class TorchAllocator(ExternalAllocator):
         ten = torch.full(shape, value, dtype=th_dtype, device=dev)
         ten_tv = torch_tensor_to_tv(ten)
         self.allocated[ten.data_ptr()] = ten
-        if name:
-            self.allocated[name] = ten
-        if name:
+        if name and not is_temp_memory:
             self.allocated[name] = ten
         if torch_uint_workaround:
             return ten_tv.type_view(dtype_bkp)
         return ten_tv
 
-    def full_float(self, name: str, shape: List[int], value: float, dtype: int, device: int) -> tv.Tensor:
+    def full_float(self, name: str, shape: List[int], value: float, dtype: int,
+                   device: int, is_temp_memory: bool = False, stream: int = 0) -> tv.Tensor:
         if dtype in _TORCH_UINT_WORKAROUNDS and value < 0:
             raise NotImplementedError("you can't use full for unsigned dtypes")
         torch_uint_workaround = dtype in _TORCH_UINT_WORKAROUNDS
         dtype_bkp = dtype
         if dtype in _TORCH_UINT_WORKAROUNDS:
             assert name == "", "must be temp memory for uint dtypes"
-            dtype = _TORCH_UINT_WORKAROUNDS[dtype]        
+            dtype = _TORCH_UINT_WORKAROUNDS[dtype]
         th_dtype = _TV_DTYPE_TO_TORCH[dtype]
         if device == -1:
             dev = self.cpudevice
@@ -166,11 +187,14 @@ class TorchAllocator(ExternalAllocator):
         ten = torch.full(shape, value, dtype=th_dtype, device=dev)
         ten_tv = torch_tensor_to_tv(ten)
         self.allocated[ten.data_ptr()] = ten
-        if name:
+        if name and not is_temp_memory:
             self.allocated[name] = ten
         if torch_uint_workaround:
             return ten_tv.type_view(dtype_bkp)
         return ten_tv
+
+    def get_tensor_by_name(self, name: str):
+        return torch_tensor_to_tv(self.allocated[name])
 
     def free(self, ten: tv.Tensor):
         if ten.storage_bytesize() != ten.bytesize():
@@ -188,6 +212,130 @@ class TorchAllocator(ExternalAllocator):
             self.allocated.pop(ten.byte_pointer())
             return
 
+
+class TorchSpconvMatmul(ExternalSpconvMatmul):
+
+    def __init__(self, alloc: TorchAllocator) -> None:
+        super().__init__()
+        self.alloc = alloc
+
+    def indice_conv_init_gemm(self, features_n: str, filters_n: str,
+                              all_weight_is_krsc: bool, is_kc_not_ck: bool,
+                              kv_center: int, out_channel: int, stream_int: int = 0):
+        features = self.alloc.allocated[features_n]
+        filters = self.alloc.allocated[filters_n]
+        if not all_weight_is_krsc:
+            filters = filters.reshape(-1, *filters.shape[-2:])
+            if not is_kc_not_ck:
+                out_features = torch.mm(features, filters[kv_center])
+            else:
+                out_features = torch.mm(features, filters[kv_center].T)
+        else:
+            filters = filters.reshape(out_channel, -1, filters.shape[-1])
+            if features.is_cuda or (features.dtype != torch.float16):
+                out_features = torch.mm(features, filters[:, kv_center].T)
+            else:
+                # pytorch 1.12 don't support cpu half mm, f**k pytorch
+                # we need cpu fp16 mm for test only.
+                out_features = torch.empty((features.shape[0], out_channel),
+                                           dtype=features.dtype,
+                                           device=features.device)
+                features_np = torch_tensor_to_tv(features).numpy_view()
+                filters_np = torch_tensor_to_tv(filters).numpy_view()
+                out_features_np = torch_tensor_to_tv(out_features).numpy_view()
+                np.matmul(features_np,
+                          filters_np[:, kv_center].T,
+                          out=out_features_np)
+        self.alloc.allocated[AllocKeys.OutFeatures] = out_features
+        # print(filters.shape, features.shape, all_weight_is_krsc, out_features.shape, out_features.is_contiguous())
+
+        return torch_tensor_to_tv(out_features)
+
+    def indice_conv_cpu_gemm(self, inp_buffer_n: str, out_buffer_n: str, filters_n: str,
+                             all_weight_is_krsc: bool,
+                             is_kc_not_ck: bool, nhot: int, index: int):
+        kv_dim = 1 if all_weight_is_krsc else 0
+        inp_buffer = self.alloc.allocated[inp_buffer_n]
+        filters = self.alloc.allocated[filters_n]
+        if not all_weight_is_krsc:
+            filters = filters.reshape(-1, *filters.shape[-2:])
+        else:
+            filters = filters.reshape(filters.shape[0], -1, filters.shape[-1])
+        out_buffer = self.alloc.allocated[out_buffer_n]
+        filters_i = filters.select(kv_dim, index)
+        filters_cur = filters_i if not is_kc_not_ck else filters_i.T
+        if inp_buffer.dtype == torch.float16:
+            inp_buffer_np = torch_tensor_to_tv(inp_buffer).numpy_view()
+            filters_np = torch_tensor_to_tv(filters).numpy_view()
+            filters_i_np = filters_np[
+                index] if not all_weight_is_krsc else filters_np[:, index]
+            filters_cur_np = filters_i_np if not is_kc_not_ck else filters_i_np.T
+            out_buffer_np = torch_tensor_to_tv(out_buffer).numpy_view()
+            np.matmul(inp_buffer_np[:nhot],
+                      filters_cur_np,
+                      out=out_buffer_np[:nhot])
+        else:
+            torch.mm(inp_buffer[:nhot], filters_cur, out=out_buffer[:nhot])
+
+    def indice_conv_bwd_init_gemm(self, features_n: str, filters_n: str,
+                                  out_bp_n: str, dfilters_n: str,
+                                  all_weight_is_krsc: bool, is_kc_not_ck: bool,
+                                  kv_center: int, stream_int: int = 0):
+        features = self.alloc.allocated[features_n]
+        filters = self.alloc.allocated[filters_n]
+        out_bp = self.alloc.allocated[out_bp_n]
+        dfilters = self.alloc.allocated[dfilters_n]
+        if not all_weight_is_krsc:
+            filters = filters.reshape(-1, *filters.shape[-2:])
+            dfilters = dfilters.reshape(-1, *filters.shape[-2:])
+
+        else:
+            filters = filters.reshape(filters.shape[0], -1, filters.shape[-1])
+            dfilters = dfilters.reshape(filters.shape[0], -1, filters.shape[-1])
+
+        if not all_weight_is_krsc:
+            if not is_kc_not_ck:
+                torch.mm(features.T, out_bp, out=dfilters[kv_center])
+                din = torch.mm(out_bp, filters[kv_center].T)
+            else:
+                torch.mm(out_bp.T, features, out=dfilters[kv_center])
+                din = torch.mm(out_bp, filters[kv_center])
+        else:
+            # KN @ NC
+            torch.mm(out_bp.T, features, out=dfilters[:, kv_center])
+            # NK @ KC
+            din = torch.mm(out_bp, filters[:, kv_center])
+        self.alloc.allocated[AllocKeys.DIn] = din
+        return torch_tensor_to_tv(din)
+
+    def indice_conv_bwd_cpu_gemm(self, inp_buffer_n: str, 
+                             out_buffer_n: str, filters_n: str, dfilters_n: str,all_weight_is_krsc: bool,
+                             is_kc_not_ck: bool, nhot: int, index: int):
+        kv_dim = 1 if all_weight_is_krsc else 0
+        inp_buffer = self.alloc.allocated[inp_buffer_n]
+        out_buffer = self.alloc.allocated[out_buffer_n]
+        filters = self.alloc.allocated[filters_n]
+        dfilters = self.alloc.allocated[dfilters_n]
+        if not all_weight_is_krsc:
+            filters = filters.reshape(-1, *filters.shape[-2:])
+            dfilters = dfilters.reshape(-1, *filters.shape[-2:])
+
+        else:
+            filters = filters.reshape(filters.shape[0], -1, filters.shape[-1])
+            dfilters = dfilters.reshape(filters.shape[0], -1, filters.shape[-1])
+
+        filters_i = filters.select(kv_dim, index)
+        dfilters_i = dfilters.select(kv_dim, index)
+
+        filters_KC = filters_i if is_kc_not_ck else filters_i.T
+        if is_kc_not_ck:
+            # KN @ NC
+            torch.mm(out_buffer[:nhot].T, inp_buffer[:nhot], out=dfilters_i)
+        else:
+            # CN @ NK
+            torch.mm(inp_buffer[:nhot].T, out_buffer[:nhot], out=dfilters_i)
+        # NK @ KC
+        torch.mm(out_buffer[:nhot], filters_KC, out=inp_buffer[:nhot])
 
 if __name__ == "__main__":
     a = torch.rand(2, 2)

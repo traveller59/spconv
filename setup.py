@@ -159,6 +159,9 @@ if disable_jit is not None and disable_jit == "1":
     from spconv.csrc.utils import BoxOps
     from spconv.csrc.hash.core import HashTable
     from cumm.common import CompileInfo
+    from spconv.csrc.sparse.alloc import ExternalAllocator
+    from spconv.csrc.sparse.convops import GemmTunerSimple, ExternalSpconvMatmul
+    from spconv.csrc.sparse.convops import ConvTunerSimple, ConvGemmOps
 
     cu = GemmMainUnitTest(SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS)
     convcu = ConvMainUnitTest(IMPLGEMM_SIMT_PARAMS + IMPLGEMM_VOLTA_PARAMS + IMPLGEMM_TURING_PARAMS)
@@ -172,14 +175,30 @@ if disable_jit is not None and disable_jit == "1":
             std = "c++14" 
         else:
             std = "c++17"
-    cus = [cu, convcu, SpconvOps(), BoxOps(), HashTable(), CompileInfo()]
     if CUMM_CPU_ONLY_BUILD:
-        cus = [SpconvOps(), BoxOps(), HashTable(), CompileInfo()]
+        gemmtuner = GemmTunerSimple(cu)
+        gemmtuner.namespace = "csrc.sparse.convops.gemmops"
+        convtuner = ConvTunerSimple(convcu)
+        convtuner.namespace = "csrc.sparse.convops.convops"
+        convops = ConvGemmOps(gemmtuner, convtuner)
+        convops.namespace = "csrc.sparse.convops.spops"
+    else:
+        gemmtuner = GemmTunerSimple(None)
+        gemmtuner.namespace = "csrc.sparse.convops.gemmops"
+        convtuner = ConvTunerSimple(None)
+        convtuner.namespace = "csrc.sparse.convops.convops"
+        convops = ConvGemmOps(gemmtuner, convtuner)
+        convops.namespace = "csrc.sparse.convops.spops"
+    cus = [gemmtuner, convtuner,
+        convops, SpconvOps(), BoxOps(), HashTable(), CompileInfo(), 
+        ExternalAllocator(),
+        ExternalSpconvMatmul()]
+    if not CUMM_CPU_ONLY_BUILD:
+        cus.extend([cu, convcu])
     ext_modules: List[Extension] = [
         PCCMExtension(cus,
                       "spconv/core_cc",
                       Path(__file__).resolve().parent / "spconv",
-                      objects_folder="objects",
                       std=std,
                       disable_pch=True,
                       verbose=True)

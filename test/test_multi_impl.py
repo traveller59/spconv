@@ -222,6 +222,7 @@ class NetLight(nn.Module):
 
 
 def _test_multi_impl(dtype: torch.dtype):
+    # TODO pytorch 1.12 don't support cpu half mm, f**k pytorch
     # TODO remove or release this when tf32 op is ready
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
@@ -239,8 +240,6 @@ def _test_multi_impl(dtype: torch.dtype):
             np.float32)
         coors = np.ascontiguousarray(
             sparse_dict["indices"][:, [3, 0, 1, 2]]).astype(np.int32)
-
-
     device = torch.device("cuda:0")
     device_cpu = torch.device("cpu:0")
 
@@ -275,17 +274,21 @@ def _test_multi_impl(dtype: torch.dtype):
     dout_t = torch.from_numpy(dout).to(device_cpu).to(dtype)
     dout_t_cu = torch.from_numpy(dout).to(device).to(dtype)
 
-
-
+    t = time.time()
+    print(1, time.time() - t)
     out_cpu = net_native_cpu(voxels_th, coors_th, 1).dense()
-    out_cpu.backward(dout_t)
+    if dtype != torch.float16:
+        out_cpu.backward(dout_t)
     out = net_native_gpu(voxels_th_cuda, coors_th_cuda, 1).dense()
+    print(2, time.time() - t)
 
     out.backward(dout_t_cu)
     out_imp = net_imp_gpu(voxels_th_cuda, coors_th_cuda, 1).dense()
+    print(3, time.time() - t)
 
     out_imp.backward(dout_t_cu)
     out_simp = net_simp_gpu(voxels_th_cuda, coors_th_cuda, 1).dense()
+    print(4, time.time() - t)
 
     out_simp.backward(dout_t_cu)
     with torch.no_grad():
@@ -297,6 +300,7 @@ def _test_multi_impl(dtype: torch.dtype):
         error_native = torch.linalg.norm(dense_cpu - dense_native).cpu().item()
         error_imp = torch.linalg.norm(dense_cpu - dense_imp).cpu().item()
         error_simp = torch.linalg.norm(dense_cpu - dense_simp).cpu().item()
+    print(5, time.time() - t)
 
     print("error_native", error_native)
     print("error_imp", error_imp)
@@ -320,15 +324,15 @@ def _test_multi_impl(dtype: torch.dtype):
         native_w = native_params[k]
         imp_w = imp_params[k]
         simp_w = simp_params[k]
-        cpu_w_grad = cpu_w.grad.detach().cuda()
         native_w_grad = native_w.grad.detach()
         imp_w_grad = imp_w.grad.detach()
         simp_w_grad = simp_w.grad.detach()
-
-        error_native = torch.linalg.norm(native_w_grad - cpu_w_grad).cpu().item()
+        if dtype != torch.float16:
+            cpu_w_grad = cpu_w.grad.detach().cuda()
+            error_native = torch.linalg.norm(native_w_grad - cpu_w_grad).cpu().item()
         error_imp = torch.linalg.norm(native_w_grad - imp_w_grad).cpu().item()
         error_simp = torch.linalg.norm(native_w_grad - simp_w_grad).cpu().item()
-        print(k, error_native, error_imp, error_simp)
+        print(k, error_imp, error_simp)
         assert error_imp < 1
         assert error_simp < 1
 

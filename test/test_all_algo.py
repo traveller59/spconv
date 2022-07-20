@@ -30,6 +30,7 @@ import numpy as np
 import pccm
 import torch
 import torch.nn.functional as F
+from spconv.core_cc.csrc.sparse.convops import GemmTuneResult, ConvTuneResult
 from spconv.test_utils import TestCase
 from cumm import tensorview as tv
 from cumm.conv.bases import NCHW, NHWC, ConvIterAlgo, ConvOpType
@@ -38,11 +39,11 @@ from cumm.gemm.codeops import div_up
 from spconv.core import AlgoHint, ConvAlgo
 from spconv.pytorch.conv import expand_nd
 from spconv.pytorch import ops
-from spconv.algo import CONV, GEMM, BestAlgoByProfile, BestConvAlgoByProfile
+from spconv.algo import GEMM, CONV, GEMM_CPP, CONV_CPP, BestAlgoByProfile, BestConvAlgoByProfile, GemmTunerSimple
 from spconv.pytorch.cppcore import get_current_stream, torch_tensor_to_tv
 from spconv.test_utils import generate_sparse_data, params_grid
 import tqdm 
-from spconv.constants import ALL_WEIGHT_IS_KRSC
+from spconv.constants import ALL_WEIGHT_IS_KRSC, SPCONV_CPP_GEMM
 
 assert ALL_WEIGHT_IS_KRSC is True, "we only support KRSC in spconv >= 2.2"
 
@@ -67,13 +68,13 @@ class SparseConvTester:
         self.dtype_th = NUMPY_DTYPE_TO_TORCH[dtype]
         self.K = K 
         self.C = C 
-        self.ksize = expand_nd(ksize, ndim) 
-        self.stride = expand_nd(stride, ndim) 
-        self.padding = expand_nd(padding, ndim) 
-        self.dilation = expand_nd(dilation, ndim) 
+        self.ksize = expand_nd(ndim, ksize) 
+        self.stride = expand_nd(ndim, stride) 
+        self.padding = expand_nd(ndim, padding, ) 
+        self.dilation = expand_nd(ndim, dilation) 
         self.N = N
         self.device = torch.device("cuda:0")
-        op = expand_nd(0, ndim)
+        op = expand_nd(ndim, 0)
         self.kv: int = np.prod(self.ksize)
         self.num_split = 1 if algo == ConvAlgo.MaskImplicitGemm else 2
 
@@ -139,7 +140,9 @@ class SparseConvTester:
         self.weight_ref = np.ascontiguousarray(self.weight_ref).reshape(-1, K, C)
 
         self.out_ref, self.din_ref, self.dw_ref = self._get_ref_output()
+
         self.dw_ref = np.ascontiguousarray(self.dw_ref.transpose(1, 0, 2).reshape(K, *self.ksize, C))
+        self.arch = tv.get_compute_capability()
 
     def _get_ref_output(self):
         output_ref = np.zeros_like(self.output, dtype=np.float32)
@@ -174,6 +177,8 @@ class SparseConvTester:
             dw_res = out_gather.astype(
                 np.float32).T @ inp_gather.astype(np.float32)
             dw_ref[filter_offset] = dw_res
+        if self.dtype == np.int8:
+            output_ref = np.clip(output_ref, -127, 127)
         return output_ref, dinput_ref, dw_ref
 
     def get_operands(self, op_type: ConvOpType):
@@ -220,9 +225,15 @@ def _test_impgemm_conv_cuda(subm: bool):
     shapes = [[19, 18, 17]]
     batchsizes = [1]
     dtypes = [np.float32, np.float16]
+    dtypes = [np.int8]
     test_case = TestCase()
-    in_channels = [512]
-    out_channels = [512]
+    # in_channels = [32]
+    # out_channels = [32, 48, 64]
+    in_channels = [32, 47]
+    out_channels = [32, 48, 62]
+    in_channels = [32]
+    out_channels = [32]
+
     multiple_base = 16
     if subm:
         ksizes = [3]
@@ -239,7 +250,7 @@ def _test_impgemm_conv_cuda(subm: bool):
         ConvAlgo.MaskImplicitGemm,
     ]
     arch = torch.cuda.get_device_capability()
-
+    force_nvrtc = False
     for shape, bs, C, K, k, s, p, d, algo, dtype in tqdm.tqdm(params_grid(
             shapes, batchsizes, in_channels, out_channels, ksizes,
             strides, paddings, dilations, algos, dtypes)):
@@ -259,15 +270,19 @@ def _test_impgemm_conv_cuda(subm: bool):
         spk = 1
         for op_type in op_types:
             inp_tv, weight_tv, output_tv = tester.get_operands(op_type)
-            avail_desps = CONV.get_all_available(inp_tv, weight_tv, output_tv, NHWC, NHWC, NHWC, arch, op_type, -1)
-            print(avail_desps)
+            if SPCONV_CPP_GEMM:
+                avail_desps = CONV_CPP.get_all_available(inp_tv, weight_tv, output_tv, 
+                    NHWC.layout_type.value, NHWC.layout_type.value, 
+                    NHWC.layout_type.value, NHWC.interleave, NHWC.interleave, NHWC.interleave, arch, op_type.value, -1, True, False)
+            else:
+                avail_desps = CONV.get_all_available(inp_tv, weight_tv, output_tv, NHWC, NHWC, NHWC, arch, op_type, -1)
+
             for desp in avail_desps:
                 if not subm:
                     if op_type == ConvOpType.kForward:
                         output_tv.zero_()
                     else:
                         inp_tv.zero_()
-
                 # this algo must success
                 mask_width = desp.tile_shape[0]
                 # if mask_width != 32:
@@ -279,9 +294,9 @@ def _test_impgemm_conv_cuda(subm: bool):
                 mask_output_fwd = mask_width_to_mask_out_fwd[mask_width]
 
                 if subm:
-                    if desp.op_type == ConvOpType.kForward.value:
+                    if desp.op_type.value == ConvOpType.kForward.value:
                         indice_pairs = tester.pair_fwd
-                    elif desp.op_type == ConvOpType.kBackwardInput.value:
+                    elif desp.op_type.value == ConvOpType.kBackwardInput.value:
                         indice_pairs = tester.pair_bwd
                     else:
                         indice_pairs = tester.pair_fwd
@@ -292,31 +307,57 @@ def _test_impgemm_conv_cuda(subm: bool):
                         mask_filter = tester.masks[j].item()
 
                         reverse_mask = False
-                        if desp.op_type == ConvOpType.kBackwardWeight.value:
+                        if desp.op_type.value == ConvOpType.kBackwardWeight.value:
                             mask_op = mask_output[j]
                         else:
                             mask_op = tester.pair_mask_fwd_splits[j]
-                        if desp.op_type == ConvOpType.kBackwardInput.value:
+                        if desp.op_type.value == ConvOpType.kBackwardInput.value:
                             reverse_mask = True
                         mask_output_run = torch_tensor_to_tv(mask_output[j], dtype=tv.uint32)
-                        if desp.op_type == ConvOpType.kBackwardWeight.value:
+                        if desp.op_type.value == ConvOpType.kBackwardWeight.value:
                             mask_output_run = tv.Tensor()
-                        CONV.run_with_tuned_result(
-                            BestConvAlgoByProfile(desp, spk),
-                            desp.op_type,
-                            inp_tv,
-                            weight_tv,
-                            output_tv,
-                            torch_tensor_to_tv(mask_op, dtype=tv.uint32),
-                            torch_tensor_to_tv(tester.mask_argsort_fwd_splits[j]),
-                            mask_output_run,
-                            torch_tensor_to_tv(indice_pairs),
-                            reverse_mask,
-                            mask_filter=mask_filter,
-                            mask_width=mask_width,
-                            beta=beta,
-                            verbose=False,
-                        )
+                        # force_nvrtc = desp.op_type.value == ConvOpType.kBackwardInput.value
+                        # if force_nvrtc:
+                        #     desp.is_nvrtc = True
+                        # print(force_nvrtc, desp.op_type, op_type)
+                        if SPCONV_CPP_GEMM:
+
+                            CONV_CPP.run_with_tuned_result(
+                                ConvTuneResult(desp, tester.arch, spk),
+                                desp.op_type.value,
+                                inp_tv,
+                                weight_tv,
+                                output_tv,
+                                torch_tensor_to_tv(mask_op, dtype=tv.uint32),
+                                torch_tensor_to_tv(tester.mask_argsort_fwd_splits[j]),
+                                mask_output_run,
+                                torch_tensor_to_tv(indice_pairs),
+                                reverse_mask,
+                                mask_filter=mask_filter,
+                                mask_width=mask_width,
+                                beta=beta,
+                                verbose=False,
+                                force_nvrtc=force_nvrtc,
+                            )
+                        else:
+                            CONV.run_with_tuned_result(
+                                BestConvAlgoByProfile(desp, tester.arch, spk),
+                                desp.op_type.value,
+                                inp_tv,
+                                weight_tv,
+                                output_tv,
+                                torch_tensor_to_tv(mask_op, dtype=tv.uint32),
+                                torch_tensor_to_tv(tester.mask_argsort_fwd_splits[j]),
+                                mask_output_run,
+                                torch_tensor_to_tv(indice_pairs),
+                                reverse_mask,
+                                mask_filter=mask_filter,
+                                mask_width=mask_width,
+                                beta=beta,
+                                verbose=False,
+                                force_nvrtc=force_nvrtc,
+                            )
+
                 else:
                     if mask_width not in mask_width_to_mask_out_bwd:
                         mask_width_to_mask_out_bwd[mask_width] = torch.zeros([2, div_up(tester.indices_np.shape[0], mask_width)],
@@ -324,12 +365,12 @@ def _test_impgemm_conv_cuda(subm: bool):
                                         device=tester.device)
                     mask_output_bwd = mask_width_to_mask_out_bwd[mask_width]
 
-                    if desp.op_type == ConvOpType.kForward.value:
+                    if desp.op_type.value == ConvOpType.kForward.value:
                         indice_pairs = tester.pair_fwd  # inp -> out
                         mask_ops = tester.pair_mask_fwd_splits
                         mask_argsorts = tester.mask_argsort_fwd_splits
                         mask_output = mask_output_fwd
-                    elif desp.op_type == ConvOpType.kBackwardInput.value:
+                    elif desp.op_type.value == ConvOpType.kBackwardInput.value:
                         indice_pairs = tester.pair_bwd  # out -> inp
                         mask_ops = tester.pair_mask_bwd_splits
                         mask_argsorts = tester.mask_argsort_bwd_splits
@@ -344,27 +385,46 @@ def _test_impgemm_conv_cuda(subm: bool):
                         beta = 1 if j == 1 else 0
                         mask_filter = tester.masks[j].item()
                         reverse_mask = False
-                        if desp.op_type == ConvOpType.kBackwardWeight.value:
+                        if desp.op_type.value == ConvOpType.kBackwardWeight.value:
                             mask_op = mask_output[j]
                         else:
                             mask_op = mask_ops[j]
+                        if SPCONV_CPP_GEMM:
 
-                        CONV.run_with_tuned_result(
-                            BestConvAlgoByProfile(desp, spk),
-                            desp.op_type,
-                            inp_tv,
-                            weight_tv,
-                            output_tv,
-                            torch_tensor_to_tv(mask_op, dtype=tv.uint32),
-                            torch_tensor_to_tv(mask_argsorts[j]),
-                            torch_tensor_to_tv(mask_output[j], dtype=tv.uint32),
-                            torch_tensor_to_tv(indice_pairs),
-                            reverse_mask,
-                            mask_filter=mask_filter,
-                            mask_width=mask_width,
-                            beta=beta,
-                            verbose=False,
-                        )
+                            CONV_CPP.run_with_tuned_result(
+                                ConvTuneResult(desp, tester.arch, spk),
+                                desp.op_type.value,
+                                inp_tv,
+                                weight_tv,
+                                output_tv,
+                                torch_tensor_to_tv(mask_op, dtype=tv.uint32),
+                                torch_tensor_to_tv(mask_argsorts[j]),
+                                torch_tensor_to_tv(mask_output[j], dtype=tv.uint32),
+                                torch_tensor_to_tv(indice_pairs),
+                                reverse_mask,
+                                mask_filter=mask_filter,
+                                mask_width=mask_width,
+                                beta=beta,
+                                verbose=False,
+                            )
+                        else:
+                            CONV.run_with_tuned_result(
+                                BestConvAlgoByProfile(desp, tester.arch, spk),
+                                desp.op_type.value,
+                                inp_tv,
+                                weight_tv,
+                                output_tv,
+                                torch_tensor_to_tv(mask_op, dtype=tv.uint32),
+                                torch_tensor_to_tv(mask_argsorts[j]),
+                                torch_tensor_to_tv(mask_output[j], dtype=tv.uint32),
+                                torch_tensor_to_tv(indice_pairs),
+                                reverse_mask,
+                                mask_filter=mask_filter,
+                                mask_width=mask_width,
+                                beta=beta,
+                                verbose=False,
+                            )
+
                 out_ref = tester.out_ref
                 din_ref = tester.din_ref
                 dw_ref = tester.dw_ref
@@ -374,8 +434,8 @@ def _test_impgemm_conv_cuda(subm: bool):
                         test_case.assertAllClose(out_ref, out_my, atol=atol, rtol=rtol)
                     else:
                         error_norm = np.linalg.norm(out_ref.reshape(-1) - out_my.reshape(-1))
-                        # if (error_norm > 5):
-                        print(f"{desp}, Error={error_norm}")
+                        if (error_norm > 5):
+                            print(f"{desp}, Error={error_norm}")
                         assert error_norm < 10 * multipler
                     # print(desp, )
                 else:
@@ -389,7 +449,13 @@ def _test_impgemm_conv_cuda(subm: bool):
 
         for spk in [1, 4, 16, 64]:
             for mask_width, mask_output in mask_width_to_mask_out_fwd.items():
-                avail_desps = CONV.get_all_available(inp_tv, weight_tv, output_tv, NHWC, NHWC, NHWC, arch, ConvOpType.kBackwardWeight, mask_width)
+                if SPCONV_CPP_GEMM:
+                    avail_desps = CONV_CPP.get_all_available(inp_tv, weight_tv, output_tv, 
+                        NHWC.layout_type.value, NHWC.layout_type.value, 
+                        NHWC.layout_type.value, NHWC.interleave, NHWC.interleave, NHWC.interleave, arch, 
+                        ConvOpType.kBackwardWeight.value, mask_width, True, False)
+                else:
+                    avail_desps = CONV.get_all_available(inp_tv, weight_tv, output_tv, NHWC, NHWC, NHWC, arch, ConvOpType.kBackwardWeight, mask_width)
                 for desp in avail_desps:
                     weight_tv.zero_()
                     if subm:
@@ -403,8 +469,8 @@ def _test_impgemm_conv_cuda(subm: bool):
                             # bit_ref = np.bitwise_or.reduce(mask_op_np, axis=0)
                             # bit_my = mask_filter
                             CONV.run_with_tuned_result(
-                                BestConvAlgoByProfile(desp, spk),
-                                desp.op_type,
+                                BestConvAlgoByProfile(desp, tester.arch, spk),
+                                desp.op_type.value,
                                 inp_tv,
                                 weight_tv,
                                 output_tv,
@@ -430,8 +496,8 @@ def _test_impgemm_conv_cuda(subm: bool):
                             mask_op = mask_output[j]
 
                             CONV.run_with_tuned_result(
-                                BestConvAlgoByProfile(desp, spk),
-                                desp.op_type,
+                                BestConvAlgoByProfile(desp, tester.arch, spk),
+                                desp.op_type.value,
                                 inp_tv,
                                 weight_tv,
                                 output_tv,
@@ -499,6 +565,8 @@ def _test_native_conv_cuda(subm: bool):
         pair_out = torch_tensor_to_tv(tester.pair_native)[1]
 
         op_types = [ConvOpType.kForward, ConvOpType.kBackwardInput, ConvOpType.kBackwardWeight]
+        # op_types = [ConvOpType.kForward]
+
         indice_pair_num_cpu = tester.indice_num_per_loc_np
         spk = 1
 
@@ -517,9 +585,11 @@ def _test_native_conv_cuda(subm: bool):
                 a = inp_tv
                 c = output_tv
                 b = weight_tv.select(1, tester.kv // 2)
+                if SPCONV_CPP_GEMM:
+                    avail_desps = GEMM_CPP.get_all_available(a, b, c, False, True, False, arch, ShuffleStrideType.ShuffleAC.value)
+                else:
+                    avail_desps = GEMM.get_all_available(a, b, c, False, True, False, arch, ShuffleStrideType.ShuffleAC)
 
-
-                avail_desps = GEMM.get_all_available(a, b, c, False, True, False, arch, ShuffleStrideType.ShuffleAC)
                 for desp in avail_desps:
                     if subm:
                         torch.mm(inp_th, weight_th[:, tester.kv // 2].T, out=output_th)
@@ -538,22 +608,42 @@ def _test_native_conv_cuda(subm: bool):
                         b = weight_tv.select(1, i)
                         # inp @ filter.T, NC @ KC
                         beta = 1.0 if inited else 0.0
-                        GEMM.run_with_tuned_result(
-                            BestAlgoByProfile(desp, 1),
-                            a,
-                            b,
-                            c,
-                            False,
-                            True,
-                            False,
-                            arch=arch,
-                            stream=stream,
-                            shuffle_type=ShuffleStrideType.ShuffleAC,
-                            a_inds=inp_indices,
-                            c_inds=out_indices,
-                            hint=AlgoHint.Fowrard.value,
-                            alpha=1.0,
-                            beta=beta)
+                        if SPCONV_CPP_GEMM:
+                            GEMM_CPP.run_with_tuned_result(
+                                GemmTuneResult(desp, tester.arch, 1),
+                                a,
+                                b,
+                                c,
+                                False,
+                                True,
+                                False,
+                                arch=arch,
+                                stream_int=stream,
+                                shuffle_type=ShuffleStrideType.ShuffleAC.value,
+                                a_inds=inp_indices,
+                                b_inds=tv.Tensor(),
+                                c_inds=out_indices,
+                                hint=AlgoHint.Fowrard.value,
+                                alpha=1.0,
+                                beta=beta)
+                        else:
+                            GEMM.run_with_tuned_result(
+                                BestAlgoByProfile(desp, tester.arch, 1),
+                                a,
+                                b,
+                                c,
+                                False,
+                                True,
+                                False,
+                                arch=arch,
+                                stream=stream,
+                                shuffle_type=ShuffleStrideType.ShuffleAC,
+                                a_inds=inp_indices,
+                                c_inds=out_indices,
+                                hint=AlgoHint.Fowrard.value,
+                                alpha=1.0,
+                                beta=beta)
+
                         inited = True
                     out_my = output_tv.cpu().numpy()
                     if dtype != np.float16:
@@ -570,7 +660,11 @@ def _test_native_conv_cuda(subm: bool):
                 a = output_tv
                 b = weight_tv.select(1, tester.kv // 2)
                 c = inp_tv
-                avail_desps = GEMM.get_all_available(a, b, c, False, False, False, arch, ShuffleStrideType.ShuffleAC)
+                if SPCONV_CPP_GEMM:
+                    avail_desps = GEMM_CPP.get_all_available(a, b, c, False, False, False, arch, ShuffleStrideType.ShuffleAC.value)
+                else:
+                    avail_desps = GEMM.get_all_available(a, b, c, False, False, False, arch, ShuffleStrideType.ShuffleAC)
+
                 for desp in avail_desps:
                     if subm:
                         torch.mm(output_th, weight_th[:, tester.kv // 2], out=inp_th)
@@ -589,22 +683,42 @@ def _test_native_conv_cuda(subm: bool):
                         b = weight_tv.select(1, i)
                         # inp @ filter.T, NC @ KC
                         beta = 1.0 if inited else 0.0
-                        GEMM.run_with_tuned_result(
-                            BestAlgoByProfile(desp, 1),
-                            a,
-                            b,
-                            c,
-                            False,
-                            False,
-                            False,
-                            arch=arch,
-                            stream=stream,
-                            shuffle_type=ShuffleStrideType.ShuffleAC,
-                            a_inds=out_indices,
-                            c_inds=inp_indices,
-                            hint=AlgoHint.Fowrard.value,
-                            alpha=1.0,
-                            beta=beta)
+                        if SPCONV_CPP_GEMM:
+                            GEMM_CPP.run_with_tuned_result(
+                                GemmTuneResult(desp, tester.arch, 1),
+                                a,
+                                b,
+                                c,
+                                False,
+                                False,
+                                False,
+                                arch=arch,
+                                stream_int=stream,
+                                shuffle_type=ShuffleStrideType.ShuffleAC.value,
+                                a_inds=out_indices,
+                                b_inds=tv.Tensor(),
+                                c_inds=inp_indices,
+                                hint=AlgoHint.Fowrard.value,
+                                alpha=1.0,
+                                beta=beta)
+                        else:
+                            GEMM.run_with_tuned_result(
+                                BestAlgoByProfile(desp, tester.arch, 1),
+                                a,
+                                b,
+                                c,
+                                False,
+                                False,
+                                False,
+                                arch=arch,
+                                stream=stream,
+                                shuffle_type=ShuffleStrideType.ShuffleAC,
+                                a_inds=out_indices,
+                                c_inds=inp_indices,
+                                hint=AlgoHint.Fowrard.value,
+                                alpha=1.0,
+                                beta=beta)
+
                         inited = True
                     din_my = inp_tv.cpu().numpy()
                     if dtype != np.float16:
@@ -616,13 +730,18 @@ def _test_native_conv_cuda(subm: bool):
                     else:
                         error_norm = np.linalg.norm(din_ref.reshape(-1) - din_my.reshape(-1))
                         assert error_norm < 10 * multipler
-
             else:
                 a = output_tv
                 b = inp_tv
                 c = weight_tv.select(1, tester.kv // 2)
-                avail_desps = GEMM.get_all_available(a, b, c, True, False, False, arch, ShuffleStrideType.ShuffleAB)
+                if SPCONV_CPP_GEMM:
+                    avail_desps = GEMM_CPP.get_all_available(a, b, c, True, False, False, arch, ShuffleStrideType.ShuffleAB.value)
+                else:
+                    avail_desps = GEMM.get_all_available(a, b, c, True, False, False, arch, ShuffleStrideType.ShuffleAB)
+
                 for desp in avail_desps:
+                    # print(desp, C, K, k, s, p, d)
+                    # desp.is_nvrtc = True
                     inited = subm
                     weight_tv.zero_()
                     if subm:
@@ -640,42 +759,57 @@ def _test_native_conv_cuda(subm: bool):
                         out_indices = pair_out[i].slice_first_axis(0, nhot)
                         a_inds = out_indices
                         b_inds = inp_indices
+                        if SPCONV_CPP_GEMM:
+                            GEMM_CPP.run_with_tuned_result(
+                                GemmTuneResult(desp, tester.arch, 32),
+                                a,
+                                b,
+                                weight_tv.select(1, i),
+                                True,
+                                False,
+                                False,
+                                arch=arch,
+                                stream_int=stream,
+                                shuffle_type=ShuffleStrideType.ShuffleAB.value,
+                                a_inds=a_inds,
+                                b_inds=b_inds,
+                                c_inds=tv.Tensor(),
+                                hint=AlgoHint.BackwardWeight.value,
+                                alpha=1.0,
+                                beta=beta)
 
-                        GEMM.run_with_tuned_result(BestAlgoByProfile(desp, 32),
-                                                a,
-                                                b,
-                                                weight_tv.select(1, i),
-                                                True,
-                                                False,
-                                                False,
-                                                arch=arch,
-                                                stream=stream,
-                                                shuffle_type=ShuffleStrideType.ShuffleAB,
-                                                a_inds=a_inds,
-                                                b_inds=b_inds,
-                                                hint=AlgoHint.BackwardWeight.value,
-                                                alpha=1.0,
-                                                beta=beta)
+                        else:
+                            GEMM.run_with_tuned_result(BestAlgoByProfile(desp, tester.arch, 32),
+                                                    a,
+                                                    b,
+                                                    weight_tv.select(1, i),
+                                                    True,
+                                                    False,
+                                                    False,
+                                                    arch=arch,
+                                                    stream=stream,
+                                                    shuffle_type=ShuffleStrideType.ShuffleAB,
+                                                    a_inds=a_inds,
+                                                    b_inds=b_inds,
+                                                    hint=AlgoHint.BackwardWeight.value,
+                                                    alpha=1.0,
+                                                    beta=beta)
+
                     dw_my = weight_tv.cpu().numpy()
                     if dtype != np.float16:
                         error_norm = np.linalg.norm(dw_ref.reshape(-1) - dw_my.reshape(-1))
-                        assert error_norm < 1 * multipler
-
-                        # test_case.assertAllClose(dw_ref, dw_my, atol=atol, rtol=rtol)
-                        # print(desp, error_norm)
-
+                        assert error_norm < 1 * multipler, f"{desp}, {error_norm}"
                     else:
                         error_norm = np.linalg.norm(dw_ref.reshape(-1) - dw_my.reshape(-1))
-                        # print(desp, error_norm)
-                        assert error_norm < 10 * multipler
+                        assert error_norm < 10 * multipler, f"{desp}, {error_norm}"
 
 
 def test_all_algo_unit():
     # for i in range(5):
     _test_impgemm_conv_cuda(True)
-    # _test_impgemm_conv_cuda(False)
-    # _test_native_conv_cuda(True)
-    # _test_native_conv_cuda(False)
+    _test_impgemm_conv_cuda(False)
+    _test_native_conv_cuda(True)
+    _test_native_conv_cuda(False)
 
 
 if __name__ == "__main__":

@@ -3,3 +3,10 @@ from pccm.stubs import EnumValue, EnumClassValue
 class CompileInfo:
     @staticmethod
     def get_compiled_cuda_arch() -> List[Tuple[int, int]]: ...
+    @staticmethod
+    def arch_is_compiled(arch: Tuple[int, int]) -> bool: 
+        """
+        Args:
+            arch: 
+        """
+        ...

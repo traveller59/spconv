@@ -30,6 +30,7 @@ if _filter_hwio_env is not None:
     raise NotImplementedError("SPCONV_FILTER_HWIO is deprecated. use SPCONV_SAVED_WEIGHT_LAYOUT instead.")
 
 DISABLE_JIT = os.getenv("SPCONV_DISABLE_JIT", "0") == "1"
+
 NDIM_DONT_CARE = 3
 FILTER_HWIO = False
 
@@ -59,8 +60,10 @@ SPCONV_BWD_SPLITK = list(map(int, os.getenv("SPCONV_BWD_SPLITK", "1,2,4,8,16,32,
 SPCONV_NVRTC_MODE = NVRTCMode.ConstantMemory
 SPCONV_DEBUG_NVRTC_KERNELS = False
 
+SPCONV_DEBUG_CPP_ONLY = project_is_editable(PACKAGE_NAME)
 
-class SpconvAllocatorKeys:
+
+class AllocKeys:
     Pair = "Pair"
     IndiceNumPerLoc = "IndiceNumPerLoc"
     PairMask = "PairMask"
@@ -72,5 +75,31 @@ class SpconvAllocatorKeys:
     # MaskArgSortFwd = "MaskArgSortFwd"
     MaskArgSortBwd = "MaskArgSortBwd"
 
+    MaskOutputFwd = "MaskOutputFwd"
+
     OutFeatures = "OutFeatures"
+
+    Features = "Features"
+    Filters = "Filters"
+    OutBp = "OutBp"
+    DIn = "DIn"
+    DFilters = "DFilters"
+
+    InpBuffer = "InpBuffer"
+    OutBuffer = "OutBuffer"
+
+    IndicePairsUniq = "IndicePairsUniq"
+    IndicePairsUniqBackup = "IndicePairsUniqBackup"
+
+    HashKOrKV = "HashKOrKV"
+    HashV = "HashV"
+
+    ThrustTemp = "ThrustTemp"
+
+
 SPCONV_DEBUG_WEIGHT = False
+
+SPCONV_CPP_INDICE_PAIRS = True 
+SPCONV_CPP_INDICE_PAIRS_IGEMM = True 
+
+SPCONV_CPP_GEMM = True

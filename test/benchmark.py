@@ -25,7 +25,7 @@ import spconv.pytorch as spconv
 from spconv.utils import Point2VoxelCPU3d
 
 # torch.backends.cudnn.enabled = False
-def waymo_data(batch_size=1):
+def waymo_data(batch_size=1, num_features=-1):
     gen = Point2VoxelCPU3d([0.1, 0.1, 0.1], [-80, -80, -2, 80, 80, 6], 3,
                            150000, 1)
     # gen = VoxelGeneratorV2([0.1, 0.1, 0.1], [-80, -80, -2, 80, 80, 6], 1,
@@ -35,8 +35,36 @@ def waymo_data(batch_size=1):
     print(pc.shape)
     voxels_tv, indices_tv, _ = gen.point_to_voxel(tv.from_numpy(pc))
     voxels = voxels_tv.numpy().reshape(-1, 3)
+    if num_features > 0:
+        voxels = np.zeros((voxels.shape[0], num_features), dtype=voxels.dtype)
     coors = indices_tv.numpy()
     N = coors.shape[0]
+    coors = np.concatenate([np.full([N, 1], 0, coors.dtype), coors], axis=1)
+    return voxels, coors, gen.grid_size
+
+def waymo_data_large(batch_size=1):
+    gen = Point2VoxelCPU3d([0.1, 0.1, 0.1], [-80, -80, -2, 80, 80, 6], 3,
+                           1200000, 1)
+    # gen = VoxelGeneratorV2([0.1, 0.1, 0.1], [-80, -80, -2, 80, 80, 6], 1,
+    #                        150000)
+    data = np.load(Path(__file__).parent / "data" / "benchmark-pc.npz")
+    pc = np.ascontiguousarray(data["pc"])
+    pc2 = pc.copy()
+    pc2[:, 1] += 1
+    pc3 = pc.copy()
+    pc3[:, 1] += 2
+    pc4 = pc.copy()
+    pc4[:, 1] += 3
+    pc5 = pc.copy()
+    pc5[:, 1] += 4
+
+    pc = np.concatenate([pc, pc2, pc3, pc4, pc5])
+    print(pc.shape)
+    voxels_tv, indices_tv, _ = gen.point_to_voxel(tv.from_numpy(pc))
+    voxels = voxels_tv.numpy().reshape(-1, 3)
+    coors = indices_tv.numpy()
+    N = coors.shape[0]
+    print("num voxels", N)
     coors = np.concatenate([np.full([N, 1], 0, coors.dtype), coors], axis=1)
     return voxels, coors, gen.grid_size
 
@@ -49,6 +77,21 @@ class Net(nn.Module):
         self.net = spconv.SparseSequential(
             spconv.SubMConv3d(3, 64, 3, bias=False, indice_key="c0",
                               algo=algo),
+            # spconv.SubMConv3d(32,
+            #                   32,
+            #                   3,
+            #                   bias=False,
+            #                   indice_key="c0",
+            #                   algo=algo),
+            # # nn.BatchNorm1d(32),
+            # # nn.ReLU(),
+            # # spconv.SparseConv3d(64, 64, 2, 2, bias=False,
+            # #                   algo=algo),
+            # spconv.SubMConv3d(32, 64, 3, bias=False, indice_key="c0",
+            #                   algo=algo),
+
+            # spconv.SubMConv3d(64, 64, 3, bias=False, indice_key="c0",
+            #                   algo=algo),
             # spconv.SubMConv3d(32,
             #                   32,
             #                   3,
@@ -275,7 +318,7 @@ def main():
     import pickle
     np.random.seed(50051)
     torch.manual_seed(50051)
-    # voxels, coors, spatial_shape = waymo_data()
+    # voxels, coors, spatial_shape = waymo_data(num_features=128)
     # with open("/home/yy/test_spconv.pkl", "wb") as f:
     #     pickle.dump((voxels, coors, spatial_shape), f)
     with open(Path(__file__).parent / "data" / "test_spconv.pkl", "rb") as f:
@@ -312,7 +355,7 @@ def main():
     # MaskImpGemm: 51.0ms
     # MaskSplitImpGemm: 41.1ms
     # algo = None
-    net = Net(spatial_shape, algo).to(device).eval().to(dtype)# .train()
+    net = Net(spatial_shape, algo).to(device).eval().to(dtype).train()
     # net.load_state_dict(net.state_dict())
     spconv.assign_name_for_sparse_modules(net)
     print(coors_th.shape)
@@ -345,18 +388,18 @@ def main():
     print("spconv time", np.mean(times[10:]))
     times = []
 
-    # for i in range(10):
-    #     out = net(voxels_th, coors_th, 1)
-    #     print("------------")
-    #     torch.cuda.synchronize()
-    #     t = time.time()
-    #     out.features.backward(dout_t)
-    #     torch.cuda.synchronize()
-    #     times.append(time.time() - t)
+    for i in range(10):
+        out = net(voxels_th, coors_th, 1)
+        print("------------")
+        torch.cuda.synchronize()
+        t = time.time()
+        out.features.backward(dout_t)
+        torch.cuda.synchronize()
+        times.append(time.time() - t)
 
-    # # # print((net.grid == -1).float().sum(), net.grid.numel())
-    # # # print("spconv time", time.time() - t)
-    # print("spconv bw time", np.mean(times[5:]))
+    # # print((net.grid == -1).float().sum(), net.grid.numel())
+    # # print("spconv time", time.time() - t)
+    print("spconv bw time", np.mean(times[5:]))
 
 
 if __name__ == "__main__":

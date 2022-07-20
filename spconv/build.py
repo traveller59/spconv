@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from pathlib import Path
+from typing import List
 
 import pccm
 from pccm.utils import project_is_editable, project_is_installed
@@ -32,17 +33,48 @@ if project_is_installed(PACKAGE_NAME) and project_is_editable(
     from spconv.csrc.sparse.alloc import ExternalAllocator
     from spconv.csrc.utils import BoxOps
     from spconv.csrc.hash.core import HashTable
+    from spconv.csrc.sparse.convops import GemmTunerSimple, ExternalSpconvMatmul
+    from spconv.csrc.sparse.convops import ConvTunerSimple, ConvGemmOps
+    from spconv.csrc.sparse.convops import SimpleExternalSpconvMatmul
+
     all_shuffle = SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS
     all_shuffle = list(filter(lambda x: not x.is_nvrtc, all_shuffle))
     cu = GemmMainUnitTest(all_shuffle)
     cu.namespace = "cumm.gemm.main"
     all_imp = (IMPLGEMM_SIMT_PARAMS + IMPLGEMM_VOLTA_PARAMS +
-                              IMPLGEMM_TURING_PARAMS)
+               IMPLGEMM_TURING_PARAMS)
     all_imp = list(filter(lambda x: not x.is_nvrtc, all_imp))
     convcu = ConvMainUnitTest(all_imp)
     convcu.namespace = "cumm.conv.main"
-    pccm.builder.build_pybind([cu, convcu, SpconvOps(), BoxOps(), HashTable(), CompileInfo(), ExternalAllocator()],
+    gemmtuner = GemmTunerSimple(cu)
+    gemmtuner.namespace = "csrc.sparse.convops.gemmops"
+    convtuner = ConvTunerSimple(convcu)
+    convtuner.namespace = "csrc.sparse.convops.convops"
+    convops = ConvGemmOps(gemmtuner, convtuner)
+    convops.namespace = "csrc.sparse.convops.spops"
+
+    cus = [
+        cu, convcu, gemmtuner, convtuner,
+        convops,
+        SpconvOps(),
+        BoxOps(),
+        HashTable(),
+        CompileInfo(),
+        ExternalAllocator(),
+        ExternalSpconvMatmul(),
+        SimpleExternalSpconvMatmul(),
+
+    ]
+    pccm.builder.build_pybind(cus,
                               PACKAGE_ROOT / "core_cc",
                               namespace_root=PACKAGE_ROOT,
-                              load_library=False)
+                              load_library=False,
+                              verbose=True)
 
+    # cus_dev: List[pccm.Class] = [
+    # ]
+    # pccm.builder.build_pybind(cus_dev,
+    #                           PACKAGE_ROOT / "core_cc_dev",
+    #                           namespace_root=PACKAGE_ROOT,
+    #                           load_library=False,
+    #                           verbose=True)

@@ -26,7 +26,7 @@ from .indices import SparseConvIndicesKernel, CudaCommonKernel, SparseConvIndice
 from .maxpool import IndiceMaxPool, IndiceMaxPoolCPU
 from .gather import GatherCPU
 from .alloc import ExternalAllocator, ThrustAllocator
-from spconv.constants import SpconvAllocatorKeys
+from spconv.constants import AllocKeys
 
 class CustomThrustLib(pccm.Class):
     def __init__(self):
@@ -34,7 +34,7 @@ class CustomThrustLib(pccm.Class):
         self.add_dependency(ThrustLib)
         # https://github.com/NVIDIA/thrust/issues/1401#issuecomment-806403746
         if compat.InLinux:
-            self.build_meta.add_public_cflags("nvcc", "-Xcompiler", "-fno-gnu-unique", "-Xcompiler", "-fvisibility=hidden")
+            self.build_meta.add_public_cflags("nvcc", "-Xcompiler -fno-gnu-unique", "-Xcompiler -fvisibility=hidden")
 
 
 class ThrustCustomAllocatorV2(pccm.Class, pccm.pybind.PybindClassMixin):
@@ -76,6 +76,7 @@ class SpconvOps(pccm.Class):
         super().__init__()
         self.add_dependency(ThrustCustomAllocatorV2, ExternalAllocator, GemmBasicHost, ThrustAllocator)
         self.ndims = [1, 2, 3, 4]
+        self.cuda_common_kernel = CudaCommonKernel()
         for ndim in self.ndims:
             p2v = Point2Voxel(dtypes.float32, ndim)
             p2v_cpu = Point2VoxelCPU(dtypes.float32, ndim)
@@ -101,7 +102,12 @@ class SpconvOps(pccm.Class):
                 self.add_impl_only_param_class(cuda_funcs, f"ops{ndim}d",
                                                indices,
                                                f"SpconvIndices{ndim}D")
-    
+
+        for name in dir(AllocKeys):
+            if not name.startswith("__"):
+                v = getattr(AllocKeys, name)
+                self.add_static_const("k" + name, "auto", f"tv::make_const_string({pccm.literal(v)})")
+
     @pccm.pybind.mark
     @pccm.static_function
     def cumm_version(self):
@@ -194,12 +200,15 @@ class SpconvOps(pccm.Class):
         code = pccm.FunctionCode()
         code.arg("indices, hashdata_k, hashdata_v", "tv::Tensor")
         code.arg("indice_pairs, indice_pairs_uniq, indice_pairs_uniq_before_sort, out_inds", "tv::Tensor")
+        code.arg("indice_num_per_loc", "tv::Tensor")
         code.arg("num_out_act", "int")
         code.arg("batch_size", "int")
         code.arg("output_dims, input_dims", f"std::vector<int>")
         code.arg("ksize, stride, padding, dilation", f"std::vector<int>")
         code.arg("transposed", f"bool", "false")
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
+        code.arg("use_bound_algo", "bool", "false")
+
         if CUMM_CPU_ONLY_BUILD:
             return code.make_invalid()
 
@@ -225,9 +234,11 @@ class SpconvOps(pccm.Class):
                 }}
                 return SpconvIndices{ndim}D::generate_conv_inds_stage2(indices, 
                     hashdata_k, hashdata_v, indice_pairs,
-                    indice_pairs_uniq, indice_pairs_uniq_before_sort, out_inds, num_out_act,
+                    indice_pairs_uniq, indice_pairs_uniq_before_sort, out_inds, 
+                    indice_num_per_loc, num_out_act,
                     batch_size, output_dims_, input_dims_, 
-                    ksize_, stride_, padding_, dilation_, transposed, stream_int);
+                    ksize_, stride_, padding_, dilation_, transposed, stream_int,
+                    use_bound_algo);
             }}
             """)
         code.raw(f"""TV_THROW_RT_ERR("unknown ndim", ndim);""")
@@ -481,6 +492,93 @@ class SpconvOps(pccm.Class):
         """)
         return code
 
+
+    @pccm.pybind.mark
+    @pccm.cuda.static_function
+    def indice_maxpool(self):
+        code = pccm.FunctionCode()
+        code.arg("out_features, features", "tv::Tensor")
+        code.arg("indice_pairs", "tv::Tensor")
+        code.arg("indice_pair_num", "tv::Tensor")
+        code.arg("num_activate_out", "int")
+        code.arg("stream", "std::uintptr_t", "0", pyanno="int")
+        code.add_dependency(IndiceMaxPoolCPU)
+        if not CUMM_CPU_ONLY_BUILD:
+            code.add_dependency(IndiceMaxPool)
+        code.raw(f"""
+        tv::check_shape(out_features, {{-1, features.dim(1)}});
+
+        auto indice_pair_num_cpu = indice_pair_num.cpu();
+        auto indice_pair_num_cpu_ptr = indice_pair_num_cpu.data_ptr<int>();
+
+        """)
+        with code.for_("int i = 0; i < indice_pair_num.dim(0); ++i"):
+            code.raw(f"""
+            int nhot = indice_pair_num_cpu_ptr[i];
+            nhot = std::min(nhot, int(indice_pairs.dim(2)));
+            if (nhot <= 0){{
+                continue;
+            }}
+            auto inp_indices = indice_pairs[0][i].slice_first_axis(0, nhot);
+            auto out_indices = indice_pairs[1][i].slice_first_axis(0, nhot);
+            if (features.is_cpu()){{
+                IndiceMaxPoolCPU::forward(out_features, features, out_indices, inp_indices);
+            }}
+            """)
+            if not CUMM_CPU_ONLY_BUILD:
+                with code.else_():
+                    code.raw(f"""
+                    IndiceMaxPool::forward(out_features, features, out_indices, inp_indices, stream);
+                    """)
+            else:
+                code.raw(f"""
+                TV_THROW_RT_ERR("not implemented in cpu-only spconv!!! ")
+                """)
+        return code
+
+
+    @pccm.pybind.mark
+    @pccm.cuda.static_function
+    def indice_maxpool_backward(self):
+        code = pccm.FunctionCode()
+        code.arg("din, features, out_features, out_bp", "tv::Tensor")
+        code.arg("indice_pairs", "tv::Tensor")
+        code.arg("indice_pair_num", "tv::Tensor")
+        code.arg("stream", "std::uintptr_t", "0", pyanno="int")
+        code.add_dependency(IndiceMaxPoolCPU)
+        if not CUMM_CPU_ONLY_BUILD:
+            code.add_dependency(IndiceMaxPool)
+        code.raw(f"""
+        tv::check_shape(din, features.shape());
+        auto indice_pair_num_cpu = indice_pair_num.cpu();
+        auto indice_pair_num_cpu_ptr = indice_pair_num_cpu.data_ptr<int>();
+
+        """)
+        with code.for_("int i = 0; i < indice_pair_num.dim(0); ++i"):
+            code.raw(f"""
+            int nhot = indice_pair_num_cpu_ptr[i];
+            nhot = std::min(nhot, int(indice_pairs.dim(2)));
+
+            if (nhot <= 0){{
+                continue;
+            }}
+            auto inp_indices = indice_pairs[0][i].slice_first_axis(0, nhot);
+            auto out_indices = indice_pairs[1][i].slice_first_axis(0, nhot);
+            if (features.is_cpu()){{
+                IndiceMaxPoolCPU::backward(out_features, features, out_bp, din, out_indices, inp_indices);
+            }}
+            """)
+            if not CUMM_CPU_ONLY_BUILD:
+                with code.else_():
+                    code.raw(f"""
+                    IndiceMaxPool::backward(out_features, features, out_bp, din, out_indices, inp_indices, stream);
+                    """)
+            else:
+                code.raw(f"""
+                TV_THROW_RT_ERR("not implemented in cpu-only spconv!!! ")
+                """)
+        return code
+
     @pccm.pybind.mark
     @pccm.cuda.static_function
     def maxpool_implicit_gemm_forward(self):
@@ -597,7 +695,7 @@ class SpconvOps(pccm.Class):
 
         """
         code.add_dependency(CustomThrustLib, TensorViewKernel)
-        code.add_param_class("cudakers", CudaCommonKernel())
+        code.add_param_class("cudakers", self.cuda_common_kernel)
         code.raw(f"""
         cudaStream_t stream_cu = reinterpret_cast<cudaStream_t>(stream);
         if (indices.empty()){{
@@ -613,7 +711,7 @@ class SpconvOps(pccm.Class):
             auto thrust_ctx = thrust::cuda::par.on(stream_cu);
             thrust::stable_sort_by_key(thrust_ctx, ptr_tr, ptr_tr + data.dim(0), ptr_k, SmallOrEqualTo<uint32_t>());
         }});
-        tv::ssprint("SORT BY KEY TIME", data.dim(0), timer.report() / 1000.0);
+        // tv::ssprint("SORT BY KEY TIME", data.dim(0), timer.report() / 1000.0);
         return indices;
         """)
         return code.ret("tv::Tensor")
@@ -646,7 +744,7 @@ class SpconvOps(pccm.Class):
         }}
         """
         code.add_dependency(CustomThrustLib, TensorViewKernel)
-        code.add_param_class("cudakers", CudaCommonKernel())
+        code.add_param_class("cudakers", self.cuda_common_kernel)
         if not use_allocator:
             code.raw(f"""
             ThrustCustomAllocatorV2 allocator{{alloc_func}};
@@ -715,7 +813,7 @@ class SpconvOps(pccm.Class):
         }}
         """
         code.add_dependency(CustomThrustLib, TensorViewKernel)
-        code.add_param_class("cudakers", CudaCommonKernel())
+        code.add_param_class("cudakers", self.cuda_common_kernel)
         code.raw(f"""
         cudaStream_t stream_cu = reinterpret_cast<cudaStream_t>(stream);
         // auto timer = tv::CudaContextTimer<>();
@@ -774,7 +872,7 @@ class SpconvOps(pccm.Class):
         }}
         """
         code.add_dependency(CustomThrustLib, TensorViewKernel)
-        code.add_param_class("cudakers", CudaCommonKernel())
+        code.add_param_class("cudakers", self.cuda_common_kernel)
         if not use_allocator:
             code.raw(f"""
             ThrustCustomAllocatorV2 allocator{{alloc_func}};
@@ -1143,6 +1241,26 @@ class SpconvOps(pccm.Class):
 
     @pccm.pybind.mark 
     @pccm.static_function
+    def get_indice_gen_workspace_size(self):
+        code = pccm.code()
+        code.arg("kv", "size_t")
+        code.arg("num_act_in", "size_t")
+        code.arg("num_act_out_bound", "size_t")
+        code.arg("subm, use_int64_hash_k", "bool")
+        code.raw(f"""
+        if (subm){{
+            return 2 * num_act_in * (use_int64_hash_k ? 2 : 3) * sizeof(int);
+        }}else{{
+            size_t pair_single_size = kv * num_act_in;
+            size_t ind_uniq_and_bkp_size = (pair_single_size + 1) * 2 * (use_int64_hash_k ? sizeof(int64_t) : sizeof(int32_t));
+            size_t hash_size = 2 * num_act_out_bound * (use_int64_hash_k ? 2 : 3) * sizeof(int);
+            return ind_uniq_and_bkp_size + hash_size;
+        }}
+        """)
+        return code.ret("std::size_t")
+
+    @pccm.pybind.mark 
+    @pccm.static_function
     def get_indice_pairs_implicit_gemm(self):
         code = pccm.code()
         code.arg("allocator", "ExternalAllocator&")
@@ -1154,6 +1272,8 @@ class SpconvOps(pccm.Class):
         code.arg("subm, transposed, is_train", f"bool")
 
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
+        code.arg("num_out_act_bound", f"int", "-1")
+
         if CUMM_CPU_ONLY_BUILD:
             code.raw(f"""
             throw std::runtime_error("this function can only be used with CUDA.")
@@ -1192,13 +1312,13 @@ class SpconvOps(pccm.Class):
         int mask_split_count = is_mask_split ? 2 : 1;
         tv::Tensor pair;
         if (subm){{
-            pair = allocator.full_int({pccm.literal(SpconvAllocatorKeys.Pair)}, 
+            pair = allocator.full_int({pccm.literal(AllocKeys.Pair)}, 
                 {{2, kv, indices.dim(0)}}, -1, indices.dtype(), indices.device());
         }}else{{
-            pair = allocator.full_int({pccm.literal(SpconvAllocatorKeys.Pair)}, 
+            pair = allocator.full_int({pccm.literal(AllocKeys.Pair)}, 
                 {{kv, indices.dim(0)}}, -1, indices.dtype(), indices.device());
         }}
-        auto indice_num_per_loc = allocator.zeros({pccm.literal(SpconvAllocatorKeys.IndiceNumPerLoc)}, 
+        auto indice_num_per_loc = allocator.zeros({pccm.literal(AllocKeys.IndiceNumPerLoc)}, 
             {{kv}}, indices.dtype(), indices.device());
         tv::Tensor mask_tensor = tv::zeros({{mask_split_count}}, tv::uint32, -1);
         auto mask_tensor_ptr = mask_tensor.data_ptr<uint32_t>();
@@ -1213,39 +1333,48 @@ class SpconvOps(pccm.Class):
             mask_tensor_ptr[1] = uint32_t(second);
         }}
         else{{
-            mask_tensor_ptr[1] = 0xffffffff;
+            mask_tensor_ptr[0] = 0xffffffff;
         }}
         tv::Tensor out_inds;
         ThrustAllocator thrustalloc(allocator);
-
+        int num_act_out = 0;
         if (subm){{
+
             ExternalAllocator::guard_t hash_k_guard, hash_v_gurad, hash_kv_gurad;
             out_inds = indices;
+            num_act_out = indices.dim(0);
             int num_points = out_inds.dim(0);
             tv::Tensor hash_k, hash_v;
             if (use_int64_hash_k){{
-                hash_k_guard = allocator.empty_guard({{num_points * 2}}, tv::int64, 0);
-                hash_v_gurad = allocator.empty_guard({{num_points * 2}}, tv::int32, 0);
+                hash_k_guard = allocator.empty_guard({{num_points * 2}}, 
+                    tv::int64, 0, {pccm.literal(AllocKeys.HashKOrKV)});
+                hash_v_gurad = allocator.empty_guard({{num_points * 2}}, 
+                    tv::int32, 0, {pccm.literal(AllocKeys.HashV)});
                 hash_k = hash_k_guard->tensor;
                 hash_v = hash_v_gurad->tensor;
             }}else{{
-                hash_kv_gurad = allocator.empty_guard({{2, num_points * 2}}, tv::int32, 0);
+                hash_kv_gurad = allocator.empty_guard({{2, num_points * 2}}, 
+                    tv::int32, 0, {pccm.literal(AllocKeys.HashKOrKV)});
                 hash_k = hash_kv_gurad->tensor[0];
                 hash_v = hash_kv_gurad->tensor[1];
             }}
-            auto pair_mask = allocator.empty({pccm.literal(SpconvAllocatorKeys.PairMask)}, 
+
+            auto pair_mask = allocator.empty({pccm.literal(AllocKeys.PairMask)}, 
                 {{mask_split_count, indices.dim(0)}}, tv::uint32, 0);
             generate_subm_conv_inds(indices, hash_k, hash_v, pair, out_inds, indice_num_per_loc,
                 batch_size, input_dims, ksize, dilation, pair_mask, false, stream_int);
-            auto mask_argsort = allocator.empty({pccm.literal(SpconvAllocatorKeys.MaskArgSort)}, 
-                {{mask_split_count, out_inds.dim(0)}}, tv::uint32, 0);
+            auto mask_argsort = allocator.empty({pccm.literal(AllocKeys.MaskArgSort)}, 
+                {{mask_split_count, out_inds.dim(0)}}, tv::int32, 0);
             for (int j = 0; j < mask_split_count; ++j){{
                 sort_1d_by_key_allocator_v2(pair_mask[j], thrustalloc, mask_argsort[j], stream_int);
             }}
+
         }}else{{
             auto pair_bwd = pair;
-            auto indice_pairs_uniq_guard = allocator.empty_guard({{int64_t(pair.numel() + 1)}}, indice_uniq_dtype, 0);
-            auto indice_pairs_uniq_bkp_guard = allocator.empty_guard({{int64_t(pair.numel() + 1)}}, indice_uniq_dtype, 0);
+            auto indice_pairs_uniq_guard = allocator.empty_guard({{int64_t(pair.numel() + 1)}}, 
+                indice_uniq_dtype, 0, {pccm.literal(AllocKeys.IndicePairsUniq)});
+            auto indice_pairs_uniq_bkp_guard = allocator.empty_guard({{int64_t(pair.numel() + 1)}}, 
+                indice_uniq_dtype, 0, {pccm.literal(AllocKeys.IndicePairsUniqBackup)});
 
             auto indice_pairs_uniq = indice_pairs_uniq_guard->tensor;
             generate_conv_inds_mask_stage1(indices, pair_bwd, indice_pairs_uniq,
@@ -1253,28 +1382,34 @@ class SpconvOps(pccm.Class):
                 stride, padding, dilation, transposed, stream_int);
             indice_pairs_uniq_bkp_guard->tensor.copy_(indice_pairs_uniq, tvctx);
             // TODO pytorch unique may be faster?
-            int num_act_out = apply_thrust_unique_to_indice_pairs_uniq(indice_pairs_uniq, thrustalloc, stream_int) - 1;
+            num_act_out = apply_thrust_unique_to_indice_pairs_uniq(indice_pairs_uniq, thrustalloc, stream_int);
+            if (num_out_act_bound > 0 && num_act_out > num_out_act_bound){{
+                num_act_out = num_out_act_bound;
+            }}
             indice_pairs_uniq = indice_pairs_uniq.slice_first_axis(0, num_act_out);
-            out_inds = allocator.empty({pccm.literal(SpconvAllocatorKeys.OutIndices)}, 
+            out_inds = allocator.empty({pccm.literal(AllocKeys.OutIndices)}, 
                 {{num_act_out, indices.dim(1)}}, indices.dtype(), 0);
-            auto pair_fwd = allocator.full_int({pccm.literal(SpconvAllocatorKeys.PairFwd)}, 
+            auto pair_fwd = allocator.full_int({pccm.literal(AllocKeys.PairFwd)}, 
                 {{kv, num_act_out}}, -1, indices.dtype(), indices.device());
-            auto pair_mask_fwd = allocator.zeros({pccm.literal(SpconvAllocatorKeys.PairMask)}, 
+            auto pair_mask_fwd = allocator.zeros({pccm.literal(AllocKeys.PairMask)}, 
                 {{mask_split_count, num_act_out}}, tv::uint32, 0);
             auto pair_mask_bwd = tv::Tensor();
             if (is_train){{
-                pair_mask_bwd = allocator.zeros({pccm.literal(SpconvAllocatorKeys.PairMaskBwd)}, 
+                pair_mask_bwd = allocator.zeros({pccm.literal(AllocKeys.PairMaskBwd)}, 
                     {{mask_split_count, indices.dim(0)}}, tv::uint32, 0);
             }}
             ExternalAllocator::guard_t hash_k_guard, hash_v_gurad, hash_kv_gurad;
             tv::Tensor hash_k, hash_v;
             if (use_int64_hash_k){{
-                hash_k_guard = allocator.empty_guard({{num_act_out * 2}}, tv::int64, 0);
-                hash_v_gurad = allocator.empty_guard({{num_act_out * 2}}, tv::int32, 0);
+                hash_k_guard = allocator.empty_guard({{num_act_out * 2}}, 
+                    tv::int64, 0, {pccm.literal(AllocKeys.HashKOrKV)});
+                hash_v_gurad = allocator.empty_guard({{num_act_out * 2}}, 
+                    tv::int32, 0, {pccm.literal(AllocKeys.HashV)});
                 hash_k = hash_k_guard->tensor;
                 hash_v = hash_v_gurad->tensor;
             }}else{{
-                hash_kv_gurad = allocator.empty_guard({{2, num_act_out * 2}}, tv::int32, 0);
+                hash_kv_gurad = allocator.empty_guard({{2, num_act_out * 2}}, 
+                    tv::int32, 0, {pccm.literal(AllocKeys.HashKOrKV)});
                 hash_k = hash_kv_gurad->tensor[0];
                 hash_v = hash_kv_gurad->tensor[1];
             }}
@@ -1283,23 +1418,24 @@ class SpconvOps(pccm.Class):
                 out_inds, pair_mask_fwd, pair_mask_bwd, num_act_out,
                 batch_size, out_shape, input_dims, ksize, stride, padding, dilation,
                 transposed, stream_int);
-            auto mask_argsort_fwd = allocator.empty({pccm.literal(SpconvAllocatorKeys.MaskArgSort)}, 
-                {{mask_split_count, out_inds.dim(0)}}, tv::uint32, 0);
+            auto mask_argsort_fwd = allocator.empty({pccm.literal(AllocKeys.MaskArgSort)}, 
+                {{mask_split_count, out_inds.dim(0)}}, tv::int32, 0);
             tv::Tensor mask_argsort_bwd = tv::Tensor();
             if (is_train){{
-                mask_argsort_bwd = allocator.zeros({pccm.literal(SpconvAllocatorKeys.MaskArgSortBwd)}, 
-                    {{mask_split_count, indices.dim(0)}}, tv::uint32, 0);
+                mask_argsort_bwd = allocator.zeros({pccm.literal(AllocKeys.MaskArgSortBwd)}, 
+                    {{mask_split_count, indices.dim(0)}}, tv::int32, 0);
             }}
             if (is_mask_split){{
                 for (int j = 0; j < mask_split_count; ++j){{
+                    auto mask_tensor_sub = mask_tensor.slice_first_axis(j, j + 1);
                     if (!is_train){{
                         sort_1d_by_key_split_allocator_v2(pair_mask_fwd[j], thrustalloc, 
-                            mask_tensor[j], mask_argsort_fwd[j], stream_int);
+                            mask_tensor_sub, mask_argsort_fwd[j], stream_int);
                     }}else{{
                         sort_1d_by_key_split_allocator_v2(pair_mask_fwd[j], thrustalloc, 
-                            mask_tensor[j], mask_argsort_fwd[j], stream_int);
+                            mask_tensor_sub, mask_argsort_fwd[j], stream_int);
                         sort_1d_by_key_split_allocator_v2(pair_mask_bwd[j], thrustalloc, 
-                            mask_tensor[j], mask_argsort_bwd[j], stream_int);
+                            mask_tensor_sub, mask_argsort_bwd[j], stream_int);
                     }}
                 }}
             }}else{{
@@ -1314,9 +1450,9 @@ class SpconvOps(pccm.Class):
                 }}
             }}
         }}
-        return mask_tensor;
+        return std::make_tuple(mask_tensor, num_act_out);
         """)
-        return code.ret("tv::Tensor")
+        return code.ret("std::tuple<tv::Tensor, int>")
 
     @pccm.pybind.mark 
     @pccm.static_function
@@ -1329,15 +1465,12 @@ class SpconvOps(pccm.Class):
         code.arg("algo", "int")
         code.arg("ksize, stride, padding, dilation, out_padding", f"std::vector<int>")
         code.arg("subm, transposed", f"bool")
-        code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
-        if CUMM_CPU_ONLY_BUILD:
-            code.raw(f"""
-            throw std::runtime_error("this function can only be used with CUDA.")
-            """)
-            return code
+        code.arg("stream_int", f"std::uintptr_t", "0")
+        code.arg("num_out_act_bound", f"int", "-1")
+
+        
         code.raw(f"""
         int kv = std::accumulate(ksize.begin(), ksize.end(), 1, std::multiplies<int>());
-        TV_ASSERT_RT_ERR(kv <= 32, "currently only support ksize < 32");
         auto conv_algo = static_cast<tv::gemm::SparseConvAlgo>(algo);
         TV_ASSERT_RT_ERR(conv_algo == tv::gemm::SparseConvAlgo::kNative, "only support kNative");
 
@@ -1362,15 +1495,17 @@ class SpconvOps(pccm.Class):
             }}
         }}
         tv::Tensor pair;
-        pair = allocator.full_int({pccm.literal(SpconvAllocatorKeys.Pair)}, 
+        pair = allocator.full_int({pccm.literal(AllocKeys.Pair)}, 
             {{2, kv, indices.dim(0)}}, -1, indices.dtype(), indices.device());
         
-        auto indice_num_per_loc = allocator.zeros({pccm.literal(SpconvAllocatorKeys.IndiceNumPerLoc)}, 
+        auto indice_num_per_loc = allocator.zeros({pccm.literal(AllocKeys.IndiceNumPerLoc)}, 
             {{kv}}, indices.dtype(), indices.device());
         tv::Tensor out_inds;
+        int num_act_out = -1;
         """)
         with code.if_("subm"):
             code.raw(f"""
+            num_act_out = indices.dim(0);
             if (indices.is_cpu()){{
                 generate_subm_conv_inds_cpu(indices, pair, out_inds, indice_num_per_loc,
                     batch_size, input_dims, ksize, dilation);
@@ -1384,12 +1519,15 @@ class SpconvOps(pccm.Class):
                     int num_points = out_inds.dim(0);
                     tv::Tensor hash_k, hash_v;
                     if (use_int64_hash_k){{
-                        hash_k_guard = allocator.empty_guard({{num_points * 2}}, tv::int64, 0);
-                        hash_v_gurad = allocator.empty_guard({{num_points * 2}}, tv::int32, 0);
+                        hash_k_guard = allocator.empty_guard({{num_points * 2}}, 
+                            tv::int64, 0, {pccm.literal(AllocKeys.HashKOrKV)});
+                        hash_v_gurad = allocator.empty_guard({{num_points * 2}}, 
+                            tv::int32, 0, {pccm.literal(AllocKeys.HashV)});
                         hash_k = hash_k_guard->tensor;
                         hash_v = hash_v_gurad->tensor;
                     }}else{{
-                        hash_kv_gurad = allocator.empty_guard({{2, num_points * 2}}, tv::int32, 0);
+                        hash_kv_gurad = allocator.empty_guard({{2, num_points * 2}}, 
+                            tv::int32, 0, {pccm.literal(AllocKeys.HashKOrKV)});
                         hash_k = hash_kv_gurad->tensor[0];
                         hash_v = hash_kv_gurad->tensor[1];
                     }}
@@ -1406,10 +1544,10 @@ class SpconvOps(pccm.Class):
         with code.else_():
             code.raw(f"""
             if (indices.is_cpu()){{
-
-                out_inds = allocator.empty({pccm.literal(SpconvAllocatorKeys.OutIndices)}, 
+                TV_ASSERT_RT_ERR(num_out_act_bound <= 0, "cpu algo don't support out bound")
+                out_inds = allocator.empty({pccm.literal(AllocKeys.OutIndices)}, 
                     {{kv * indices.dim(0), indices.dim(1)}}, indices.dtype(), -1);
-                generate_conv_inds_cpu(indices, pair, out_inds, indice_num_per_loc,
+                num_act_out = generate_conv_inds_cpu(indices, pair, out_inds, indice_num_per_loc,
                     batch_size, out_shape, input_dims, ksize, 
                     stride, padding, dilation, transposed);
             }}
@@ -1422,9 +1560,13 @@ class SpconvOps(pccm.Class):
                     auto tvctx = tv::Context();
                     tvctx.set_cuda_stream(reinterpret_cast<cudaStream_t>(stream_int));
 
-                    auto indice_pairs_uniq_guard = allocator.empty_guard({{int64_t(pair.numel() + 1)}}, indice_uniq_dtype, 0);
+                    auto indice_pairs_uniq_guard = allocator.empty_guard(
+                        {{int64_t(pair.numel() / 2 + 1)}}, indice_uniq_dtype, 0, 
+                        {pccm.literal(AllocKeys.IndicePairsUniq)});
                     auto indice_pairs_uniq = indice_pairs_uniq_guard->tensor;
-                    auto indice_pairs_uniq_bkp_guard = allocator.empty_guard({{int64_t(pair.numel() + 1)}}, indice_uniq_dtype, 0);
+                    auto indice_pairs_uniq_bkp_guard = allocator.empty_guard(
+                        {{int64_t(pair.numel() / 2 + 1)}}, indice_uniq_dtype, 0,
+                        {pccm.literal(AllocKeys.IndicePairsUniqBackup)});
 
                     generate_conv_inds_stage1(indices, pair, indice_pairs_uniq,
                         indice_num_per_loc, batch_size, out_shape, input_dims, ksize,
@@ -1432,27 +1574,35 @@ class SpconvOps(pccm.Class):
                     indice_pairs_uniq_bkp_guard->tensor.copy_(indice_pairs_uniq, tvctx);
 
                     // TODO pytorch unique may be faster?
-                    int num_act_out = apply_thrust_unique_to_indice_pairs_uniq(indice_pairs_uniq, thrustalloc, stream_int) - 1;
+                    num_act_out = apply_thrust_unique_to_indice_pairs_uniq(indice_pairs_uniq, thrustalloc, stream_int);
+                    bool use_bound_algo = false;
+                    if (num_out_act_bound > 0 && num_act_out > num_out_act_bound){{
+                        num_act_out = num_out_act_bound;
+                        use_bound_algo = true;
+                    }}
                     indice_pairs_uniq = indice_pairs_uniq.slice_first_axis(0, num_act_out);
-                    out_inds = allocator.empty({pccm.literal(SpconvAllocatorKeys.OutIndices)}, 
+                    out_inds = allocator.empty({pccm.literal(AllocKeys.OutIndices)}, 
                         {{num_act_out, indices.dim(1)}}, indices.dtype(), 0);
                     ExternalAllocator::guard_t hash_k_guard, hash_v_gurad, hash_kv_gurad;
                     tv::Tensor hash_k, hash_v;
                     if (use_int64_hash_k){{
-                        hash_k_guard = allocator.empty_guard({{num_act_out * 2}}, tv::int64, 0);
-                        hash_v_gurad = allocator.empty_guard({{num_act_out * 2}}, tv::int32, 0);
+                        hash_k_guard = allocator.empty_guard({{num_act_out * 2}}, 
+                            tv::int64, 0, {pccm.literal(AllocKeys.HashKOrKV)});
+                        hash_v_gurad = allocator.empty_guard({{num_act_out * 2}}, 
+                            tv::int32, 0, {pccm.literal(AllocKeys.HashV)});
                         hash_k = hash_k_guard->tensor;
                         hash_v = hash_v_gurad->tensor;
                     }}else{{
-                        hash_kv_gurad = allocator.empty_guard({{2, num_act_out * 2}}, tv::int32, 0);
+                        hash_kv_gurad = allocator.empty_guard({{2, num_act_out * 2}}, 
+                            tv::int32, 0, {pccm.literal(AllocKeys.HashKOrKV)});
                         hash_k = hash_kv_gurad->tensor[0];
                         hash_v = hash_kv_gurad->tensor[1];
                     }}
-                    generate_conv_inds_stage2(indices, hash_k, hash_v, pair,
+                    num_act_out = generate_conv_inds_stage2(indices, hash_k, hash_v, pair,
                         indice_pairs_uniq, indice_pairs_uniq_bkp_guard->tensor, 
-                        out_inds, num_act_out,
+                        out_inds, indice_num_per_loc, num_act_out,
                         batch_size, out_shape, input_dims, ksize, stride, padding, dilation,
-                        transposed, stream_int);
+                        transposed, stream_int, use_bound_algo);
                 }}
                 """)
             else:
@@ -1462,18 +1612,6 @@ class SpconvOps(pccm.Class):
                 }}
                 """)
         code.raw(f"""
-        return;
+        return num_act_out;
         """)
-        return code
-
-
-    @pccm.pybind.mark 
-    @pccm.static_function
-    def test_allocator(self):
-        code = pccm.code()
-        code.arg("allocator", "ExternalAllocator&")
-        code.raw(f"""
-        auto guard = allocator.zeros_guard({{1, 2, 3}}, tv::int32, 0);
-        tv::ssprint("????");
-        """)
-        return code 
+        return code.ret("int")

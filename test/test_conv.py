@@ -248,7 +248,7 @@ def test_spconv3d():
         ConvAlgo.Native, ConvAlgo.MaskImplicitGemm,
         ConvAlgo.MaskSplitImplicitGemm
     ]
-    # algos = [ConvAlgo.Native]
+    algos = [ConvAlgo.Native]
 
     for dev, shape, bs, IC, OC, k, s, p, d, al in params_grid(
             devices, shapes, batchsizes, in_channels, out_channels, ksizes,
@@ -308,7 +308,6 @@ def test_spconv3d():
             filters_t = torch.from_numpy(filters).to(device).to(dtype)
             net_ref.net[0].weight.data[:] = filters_t.permute(
                 0, 4, 1, 2, 3).contiguous()
-
         net.net[0].weight.data[:] = filters_t
         out_ref = net_ref(features_dense_t)
         out = net(features_t, indices_t, bs).dense()
@@ -529,4 +528,4 @@ def test_spmaxpool3d():
 
 
 if __name__ == "__main__":
-    test_spmaxpool3d()
+    test_spconv3d()

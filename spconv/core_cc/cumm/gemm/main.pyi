@@ -1,11 +1,12 @@
 from typing import overload, Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 from pccm.stubs import EnumValue, EnumClassValue
+from cumm.tensorview.gemm import GemmAlgoDesp
 from cumm.tensorview.gemm import GemmParams
 class GemmMainUnitTest:
     @staticmethod
-    def get_all_algo_desp() -> List[Any]: ...
+    def get_all_algo_desp() -> List[GemmAlgoDesp]: ...
     @staticmethod
-    def extract_mnk(a_shape: List[int], b_shape: List[int], trans_a: bool, trans_b: bool, trans_c: bool, shuffle_type: str = "0", a_inds_shape: List[int] =  [], b_inds_shape: List[int] =  [], c_inds_shape: List[int] =  []) -> Tuple[int, int, int]: 
+    def extract_mnk(a_shape: List[int], b_shape: List[int], trans_a: bool, trans_b: bool, trans_c: bool, shuffle_type: int = 0, a_inds_shape: List[int] =  [], b_inds_shape: List[int] =  [], c_inds_shape: List[int] =  []) -> Tuple[int, int, int]: 
         """
         Args:
             a_shape: 
