@@ -160,7 +160,7 @@ You need to rebuild ```cumm``` first if you are build along a CUDA version that 
 1. install build-essential, install CUDA
 2. run ```export SPCONV_DISABLE_JIT="1"```
 3. run ```pip install pccm cumm wheel```
-4. run ```python setup.py bdist_wheel```+```pip install dists/xxx.whl```
+4. run ```python setup.py bdist_wheel```+```pip install dist/xxx.whl```
 
 #### Windows
 
@@ -169,7 +169,7 @@ You need to rebuild ```cumm``` first if you are build along a CUDA version that 
 3. start a new powershell, run ```tools/msvc_setup.ps1```
 4. run ```$Env:SPCONV_DISABLE_JIT = "1"```
 5. run ```pip install pccm cumm wheel```
-6. run ```python setup.py bdist_wheel```+```pip install dists/xxx.whl```
+6. run ```python setup.py bdist_wheel```+```pip install dist/xxx.whl```
 
 ## Know issues
 
