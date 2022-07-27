@@ -17,7 +17,9 @@ from spconv.pytorch.modules import (SparseModule, SparseSequential,
                                     assign_name_for_sparse_modules)
 from spconv.pytorch.ops import ConvAlgo
 from spconv.pytorch.pool import (SparseMaxPool1d, SparseMaxPool2d,
-                                 SparseMaxPool3d, SparseMaxPool4d)
+                                 SparseMaxPool3d, SparseMaxPool4d,
+                                 SparseAvgPool1d, SparseAvgPool2d,
+                                 SparseAvgPool3d)
 from spconv.pytorch.tables import AddTable, ConcatTable, JoinTable
 
 

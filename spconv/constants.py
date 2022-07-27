@@ -64,7 +64,7 @@ SPCONV_DEBUG_CPP_ONLY = project_is_editable(PACKAGE_NAME)
 
 
 class AllocKeys:
-    Pair = "Pair"
+    PairBwd = "PairBwd"
     IndiceNumPerLoc = "IndiceNumPerLoc"
     PairMask = "PairMask"
     MaskArgSort = "MaskArgSort"
@@ -103,3 +103,5 @@ SPCONV_CPP_INDICE_PAIRS = True
 SPCONV_CPP_INDICE_PAIRS_IGEMM = True 
 
 SPCONV_CPP_GEMM = True
+
+SPCONV_FX_TRACE_MODE = os.getenv("SPCONV_FX_TRACE_MODE", "0") == "1"

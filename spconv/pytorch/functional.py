@@ -361,6 +361,25 @@ class SparseMaxPoolImplicitGemmFunction(Function):
             features, out, grad_output, indice_pairs_bwd)
         return input_bp, None, None, None
 
+class SparseAvgPoolImplicitGemmFunction(Function):
+    @staticmethod
+    @_TORCH_CUSTOM_FWD
+    def forward(ctx, features: torch.Tensor, indice_pairs_fwd: torch.Tensor,
+                indice_pairs_bwd: torch.Tensor, num_activate_out: int, calc_count):
+        out, count = ops.indice_avgpool_implicit_gemm(features, indice_pairs_fwd,
+                                               num_activate_out, calc_count)
+        ctx.save_for_backward(indice_pairs_bwd, features, out, count)
+        return out
+
+    @staticmethod
+    @once_differentiable
+    @_TORCH_CUSTOM_BWD
+    def backward(ctx, grad_output):
+        indice_pairs_bwd, features, out, count = ctx.saved_tensors
+        input_bp = ops.indice_avgpool_implicit_gemm_backward(
+            grad_output, indice_pairs_bwd, count)
+        return input_bp, None, None, None, None
+
 
 indice_conv = SparseConvFunction.apply
 implicit_gemm = SparseImplicitGemmFunction.apply
@@ -368,6 +387,7 @@ indice_inverse_conv = SparseInverseConvFunction.apply
 indice_subm_conv = SubMConvFunction.apply
 indice_maxpool = SparseMaxPoolFunction.apply
 indice_maxpool_implicit_gemm = SparseMaxPoolImplicitGemmFunction.apply
+indice_avgpool_implicit_gemm = SparseAvgPoolImplicitGemmFunction.apply
 
 
 def _indice_to_scalar(indices: torch.Tensor, shape: List[int]):

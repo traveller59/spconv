@@ -30,6 +30,7 @@ from spconv.pytorch.core import IndiceData, ImplicitGemmIndiceData, expand_nd
 from spconv.pytorch.modules import SparseModule
 from spconv.cppconstants import CPU_ONLY_BUILD
 from spconv.utils import nullcontext
+from .conv import _MAX_NUM_VOXELS_DURING_TRAINING
 
 
 class SparseMaxPool(SparseModule):
@@ -42,6 +43,7 @@ class SparseMaxPool(SparseModule):
                  indice_key: Optional[str] = None,
                  subm: bool = False,
                  algo: Optional[ConvAlgo] = None,
+                 record_voxel_count: bool = False,
                  name=None):
         super(SparseMaxPool, self).__init__(name=name)
         self.ndim = ndim
@@ -52,6 +54,12 @@ class SparseMaxPool(SparseModule):
             self.stride = expand_nd(ndim, stride)
         self.padding = expand_nd(ndim, padding)
         self.subm = subm
+        if record_voxel_count and not self.subm:
+            # we record maximum voxel num in both inference and training if
+            # record_voxel_count flag setting.
+            self.register_buffer(_MAX_NUM_VOXELS_DURING_TRAINING,
+                                 torch.zeros(1, dtype=torch.int32))
+        self.record_voxel_count = record_voxel_count
         self.dilation = expand_nd(ndim, dilation)
         self.indice_key = indice_key
         kv = int(np.prod(kernel_size))
@@ -220,6 +228,136 @@ class SparseMaxPool(SparseModule):
                 features.shape[0])
             out_tensor.benchmark_record[self.name]["num_out_points"].append(
                 out_features.shape[0])
+        if not self.subm and self.record_voxel_count:
+            if hasattr(self, _MAX_NUM_VOXELS_DURING_TRAINING):
+                ops.maximum_value_int_(
+                    getattr(self, _MAX_NUM_VOXELS_DURING_TRAINING),
+                    outids.shape[0])
+        out_tensor = out_tensor.replace_feature(out_features)
+        out_tensor.indices = outids
+        out_tensor.indice_dict = indice_dict
+        out_tensor.spatial_shape = out_spatial_shape
+        return out_tensor
+
+
+class SparseAvgPool(SparseModule):
+    def __init__(self,
+                 ndim,
+                 kernel_size: Union[int, List[int], Tuple[int, ...]] = 3,
+                 stride: Optional[Union[int, List[int], Tuple[int, ...]]] = 1,
+                 padding: Union[int, List[int], Tuple[int, ...]] = 0,
+                 dilation: Union[int, List[int], Tuple[int, ...]] = 1,
+                 indice_key: Optional[str] = None,
+                 subm: bool = False,
+                 algo: Optional[ConvAlgo] = None,
+                 record_voxel_count: bool = False,
+                 name=None):
+        super(SparseAvgPool, self).__init__(name=name)
+        self.ndim = ndim
+        self.kernel_size = expand_nd(ndim, kernel_size)
+        if stride is None:
+            self.stride = self.kernel_size.copy()
+        else:
+            self.stride = expand_nd(ndim, stride)
+        self.padding = expand_nd(ndim, padding)
+        self.subm = subm
+        if record_voxel_count and not self.subm:
+            # we record maximum voxel num in both inference and training if
+            # record_voxel_count flag setting.
+            self.register_buffer(_MAX_NUM_VOXELS_DURING_TRAINING,
+                                 torch.zeros(1, dtype=torch.int32))
+        self.record_voxel_count = record_voxel_count
+        self.dilation = expand_nd(ndim, dilation)
+        self.indice_key = indice_key
+        kv = int(np.prod(kernel_size))
+        assert kv <= 32, "avg pool only support implicit-gemm style indice gen with kv <= 32 limit"
+        self.algo = ConvAlgo.MaskImplicitGemm
+
+    def extra_repr(self):
+        s = ('kernel_size={kernel_size}' ', stride={stride}')
+        if self.padding != (0, ) * len(self.padding):
+            s += ', padding={padding}'
+        if self.dilation != (1, ) * len(self.dilation):
+            s += ', dilation={dilation}'
+        if self.algo is not None:
+            s += f', algo={self.algo}'
+        return s.format(**self.__dict__)
+
+    def forward(self, input):
+        assert isinstance(input, spconv.SparseConvTensor)
+        features = input.features
+        device = features.device
+        indices = input.indices
+        spatial_shape = input.spatial_shape
+        batch_size = input.batch_size
+        if not self.subm:
+            out_spatial_shape = ops.get_conv_output_size(
+                spatial_shape, self.kernel_size, self.stride, self.padding,
+                self.dilation)
+        else:
+            out_spatial_shape = spatial_shape
+        out_tensor = input.shadow_copy()
+
+        out_padding = [0] * self.ndim
+        indice_dict = input.indice_dict.copy()
+        profile_ctx = nullcontext()
+        if input._timer is not None and self._sparse_unique_name:
+            profile_ctx = input._timer.namespace(self._sparse_unique_name)
+        with profile_ctx:
+            with input._timer.namespace("gen_pairs"):
+                res = ops.get_indice_pairs_implicit_gemm(
+                    indices,
+                    batch_size,
+                    spatial_shape,
+                    self.algo,
+                    ksize=self.kernel_size,
+                    stride=self.stride,
+                    padding=self.padding,
+                    dilation=self.dilation,
+                    out_padding=out_padding,
+                    subm=self.subm,
+                    is_train=(not self.subm) or self.training,
+                    alloc=input.thrust_allocator,
+                    timer=input._timer)
+            outids = res[0]
+            num_inds_per_loc = res[1]
+            pair_fwd = res[2]
+            pair_bwd = res[3]
+            pair_mask_fwd_splits = res[4]
+            pair_mask_bwd_splits = res[5]
+            mask_argsort_fwd_splits = res[6]
+            mask_argsort_bwd_splits = res[7]
+            masks = res[8]
+            if self.indice_key is not None:
+                indice_data = ImplicitGemmIndiceData(
+                    outids,
+                    indices,
+                    pair_fwd,
+                    pair_bwd,
+                    pair_mask_fwd_splits=pair_mask_fwd_splits,
+                    pair_mask_bwd_splits=pair_mask_bwd_splits,
+                    mask_argsort_fwd_splits=mask_argsort_fwd_splits,
+                    mask_argsort_bwd_splits=mask_argsort_bwd_splits,
+                    masks=masks,
+                    is_subm=self.subm,
+                    spatial_shape=spatial_shape,
+                    out_spatial_shape=out_spatial_shape,
+                    algo=self.algo,
+                    ksize=self.kernel_size,
+                    stride=self.stride,
+                    padding=self.padding,
+                    dilation=self.dilation)
+                msg = f"your indice key {self.indice_key} already exists in this sparse tensor."
+                assert self.indice_key not in indice_dict, msg
+                indice_dict[self.indice_key] = indice_data
+            out_features = Fsp.indice_avgpool_implicit_gemm(
+                features, pair_fwd, pair_bwd, outids.shape[0], self.training)
+
+        if not self.subm and self.record_voxel_count:
+            if hasattr(self, _MAX_NUM_VOXELS_DURING_TRAINING):
+                ops.maximum_value_int_(
+                    getattr(self, _MAX_NUM_VOXELS_DURING_TRAINING),
+                    outids.shape[0])
         out_tensor = out_tensor.replace_feature(out_features)
         out_tensor.indices = outids
         out_tensor.indice_dict = indice_dict
@@ -235,15 +373,18 @@ class SparseMaxPool1d(SparseMaxPool):
                  dilation=1,
                  indice_key=None,
                  algo: Optional[ConvAlgo] = None,
+                 record_voxel_count: bool = False,
                  name=None):
-        super(SparseMaxPool1d, self).__init__(1,
-                                              kernel_size,
-                                              stride,
-                                              padding,
-                                              dilation,
-                                              indice_key=indice_key,
-                                              algo=algo,
-                                              name=name)
+        super(SparseMaxPool1d,
+              self).__init__(1,
+                             kernel_size,
+                             stride,
+                             padding,
+                             dilation,
+                             indice_key=indice_key,
+                             algo=algo,
+                             record_voxel_count=record_voxel_count,
+                             name=name)
 
 
 class SparseMaxPool2d(SparseMaxPool):
@@ -254,15 +395,18 @@ class SparseMaxPool2d(SparseMaxPool):
                  dilation=1,
                  indice_key=None,
                  algo: Optional[ConvAlgo] = None,
+                 record_voxel_count: bool = False,
                  name=None):
-        super(SparseMaxPool2d, self).__init__(2,
-                                              kernel_size,
-                                              stride,
-                                              padding,
-                                              dilation,
-                                              indice_key=indice_key,
-                                              algo=algo,
-                                              name=name)
+        super(SparseMaxPool2d,
+              self).__init__(2,
+                             kernel_size,
+                             stride,
+                             padding,
+                             dilation,
+                             indice_key=indice_key,
+                             algo=algo,
+                             record_voxel_count=record_voxel_count,
+                             name=name)
 
 
 class SparseMaxPool3d(SparseMaxPool):
@@ -273,15 +417,18 @@ class SparseMaxPool3d(SparseMaxPool):
                  dilation=1,
                  indice_key=None,
                  algo: Optional[ConvAlgo] = None,
+                 record_voxel_count: bool = False,
                  name=None):
-        super(SparseMaxPool3d, self).__init__(3,
-                                              kernel_size,
-                                              stride,
-                                              padding,
-                                              dilation,
-                                              indice_key=indice_key,
-                                              algo=algo,
-                                              name=name)
+        super(SparseMaxPool3d,
+              self).__init__(3,
+                             kernel_size,
+                             stride,
+                             padding,
+                             dilation,
+                             indice_key=indice_key,
+                             algo=algo,
+                             record_voxel_count=record_voxel_count,
+                             name=name)
 
 
 class SparseMaxPool4d(SparseMaxPool):
@@ -292,12 +439,87 @@ class SparseMaxPool4d(SparseMaxPool):
                  dilation=1,
                  indice_key=None,
                  algo: Optional[ConvAlgo] = None,
+                 record_voxel_count: bool = False,
                  name=None):
-        super(SparseMaxPool4d, self).__init__(4,
-                                              kernel_size,
-                                              stride,
-                                              padding,
-                                              dilation,
-                                              indice_key=indice_key,
-                                              algo=algo,
-                                              name=name)
+        super(SparseMaxPool4d,
+              self).__init__(4,
+                             kernel_size,
+                             stride,
+                             padding,
+                             dilation,
+                             indice_key=indice_key,
+                             algo=algo,
+                             record_voxel_count=record_voxel_count,
+                             name=name)
+
+
+class SparseAvgPool1d(SparseAvgPool):
+    """avg pool that use real point count instead of kernel size.
+    """
+    def __init__(self,
+                 kernel_size,
+                 stride=None,
+                 padding=0,
+                 dilation=1,
+                 indice_key=None,
+                 algo: Optional[ConvAlgo] = None,
+                 record_voxel_count: bool = False,
+                 name=None):
+        super(SparseAvgPool1d,
+              self).__init__(1,
+                             kernel_size,
+                             stride,
+                             padding,
+                             dilation,
+                             indice_key=indice_key,
+                             algo=algo,
+                             record_voxel_count=record_voxel_count,
+                             name=name)
+
+
+class SparseAvgPool2d(SparseAvgPool):
+    """avg pool that use real point count instead of kernel size.
+    """
+    def __init__(self,
+                 kernel_size,
+                 stride=None,
+                 padding=0,
+                 dilation=1,
+                 indice_key=None,
+                 algo: Optional[ConvAlgo] = None,
+                 record_voxel_count: bool = False,
+                 name=None):
+        super(SparseAvgPool2d,
+              self).__init__(2,
+                             kernel_size,
+                             stride,
+                             padding,
+                             dilation,
+                             indice_key=indice_key,
+                             algo=algo,
+                             record_voxel_count=record_voxel_count,
+                             name=name)
+
+
+class SparseAvgPool3d(SparseAvgPool):
+    """avg pool that use real point count instead of kernel size.
+    """
+    def __init__(self,
+                 kernel_size,
+                 stride=None,
+                 padding=0,
+                 dilation=1,
+                 indice_key=None,
+                 algo: Optional[ConvAlgo] = None,
+                 record_voxel_count: bool = False,
+                 name=None):
+        super(SparseAvgPool3d,
+              self).__init__(3,
+                             kernel_size,
+                             stride,
+                             padding,
+                             dilation,
+                             indice_key=indice_key,
+                             algo=algo,
+                             record_voxel_count=record_voxel_count,
+                             name=name)

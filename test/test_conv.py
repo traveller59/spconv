@@ -248,7 +248,7 @@ def test_spconv3d():
         ConvAlgo.Native, ConvAlgo.MaskImplicitGemm,
         ConvAlgo.MaskSplitImplicitGemm
     ]
-    algos = [ConvAlgo.Native]
+    algos = [ConvAlgo.Native, ConvAlgo.MaskImplicitGemm, ConvAlgo.MaskSplitImplicitGemm]
 
     for dev, shape, bs, IC, OC, k, s, p, d, al in params_grid(
             devices, shapes, batchsizes, in_channels, out_channels, ksizes,

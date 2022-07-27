@@ -240,6 +240,28 @@ class SpconvOps:
         """
         ...
     @staticmethod
+    def avgpool_implicit_gemm_forward(out: Tensor, inp: Tensor, inds: Tensor, count_out: Tensor, stream: int = 0) -> None: 
+        """
+        Args:
+            out: 
+            inp: 
+            inds: 
+            count_out: 
+            stream: 
+        """
+        ...
+    @staticmethod
+    def avgpool_implicit_gemm_backward(dout: Tensor, dinp: Tensor, inds: Tensor, count_out: Tensor, stream: int = 0) -> None: 
+        """
+        Args:
+            dout: 
+            dinp: 
+            inds: 
+            count_out: 
+            stream: 
+        """
+        ...
+    @staticmethod
     def maxpool_forward_cpu(out: Tensor, inp: Tensor, out_inds: Tensor, in_inds: Tensor) -> None: 
         """
         Args:
@@ -277,15 +299,6 @@ class SpconvOps:
             out: 
             inp: 
             inds: 
-        """
-        ...
-    @staticmethod
-    def sort_1d_by_key(data: Tensor, indices: Tensor =  Tensor(), stream: int = 0) -> Tensor: 
-        """
-        Args:
-            data: 
-            indices: 
-            stream: 
         """
         ...
     @staticmethod
@@ -348,6 +361,24 @@ class SpconvOps:
         """
         ...
     @staticmethod
+    def maximum_value_int(data: Tensor, value: int, stream_int: int) -> None: 
+        """
+        Args:
+            data: 
+            value: 
+            stream_int: 
+        """
+        ...
+    @staticmethod
+    def sort_1d_by_key(data: Tensor, indices: Tensor =  Tensor(), stream: int = 0) -> Tensor: 
+        """
+        Args:
+            data: 
+            indices: 
+            stream: 
+        """
+        ...
+    @staticmethod
     def calc_point2voxel_meta_data(vsize_xyz: List[float], coors_range_xyz: List[float]) -> Tuple[List[float], List[int], List[int], List[float]]: 
         """
         Args:
@@ -407,6 +438,18 @@ class SpconvOps:
         """
         ...
     @staticmethod
+    def get_indice_gen_tensors_from_workspace(workspace, kv: int, num_act_in: int, num_act_out_bound: int, subm: bool, use_int64_hash_k: bool) -> Dict[str, Tensor]: 
+        """
+        Args:
+            workspace: 
+            kv: 
+            num_act_in: 
+            num_act_out_bound: 
+            subm: 
+            use_int64_hash_k: 
+        """
+        ...
+    @staticmethod
     def get_indice_pairs_implicit_gemm(allocator, indices: Tensor, batch_size: int, input_dims: List[int], algo: int, ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], out_padding: List[int], subm: bool, transposed: bool, is_train: bool, stream_int: int = 0, num_out_act_bound: int = -1) -> Tuple[Tensor, int]: 
         """
         Args:
@@ -428,7 +471,7 @@ class SpconvOps:
         """
         ...
     @staticmethod
-    def get_indice_pairs(allocator, indices: Tensor, batch_size: int, input_dims: List[int], algo: int, ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], out_padding: List[int], subm: bool, transposed: bool, stream_int: int = 0, num_out_act_bound: int = -1) -> int: 
+    def get_indice_pairs(allocator, indices: Tensor, batch_size: int, input_dims: List[int], algo: int, ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], out_padding: List[int], subm: bool, transposed: bool, stream_int: int = 0, num_out_act_bound: int = -1, num_input_act_bound: int = -1) -> int: 
         """
         Args:
             allocator: 
@@ -445,5 +488,6 @@ class SpconvOps:
             transposed: 
             stream_int: 
             num_out_act_bound: 
+            num_input_act_bound: 
         """
         ...

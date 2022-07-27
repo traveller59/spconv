@@ -132,12 +132,11 @@ class SparseSequential(SparseModule):
                 if isinstance(input, list):
                     input = module(input)
                 else:
-                    assert isinstance(input, spconv.SparseConvTensor)
+                    # assert isinstance(input, spconv.SparseConvTensor)
                     # self._sparity_dict[k] = input.sparity
                     input = module(input)
             else:
                 if isinstance(input, spconv.SparseConvTensor):
-                    print(input.features.shape)
                     if input.indices.shape[0] != 0:
                         input = input.replace_feature(module(input.features))
                 else:

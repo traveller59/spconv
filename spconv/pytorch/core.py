@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Tuple, Union, Dict
+from typing import Any, List, Optional, Tuple, Union, Dict
 
 import numpy as np
 import torch
 from spconv.core import ConvAlgo
 from spconv.pytorch.constants import PYTORCH_VERSION
 from spconv.tools import CUDAKernelTimer
+from spconv.constants import SPCONV_FX_TRACE_MODE
 
 if PYTORCH_VERSION >= [1, 8, 0]:
     try:
@@ -59,7 +60,8 @@ class ThrustSortAllocator:
 class IndiceData(object):
     def __init__(self, out_indices, indices, indice_pairs, indice_pair_num,
                  spatial_shape, out_spatial_shape, is_subm: bool, algo: ConvAlgo,
-                 ksize: List[int], stride: List[int], dilation: List[int], padding: List[int]):
+                 ksize: List[int], stride: List[int], dilation: List[int], padding: List[int],
+                 voxel_num: Optional[Any] = None):
         self.out_indices = out_indices
         self.indices = indices
         self.indice_pairs = indice_pairs
@@ -72,6 +74,8 @@ class IndiceData(object):
         self.stride = stride
         self.dilation = dilation
         self.padding = padding
+        # voxel_num is only used in tensorrt conversion.
+        self.voxel_num = voxel_num
 
 
 class ImplicitGemmIndiceData(object):
@@ -83,7 +87,9 @@ class ImplicitGemmIndiceData(object):
                  mask_argsort_bwd_splits: List[torch.Tensor],
                  masks: List[np.ndarray], spatial_shape, 
                  out_spatial_shape, is_subm: bool, algo: ConvAlgo,
-                 ksize: List[int], stride: List[int], dilation: List[int], padding: List[int]):
+                 ksize: List[int], stride: List[int], dilation: List[int], padding: List[int],
+                 in_voxel_num: Optional[Any] = None,
+                 out_voxel_num: Optional[Any] = None):
         self.out_indices = out_indices
         self.indices = indices
         self.pair_fwd = pair_fwd
@@ -101,6 +107,9 @@ class ImplicitGemmIndiceData(object):
         self.stride = stride
         self.dilation = dilation
         self.padding = padding
+        # in/out voxel_num is only used in tensorrt conversion.
+        self.in_voxel_num = in_voxel_num
+        self.out_voxel_num = out_voxel_num
 
 
 def scatter_nd(indices, updates, shape):
@@ -147,11 +156,12 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
             force_algo: force conv/pool layers use this algo, should only used for debug.
         """
         ndim = indices.shape[1] - 1
-        assert features.ndim == 2
-        assert indices.ndim == 2
-        assert len(spatial_shape) == ndim, "spatial shape must equal to ndim"
-        assert indices.dtype == torch.int32, "only support int32"
-        assert batch_size > 0
+        if not SPCONV_FX_TRACE_MODE:
+            assert features.ndim == 2
+            assert indices.ndim == 2
+            assert len(spatial_shape) == ndim, "spatial shape must equal to ndim"
+            assert indices.dtype == torch.int32, "only support int32"
+            assert batch_size > 0
         self._features = features
         self.indices = indices
         self.spatial_shape = [int(v) for v in spatial_shape]

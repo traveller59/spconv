@@ -2,7 +2,8 @@ import pccm
 from cumm.common import TensorView, TensorViewCPU, TensorViewKernel, ThrustLib
 
 from spconv.constants import AllocKeys
-
+from cumm.constants import CUMM_CPU_ONLY_BUILD
+from .indices import CudaCommonKernel
 class ExternalAllocatorGuard(pccm.Class):
     def __init__(self):
         super().__init__()
@@ -53,8 +54,8 @@ class ExternalAllocator(pccm.Class):
         code.arg("shape", "std::vector<int64_t>")
         code.arg("dtype", "int")
         code.arg("device", "int")
-        code.arg("is_temp_memory", "bool", "false")
         code.arg("stream", "std::uintptr_t", "0")
+        code.arg("is_temp_memory", "bool", "false")
 
         return code.ret("tv::Tensor")
 
@@ -66,8 +67,8 @@ class ExternalAllocator(pccm.Class):
         code.arg("shape", "std::vector<int64_t>")
         code.arg("dtype", "int")
         code.arg("device", "int")
-        code.arg("is_temp_memory", "bool", "false")
         code.arg("stream", "std::uintptr_t", "0")
+        code.arg("is_temp_memory", "bool", "false")
 
         return code.ret("tv::Tensor")
 
@@ -80,8 +81,8 @@ class ExternalAllocator(pccm.Class):
         code.arg("value", "int")
         code.arg("dtype", "int")
         code.arg("device", "int")
-        code.arg("is_temp_memory", "bool", "false")
         code.arg("stream", "std::uintptr_t", "0")
+        code.arg("is_temp_memory", "bool", "false")
 
         return code.ret("tv::Tensor")
 
@@ -94,8 +95,9 @@ class ExternalAllocator(pccm.Class):
         code.arg("value", "float")
         code.arg("dtype", "int")
         code.arg("device", "int")
-        code.arg("is_temp_memory", "bool", "false")
         code.arg("stream", "std::uintptr_t", "0")
+        code.arg("is_temp_memory", "bool", "false")
+
         return code.ret("tv::Tensor")
 
     @pccm.pybind.mark(virtual=True)
@@ -129,7 +131,7 @@ class ExternalAllocator(pccm.Class):
         code.arg("stream", "std::uintptr_t", "0")
         code.raw(f"""
         // "" means temp memory
-        auto ten = zeros(name, shape, dtype, device, true, stream);
+        auto ten = zeros(name, shape, dtype, device, stream, true);
         return std::make_{self.ptr_type}<ExternalAllocatorGuard>(ten, [this](tv::Tensor ten){{
             this->free(ten);
         }});
@@ -145,7 +147,7 @@ class ExternalAllocator(pccm.Class):
         code.arg("name", "std::string", "\"\"")
         code.arg("stream", "std::uintptr_t", "0")
         code.raw(f"""
-        auto ten = empty(name, shape, dtype, device, true, stream);
+        auto ten = empty(name, shape, dtype, device, stream, true);
         return std::make_{self.ptr_type}<ExternalAllocatorGuard>(ten, [this](tv::Tensor ten){{
             this->free(ten);
         }});
@@ -162,7 +164,7 @@ class ExternalAllocator(pccm.Class):
         code.arg("name", "std::string", "\"\"")
         code.arg("stream", "std::uintptr_t", "0")
         code.raw(f"""
-        auto ten = full_int(name, shape, value, dtype, device, true, stream);
+        auto ten = full_int(name, shape, value, dtype, device, stream, true);
         return std::make_{self.ptr_type}<ExternalAllocatorGuard>(ten, [this](tv::Tensor ten){{
             this->free(ten);
         }});
@@ -179,7 +181,7 @@ class ExternalAllocator(pccm.Class):
         code.arg("name", "std::string", "\"\"")
         code.arg("stream", "std::uintptr_t", "0")
         code.raw(f"""
-        auto ten = full_float(name, shape, value, dtype, device, true, stream);
+        auto ten = full_float(name, shape, value, dtype, device, stream, true);
         return std::make_{self.ptr_type}<ExternalAllocatorGuard>(ten, [this](tv::Tensor t){{
             this->free(t);
         }});
@@ -222,8 +224,10 @@ class ThrustAllocator(pccm.Class):
         """)
         return code
 
+
+
 class StaticAllocator(ExternalAllocator):
-    """a simple allocator for tensorrt plugin.
+    """a static allocator for tensorrt plugin.
     """
     def __init__(self):
         super().__init__()
@@ -232,6 +236,7 @@ class StaticAllocator(ExternalAllocator):
         self.add_member("repr_", "std::string")
         self.add_member("thrust_tmp_tensor_", "tv::Tensor")
         self.grow = 1.5
+        self.cuda_common_kernel = CudaCommonKernel()
 
     @pccm.pybind.mark 
     @pccm.constructor
@@ -242,7 +247,22 @@ class StaticAllocator(ExternalAllocator):
         code.raw(f"""
         std::stringstream ss;
         for (auto& p : tensor_dict){{
-            tv::ssprint(ss, p.first, p.second.shape(), tv::dtype_str(p.second.dtype()), "\\n");
+            tv::sstream_print(ss, p.first, p.second.shape(), tv::dtype_str(p.second.dtype()), "\\n");
+        }}
+        repr_ = ss.str();
+        """)
+        return code 
+
+    @pccm.pybind.mark 
+    @pccm.member_function
+    def set_new_tensor_dict(self):
+        code = pccm.code()
+        code.arg("tensor_dict", "std::unordered_map<std::string, tv::Tensor>")
+        code.raw(f"""
+        tensor_dict_ = tensor_dict;
+        std::stringstream ss;
+        for (auto& p : tensor_dict){{
+            tv::sstream_print(ss, p.first, p.second.shape(), tv::dtype_str(p.second.dtype()), "\\n");
         }}
         repr_ = ss.str();
         """)
@@ -255,12 +275,21 @@ class StaticAllocator(ExternalAllocator):
         code.arg("shape", "std::vector<int64_t>")
         code.arg("dtype", "int")
         code.arg("device", "int")
+        code.arg("is_temp_memory", "bool", "false")
+
         code.raw(f"""
         auto res = get_tensor_by_name(name);
         size_t total = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int64_t>());
-        TV_ASSERT_RT_ERR(res.nbytes() >= total * tv::bit_size(tv::DType(dtype)) 
-            && res.device() == device, "alloc failed", shape, res.shape());
-        return tv::from_blob(res.raw_data(), shape, dtype, device);
+        TV_ASSERT_RT_ERR(res.nbytes() >= total * tv::bit_size(tv::DType(dtype)) / 8 
+            && res.device() == device, "alloc failed, tensor size too small", shape, res.shape());
+
+        // if (is_temp_memory){{
+        // }}else{{
+        //     // size must exactly match
+        //     TV_ASSERT_RT_ERR(res.nbytes() == total * tv::bit_size(tv::DType(dtype)) / 8 
+        //         && res.device() == device, "alloc failed, named memory size must match", shape, res.shape());
+        // }}
+        return tv::from_blob(res.raw_data(), shape, tv::DType(dtype), device);
         """)
         return code.ret("tv::Tensor")
 
@@ -273,15 +302,21 @@ class StaticAllocator(ExternalAllocator):
         code.arg("shape", "std::vector<int64_t>")
         code.arg("dtype", "int")
         code.arg("device", "int")
-        code.arg("is_temp_memory", "bool", "false")
         code.arg("stream", "std::uintptr_t", "0")
+        code.arg("is_temp_memory", "bool", "false")
         code.raw(f"""
         auto tvctx = tv::Context();
-        tvctx.set_cuda_stream(reinterpret_cast<cudaStream_t>(stream));
-        auto blob = _get_raw_and_check(name, shape, dtype, device);
+        """)
+        if not CUMM_CPU_ONLY_BUILD:
+            code.raw(f"""
+            tvctx.set_cuda_stream(reinterpret_cast<cudaStream_t>(stream));
+            """)
+        code.raw(f"""
+        auto blob = _get_raw_and_check(name, shape, dtype, device, is_temp_memory);
         return blob.zero_(tvctx);
         """)
         return code.ret("tv::Tensor")
+
 
     @pccm.pybind.mark
     @pccm.member_function(virtual=True)
@@ -291,8 +326,8 @@ class StaticAllocator(ExternalAllocator):
         code.arg("shape", "std::vector<int64_t>")
         code.arg("dtype", "int")
         code.arg("device", "int")
-        code.arg("is_temp_memory", "bool", "false")
         code.arg("stream", "std::uintptr_t", "0")
+        code.arg("is_temp_memory", "bool", "false")
         code.raw(f"""
         if (name == {pccm.literal(AllocKeys.ThrustTemp)}){{
             // thrust tmp shouldn't inside tensor_dict. use a simple method to allocate
@@ -300,23 +335,28 @@ class StaticAllocator(ExternalAllocator):
             // so we can just use one tensor
             tv::Tensor res = thrust_tmp_tensor_;
             if (res.empty()){{
-                res = tv::empty(shape, dtype, device);
+                res = tv::empty(shape, tv::DType(dtype), device);
                 thrust_tmp_tensor_ = res;
             }}
             if (shape[0] > thrust_tmp_tensor_.dim(0)){{
-                res = tv::empty({{int64_t(shape[0] * {self.grow})}}, dtype, device);
+                res = tv::empty({{int64_t(shape[0] * {self.grow})}}, tv::DType(dtype), device);
                 thrust_tmp_tensor_ = res;
             }}
             return res;
         }}else{{
-            auto blob = _get_raw_and_check(name, shape, dtype, device);
+            auto blob = _get_raw_and_check(name, shape, dtype, device, is_temp_memory);
             return blob;
         }}
         """)
         return code.ret("tv::Tensor")
 
+    # cpu only build can't use pccm.cuda
+    __CUDA_DECORATOR = pccm.member_function
+    if not CUMM_CPU_ONLY_BUILD:
+        __CUDA_DECORATOR = pccm.cuda.member_function
+
     @pccm.pybind.mark
-    @pccm.member_function(virtual=True)
+    @__CUDA_DECORATOR
     def full_int(self):
         code = pccm.code()
         code.arg("name", "std::string")
@@ -324,17 +364,36 @@ class StaticAllocator(ExternalAllocator):
         code.arg("value", "int")
         code.arg("dtype", "int")
         code.arg("device", "int")
-        code.arg("is_temp_memory", "bool", "false")
         code.arg("stream", "std::uintptr_t", "0")
+        code.arg("is_temp_memory", "bool", "false")
+
         code.raw(f"""
         auto tvctx = tv::Context();
-        auto blob = _get_raw_and_check(name, shape, dtype, device);
-        return blob.fill_(tvctx, value);
+        auto blob = _get_raw_and_check(name, shape, dtype, device, is_temp_memory);
+
+        """)
+        if not CUMM_CPU_ONLY_BUILD:
+            code.add_param_class("cudakers", self.cuda_common_kernel)
+            code.raw(f"""
+            tvctx.set_cuda_stream(reinterpret_cast<cudaStream_t>(stream));
+            using ints_t = std::tuple<int32_t, int16_t, int8_t, int64_t, uint32_t, uint64_t, uint16_t, uint8_t>;
+            tv::Dispatch<ints_t>()(blob.dtype(), [&](auto I){{
+                using T = TV_DECLTYPE(I);
+                tv::cuda::Launch lanucher_fill(blob.size(), reinterpret_cast<cudaStream_t>(stream));
+                lanucher_fill(cudakers::fill_kernel<T>, blob.data_ptr<T>(), value, blob.size());
+            }});
+            """)
+        else:
+            code.raw(f"""
+            blob.fill_(value);
+            """)
+        code.raw(f"""
+        return blob;
         """)
         return code.ret("tv::Tensor")
 
     @pccm.pybind.mark
-    @pccm.member_function(virtual=True)
+    @__CUDA_DECORATOR
     def full_float(self):
         code = pccm.code()
         code.arg("name", "std::string")
@@ -342,11 +401,29 @@ class StaticAllocator(ExternalAllocator):
         code.arg("value", "float")
         code.arg("dtype", "int")
         code.arg("device", "int")
-        code.arg("is_temp_memory", "bool", "false")
         code.arg("stream", "std::uintptr_t", "0")
+        code.arg("is_temp_memory", "bool", "false")
         code.raw(f"""
-        auto blob = _get_raw_and_check(name, shape, dtype, device);
-        return blob.fill_(tvctx, value);
+        auto tvctx = tv::Context();
+        auto blob = _get_raw_and_check(name, shape, dtype, device, is_temp_memory);
+        """)
+        if not CUMM_CPU_ONLY_BUILD:
+            code.add_param_class("cudakers", self.cuda_common_kernel)
+            code.raw(f"""
+            tvctx.set_cuda_stream(reinterpret_cast<cudaStream_t>(stream));
+            using dtypes_t = std::tuple<float, double>;
+            tv::Dispatch<dtypes_t>()(blob.dtype(), [&](auto I){{
+                using T = TV_DECLTYPE(I);
+                tv::cuda::Launch lanucher_fill(blob.size(), reinterpret_cast<cudaStream_t>(stream));
+                lanucher_fill(cudakers::fill_kernel<T>, blob.data_ptr<T>(), value, blob.size());
+            }});
+            """)
+        else:
+            code.raw(f"""
+            blob.fill_(value);
+            """)
+        code.raw(f"""
+        return blob;
         """)
         return code.ret("tv::Tensor")
 
@@ -364,6 +441,7 @@ class StaticAllocator(ExternalAllocator):
     @pccm.pybind.mark
     @pccm.member_function(virtual=True)
     def free(self):
+        # nothing here because this is a static allocator
         code = pccm.code()
         code.arg("ten", "tv::Tensor")
         return code

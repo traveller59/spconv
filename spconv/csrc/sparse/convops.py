@@ -78,11 +78,9 @@ class ExternalSpconvMatmul(pccm.Class):
         return code
 
 class SimpleExternalSpconvMatmul(ExternalSpconvMatmul):
-    """a helper class to warp matmul operations
-    because we don't want to implement matmul
-    (link to cublas/mkl/pytorch) in python package.
+    """implement gemm in cuda via cublasLt. (only support forward)
+    should be used with tensorrt plugin.
     """
-
     def __init__(self):
         super().__init__()
         self.add_dependency(TensorView, ExternalAllocator)
@@ -311,7 +309,7 @@ class SimpleExternalSpconvMatmul(ExternalSpconvMatmul):
           TV_THROW_RT_ERR("unsupported");
         }}
         check_cublas_status(cublasLtMatmul(
-            handle, operationDesc, alpha_storage, a.raw_data(), Adesc, b.raw_data(),
+            handle, operationDesc, alpha_storage, a.const_raw_data(), Adesc, b.const_raw_data(),
             Bdesc, beta_storage, c.raw_data(), Cdesc, c.raw_data(), Cdesc,
             &heuristicResult.algo, nullptr, 0, stream));
         if (preference)
@@ -1417,11 +1415,12 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 is_KC_not_CK, kv_center, out_channel);
         }}else{{
             out_features = allocator.zeros({pccm.literal(AllocKeys.OutFeatures)}, 
-                {{num_activate_out, out_channel}}, features.dtype(), features.device());
+                {{num_activate_out, out_channel}}, features.dtype(), features.device(), stream_int);
         }}
         if (kv == 1 && subm){{
             return;
         }}
+        
         auto indice_pair_num_cpu = indice_pair_num.cpu();
         auto indice_pair_num_cpu_ptr = indice_pair_num_cpu.data_ptr<int>();
         int maxnhot = 0;
@@ -1618,7 +1617,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
         int kv_center = kv / 2;
         tv::Tensor din;
         auto dfilters = allocator.zeros({pccm.literal(AllocKeys.DFilters)}, 
-                prev_filter_shape_vec, features.dtype(), features.device());
+                prev_filter_shape_vec, features.dtype(), features.device(), stream_int);
         dfilters = dfilters.view(filters.shape());
         if (subm){{
             din = ext_mm.indice_conv_bwd_init_gemm({pccm.literal(AllocKeys.Features)}, 
@@ -1628,7 +1627,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 is_KC_not_CK, kv_center);
         }}else{{
             din = allocator.zeros({pccm.literal(AllocKeys.DIn)}, 
-                    features.shape_vector(), features.dtype(), features.device());
+                    features.shape_vector(), features.dtype(), features.device(), stream_int);
         }}
         if (kv == 1 && subm){{
             return;
@@ -1922,10 +1921,10 @@ class ConvGemmOps(pccm.ParameterizedClass):
         tv::Tensor out_features;
         if (is_subm){{
             out_features = allocator.empty({pccm.literal(AllocKeys.OutFeatures)}, 
-                {{num_activate_out, out_channel}}, features.dtype(), features.device());
+                {{num_activate_out, out_channel}}, features.dtype(), features.device(), stream_int);
         }}else{{
             out_features = allocator.zeros({pccm.literal(AllocKeys.OutFeatures)}, 
-                {{num_activate_out, out_channel}}, features.dtype(), features.device());
+                {{num_activate_out, out_channel}}, features.dtype(), features.device(), stream_int);
         }}
         auto arch = get_compute_capability();
         constexpr auto kForwardInt = static_cast<int>(tv::gemm::ConvOpType::kForward);
@@ -1966,7 +1965,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
         if (is_train){{
             mask_output_fwd = allocator.empty({pccm.literal(AllocKeys.MaskOutputFwd)}, 
                 {{num_split, tv::div_up(num_activate_out, mask_width)}}, 
-                tv::uint32, features.device());
+                tv::uint32, features.device(), stream_int);
             for (int i = 0; i < num_split; ++i){{
                 mask_output_fwd_splits.push_back(mask_output_fwd[i]);
             }}
@@ -2042,13 +2041,13 @@ class ConvGemmOps(pccm.ParameterizedClass):
         tv::Tensor din;
         if (is_subm){{
             din = allocator.empty({pccm.literal(AllocKeys.DIn)}, 
-                features.shape_vector(), features.dtype(), features.device());
+                features.shape_vector(), features.dtype(), features.device(), stream_int);
         }}else{{
             din = allocator.zeros({pccm.literal(AllocKeys.DIn)}, 
-                features.shape_vector(), features.dtype(), features.device());
+                features.shape_vector(), features.dtype(), features.device(), stream_int);
         }}
         tv::Tensor dfilters = allocator.zeros({pccm.literal(AllocKeys.DFilters)}, 
-            filters_shape_vec, filters.dtype(), filters.device());
+            filters_shape_vec, filters.dtype(), filters.device(), stream_int);
         dfilters = dfilters.view(out_channel, -1, in_channel);
 
         constexpr auto kForwardInt = static_cast<int>(tv::gemm::ConvOpType::kForward);

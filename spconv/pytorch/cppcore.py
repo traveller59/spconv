@@ -103,7 +103,7 @@ class TorchAllocator(ExternalAllocator):
         self.allocated: Dict[Union[str, int], torch.Tensor] = {}
 
     def zeros(self, name: str, shape: List[int], dtype: int,
-              device: int, is_temp_memory: bool = False, stream: int = 0) -> tv.Tensor:
+              device: int, stream: int = 0, is_temp_memory: bool = False) -> tv.Tensor:
         # TODO free memory by name if its already free by pointer.
         # provide a name if you want to access it after c++ function exit.
         torch_uint_workaround = dtype in _TORCH_UINT_WORKAROUNDS
@@ -126,7 +126,7 @@ class TorchAllocator(ExternalAllocator):
         return ten_tv
 
     def empty(self, name: str, shape: List[int], dtype: int,
-              device: int, is_temp_memory: bool = False, stream: int = 0) -> tv.Tensor:
+              device: int, stream: int = 0, is_temp_memory: bool = False) -> tv.Tensor:
         torch_uint_workaround = dtype in _TORCH_UINT_WORKAROUNDS
         dtype_bkp = dtype
         if dtype in _TORCH_UINT_WORKAROUNDS:
@@ -147,7 +147,7 @@ class TorchAllocator(ExternalAllocator):
         return ten_tv
 
     def full_int(self, name: str, shape: List[int], value: int, dtype: int,
-                 device: int, is_temp_memory: bool = False, stream: int = 0) -> tv.Tensor:
+                 device: int, stream: int = 0, is_temp_memory: bool = False) -> tv.Tensor:
         if dtype in _TORCH_UINT_WORKAROUNDS and value < 0:
             raise NotImplementedError("you can't use full for unsigned dtypes")
         torch_uint_workaround = dtype in _TORCH_UINT_WORKAROUNDS
@@ -171,7 +171,7 @@ class TorchAllocator(ExternalAllocator):
         return ten_tv
 
     def full_float(self, name: str, shape: List[int], value: float, dtype: int,
-                   device: int, is_temp_memory: bool = False, stream: int = 0) -> tv.Tensor:
+                   device: int, stream: int = 0, is_temp_memory: bool = False) -> tv.Tensor:
         if dtype in _TORCH_UINT_WORKAROUNDS and value < 0:
             raise NotImplementedError("you can't use full for unsigned dtypes")
         torch_uint_workaround = dtype in _TORCH_UINT_WORKAROUNDS

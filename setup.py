@@ -175,7 +175,7 @@ if disable_jit is not None and disable_jit == "1":
             std = "c++14" 
         else:
             std = "c++17"
-    if CUMM_CPU_ONLY_BUILD:
+    if not CUMM_CPU_ONLY_BUILD:
         gemmtuner = GemmTunerSimple(cu)
         gemmtuner.namespace = "csrc.sparse.convops.gemmops"
         convtuner = ConvTunerSimple(convcu)

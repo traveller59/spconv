@@ -297,7 +297,7 @@ class Point2Voxel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         self.add_dependency(TensorView)
         self.p2v_c = Point2VoxelCommon(dtype, ndim, zyx)
         self.add_param_class("p2v_c", self.p2v_c, "Point2VoxelCommon")
-        layout = TensorGeneric(ndim, True)
+        layout = TensorGeneric(ndim, False)
         self.add_param_class("layout_ns", layout, "Layout")
         self.dtype = dtype
         self.ndim = ndim
@@ -489,7 +489,7 @@ class Point2VoxelCPU(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
     def __init__(self, dtype: dtypes.DType, ndim: int, zyx: bool = True):
         super().__init__()
         self.add_dependency(TensorView)
-        layout = TensorGeneric(ndim, True)
+        layout = TensorGeneric(ndim, False)
         self.add_param_class("layout_ns", layout, "Layout")
         self.dtype = dtype
         self.ndim = ndim

@@ -62,8 +62,7 @@ if project_is_installed(PACKAGE_NAME) and project_is_editable(
         CompileInfo(),
         ExternalAllocator(),
         ExternalSpconvMatmul(),
-        SimpleExternalSpconvMatmul(),
-
+        SimpleExternalSpconvMatmul(), # for debug, won't be included in release
     ]
     pccm.builder.build_pybind(cus,
                               PACKAGE_ROOT / "core_cc",

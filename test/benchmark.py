@@ -113,7 +113,7 @@ class Net(nn.Module):
             # nn.BatchNorm1d(32),
             # nn.ReLU(),
             # spconv.SparseConv3d(64, 64, 2, 2, bias=False, indice_key="m0"),
-            spconv.SparseMaxPool3d(2, 2, algo=pool_algo),
+            spconv.SparseMaxPool3d(2, 2, algo=pool_algo, record_voxel_count=True),
             spconv.SubMConv3d(64,
                               96,
                               3,
@@ -332,7 +332,7 @@ def main():
     voxels_th = torch.from_numpy(voxels).to(device).to(dtype)
     coors_th = torch.from_numpy(coors).to(device).int()
     voxels_th.requires_grad = True
-    algo = spconv.ConvAlgo.MaskImplicitGemm
+    algo = spconv.ConvAlgo.Native
     # 3080 Laptop
     # MaskImpGemm: 11.2ms
     # MaskSplitImpGemm: 12.2ms
@@ -385,21 +385,25 @@ def main():
             torch.cuda.synchronize()
             # sort_bench()
             times.append(time.time() - t)
+    # state = net.state_dict()
+    # state.pop("net.2.max_num_voxels_during_training")
+    # net.load_state_dict(state)
+    # breakpoint()
     print("spconv time", np.mean(times[10:]))
-    times = []
+    # times = []
 
-    for i in range(10):
-        out = net(voxels_th, coors_th, 1)
-        print("------------")
-        torch.cuda.synchronize()
-        t = time.time()
-        out.features.backward(dout_t)
-        torch.cuda.synchronize()
-        times.append(time.time() - t)
+    # for i in range(10):
+    #     out = net(voxels_th, coors_th, 1)
+    #     print("------------")
+    #     torch.cuda.synchronize()
+    #     t = time.time()
+    #     out.features.backward(dout_t)
+    #     torch.cuda.synchronize()
+    #     times.append(time.time() - t)
 
-    # # print((net.grid == -1).float().sum(), net.grid.numel())
-    # # print("spconv time", time.time() - t)
-    print("spconv bw time", np.mean(times[5:]))
+    # # # print((net.grid == -1).float().sum(), net.grid.numel())
+    # # # print("spconv time", time.time() - t)
+    # print("spconv bw time", np.mean(times[5:]))
 
 
 if __name__ == "__main__":
