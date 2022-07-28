@@ -11,7 +11,7 @@ class ConvGemmOps:
         """
         ...
     @staticmethod
-    def indice_conv(allocator, ext_mm, gemm_tuner, all_w_is_krsc: bool, filter_hwio: bool, features: Tensor, filters: Tensor, indice_pairs: Tensor, indice_pair_num: Tensor, num_activate_out: int, inverse: bool = False, subm: bool = False, algo: int = 0, stream_int: int = 0) -> None: 
+    def indice_conv(allocator, ext_mm, gemm_tuner, all_w_is_krsc: bool, filter_hwio: bool, features: Tensor, filters: Tensor, indice_pairs: Tensor, indice_pair_num: Tensor, arch: Tuple[int, int], num_activate_out: int, inverse: bool = False, subm: bool = False, algo: int = 0, stream_int: int = 0) -> None: 
         """
         1. this function need to take a out features
         that from subm first mm.
@@ -26,6 +26,7 @@ class ConvGemmOps:
             filters: 
             indice_pairs: 
             indice_pair_num: 
+            arch: 
             num_activate_out: 
             inverse: 
             subm: 
@@ -34,7 +35,7 @@ class ConvGemmOps:
         """
         ...
     @staticmethod
-    def indice_conv_backward(allocator, ext_mm, gemm_tuner, all_w_is_krsc: bool, filter_hwio: bool, features: Tensor, filters: Tensor, out_bp: Tensor, indice_pairs: Tensor, indice_pair_num: Tensor, inverse: bool = False, subm: bool = False, algo: int = 0, stream_int: int = 0) -> None: 
+    def indice_conv_backward(allocator, ext_mm, gemm_tuner, all_w_is_krsc: bool, filter_hwio: bool, features: Tensor, filters: Tensor, out_bp: Tensor, indice_pairs: Tensor, indice_pair_num: Tensor, arch: Tuple[int, int], inverse: bool = False, subm: bool = False, algo: int = 0, stream_int: int = 0) -> None: 
         """
         Args:
             allocator: 
@@ -47,6 +48,7 @@ class ConvGemmOps:
             out_bp: 
             indice_pairs: 
             indice_pair_num: 
+            arch: 
             inverse: 
             subm: 
             algo: 
@@ -54,7 +56,7 @@ class ConvGemmOps:
         """
         ...
     @staticmethod
-    def implicit_gemm(allocator, conv_tuner, features: Tensor, filters: Tensor, pair_fwd: Tensor, pair_mask_fwd_splits: List[Tensor], mask_argsort_fwd_splits: List[Tensor], num_activate_out: int, masks: Tensor, is_train: bool = False, is_subm: bool = False, stream_int: int = 0, timer: CUDAKernelTimer =  CUDAKernelTimer(False), auto_fp32_accum: bool = True, fp32_accum: bool = False) -> int: 
+    def implicit_gemm(allocator, conv_tuner, features: Tensor, filters: Tensor, pair_fwd: Tensor, pair_mask_fwd_splits: List[Tensor], mask_argsort_fwd_splits: List[Tensor], num_activate_out: int, masks: Tensor, arch: Tuple[int, int], is_train: bool = False, is_subm: bool = False, stream_int: int = 0, timer: CUDAKernelTimer =  CUDAKernelTimer(False), auto_fp32_accum: bool = True, fp32_accum: bool = False) -> int: 
         """
         Args:
             allocator: 
@@ -66,6 +68,7 @@ class ConvGemmOps:
             mask_argsort_fwd_splits: 
             num_activate_out: 
             masks: 
+            arch: 
             is_train: 
             is_subm: 
             stream_int: 
@@ -75,7 +78,7 @@ class ConvGemmOps:
         """
         ...
     @staticmethod
-    def implicit_gemm_backward(allocator, conv_tuner, features: Tensor, filters: Tensor, out_bp: Tensor, pair_fwd: Tensor, pair_bwd: Tensor, pair_mask_fwd_splits: List[Tensor], pair_mask_bwd_splits: List[Tensor], mask_argsort_fwd_splits: List[Tensor], mask_argsort_bwd_splits: List[Tensor], mask_output_fwd: Tensor, masks: Tensor, mask_width: int, is_subm: bool, stream_int: int = 0, timer: CUDAKernelTimer =  CUDAKernelTimer(False), auto_fp32_accum: bool = True, fp32_accum: bool = False) -> None: 
+    def implicit_gemm_backward(allocator, conv_tuner, features: Tensor, filters: Tensor, out_bp: Tensor, pair_fwd: Tensor, pair_bwd: Tensor, pair_mask_fwd_splits: List[Tensor], pair_mask_bwd_splits: List[Tensor], mask_argsort_fwd_splits: List[Tensor], mask_argsort_bwd_splits: List[Tensor], mask_output_fwd: Tensor, masks: Tensor, arch: Tuple[int, int], mask_width: int, is_subm: bool, stream_int: int = 0, timer: CUDAKernelTimer =  CUDAKernelTimer(False), auto_fp32_accum: bool = True, fp32_accum: bool = False) -> None: 
         """
         Args:
             allocator: 
@@ -91,6 +94,7 @@ class ConvGemmOps:
             mask_argsort_bwd_splits: 
             mask_output_fwd: 
             masks: 
+            arch: 
             mask_width: 
             is_subm: 
             stream_int: 

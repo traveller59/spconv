@@ -113,7 +113,7 @@ class Net(nn.Module):
             # nn.BatchNorm1d(32),
             # nn.ReLU(),
             # spconv.SparseConv3d(64, 64, 2, 2, bias=False, indice_key="m0"),
-            spconv.SparseMaxPool3d(2, 2, algo=pool_algo, record_voxel_count=True),
+            spconv.SparseMaxPool3d(2, 2, algo=pool_algo),
             spconv.SubMConv3d(64,
                               96,
                               3,
@@ -312,7 +312,7 @@ def sort_bench():
     for i in range(10):
         a_tv_1 = a_tv.clone()
         SpconvOps.sort_1d_by_key(a_tv_1[0], mask_argsort_tv[0])
-
+import json
 
 def main():
     import pickle
@@ -332,7 +332,8 @@ def main():
     voxels_th = torch.from_numpy(voxels).to(device).to(dtype)
     coors_th = torch.from_numpy(coors).to(device).int()
     voxels_th.requires_grad = True
-    algo = spconv.ConvAlgo.Native
+    algo = spconv.ConvAlgo.MaskImplicitGemm
+    print("ALGO")
     # 3080 Laptop
     # MaskImpGemm: 11.2ms
     # MaskSplitImpGemm: 12.2ms
@@ -355,7 +356,7 @@ def main():
     # MaskImpGemm: 51.0ms
     # MaskSplitImpGemm: 41.1ms
     # algo = None
-    net = Net(spatial_shape, algo).to(device).eval().to(dtype).train()
+    net = Net(spatial_shape, algo).to(device).eval().to(dtype)# .train()
     # net.load_state_dict(net.state_dict())
     spconv.assign_name_for_sparse_modules(net)
     print(coors_th.shape)
@@ -368,13 +369,13 @@ def main():
     print(out.spatial_shape, out.features.mean(), out.features.max(),
           out.features.min())
     times = []
+    show_metrics = False
     with torch.no_grad():
         for i in range(20):
             print("------------")
             torch.cuda.synchronize()
             t = time.time()
-            out_nograd = net(voxels_th, coors_th, 1, False)
-            timer = out_nograd._timer
+            out_nograd = net(voxels_th, coors_th, 1, show_metrics)
             # res = timer.collect_by_name("forward", timer.get_all_pair_time())
             # res2 = timer.collect_by_name("forward0", timer.get_all_pair_time())
 
@@ -385,6 +386,12 @@ def main():
             torch.cuda.synchronize()
             # sort_bench()
             times.append(time.time() - t)
+            if show_metrics:
+                timer = out_nograd._timer
+                items = list(timer.get_all_pair_time().items())
+                items.sort(key=lambda x: x[0])
+                print(json.dumps(dict(items), indent=2))
+
     # state = net.state_dict()
     # state.pop("net.2.max_num_voxels_during_training")
     # net.load_state_dict(state)

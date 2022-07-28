@@ -419,10 +419,16 @@ def get_indice_pairs_implicit_gemm(
     is_mask_split = algo == ConvAlgo.MaskSplitImplicitGemm
     mask_split_count = 2 if is_mask_split else 1
     if subm:
-        pair = torch.full((2, kv, indices.shape[0]),
-                          -1,
-                          dtype=indices.dtype,
-                          device=indices.device)
+        if is_train:
+            pair = torch.full((2, kv, indices.shape[0]),
+                            -1,
+                            dtype=indices.dtype,
+                            device=indices.device)
+        else:
+            pair = torch.full((1, kv, indices.shape[0]),
+                            -1,
+                            dtype=indices.dtype,
+                            device=indices.device)
     else:
         # for regular conv, pair-in not equal to pair-out
         pair = torch.full((kv, indices.shape[0]),
@@ -476,6 +482,7 @@ def get_indice_pairs_implicit_gemm(
                                               ksize=ksize,
                                               dilation=dilation,
                                               indice_pair_mask=pair_mask_tv,
+                                              backward=is_train,
                                               stream_int=stream)
         # torch.cuda.synchronize()
         # print("SUBM0", time.time() - t)
@@ -505,10 +512,12 @@ def get_indice_pairs_implicit_gemm(
 
             CONV.stream_synchronize(stream)
             print("SUBM", time.time() - t)
-
-        return (out_inds, indice_num_per_loc, pair[0], pair[1],
-                pair_mask_in_splits, [], mask_argsort_in_splits, [], masks)
-
+        if is_train:
+            return (out_inds, indice_num_per_loc, pair[0], pair[1],
+                    pair_mask_in_splits, [], mask_argsort_in_splits, [], masks)
+        else:
+            return (out_inds, indice_num_per_loc, pair[0], torch.Tensor(),
+                    pair_mask_in_splits, [], mask_argsort_in_splits, [], masks)
     else:
         if DEBUG:
 
@@ -753,11 +762,15 @@ def indice_conv(features: torch.Tensor,
         indice_pair_num_tv = torch_tensor_to_tv(indice_pair_num)
         filters_tv = torch_tensor_to_tv(filters)
         stream = 0
+        arch = (0, 0)
         if features.is_cuda:
+            # plain get_arch by cuda api is VERY SLOW.
+            arch = get_arch()
             stream = get_current_stream()
         ConvGemmOps.indice_conv(alloc, ext_mm, GEMM_CPP, ALL_WEIGHT_IS_KRSC,
                                 FILTER_HWIO, features_tv, filters_tv,
                                 indice_pairs_tv, indice_pair_num_tv,
+                                arch,
                                 num_activate_out, inverse, subm, algo.value,
                                 stream)
         out_features = alloc.allocated[AllocKeys.OutFeatures]
@@ -996,12 +1009,16 @@ def indice_conv_backward(features: torch.Tensor,
         indice_pair_num_tv = torch_tensor_to_tv(indice_pair_num)
         filters_tv = torch_tensor_to_tv(filters)
         stream = 0
+        arch = (0, 0)
+
         if features.is_cuda:
             stream = get_current_stream()
+            arch = get_arch()
         ConvGemmOps.indice_conv_backward(alloc, ext_mm, GEMM_CPP,
                                          ALL_WEIGHT_IS_KRSC, FILTER_HWIO,
                                          features_tv, filters_tv, out_bp_tv,
                                          indice_pairs_tv, indice_pair_num_tv,
+                                         arch,
                                          inverse, subm, algo.value, stream)
         din = alloc.allocated[AllocKeys.DIn]
         df = alloc.allocated[AllocKeys.DFilters]
@@ -1347,10 +1364,12 @@ def implicit_gemm(features: torch.Tensor,
         auto_fp32_accum = fp32_accum is None
         if fp32_accum is None:
             fp32_accum = False
+        arch = get_arch()
+
         mask_width = ConvGemmOps.implicit_gemm(
             alloc, CONV_CPP, features_tv, filters_tv, pair_fwd_tv,
             pair_mask_fwd_splits_tv, mask_argsort_fwd_splits_tv,
-            num_activate_out, mask_tv, is_train, is_subm, stream, timer_cpp,
+            num_activate_out, mask_tv, arch, is_train, is_subm, stream, timer_cpp,
             auto_fp32_accum, fp32_accum)
         out_features = alloc.allocated[AllocKeys.OutFeatures]
         mask_output_fwd = alloc.allocated.get(AllocKeys.MaskOutputFwd, None)
@@ -1441,7 +1460,7 @@ def implicit_gemm(features: torch.Tensor,
     # CONV.stream_synchronize(stream)
 
     # t = time.time()
-    # print(tune_res.algo_desp)
+    print(tune_res.algo_desp, "REF", features_tv.shape, filters.shape)
     # with tv.measure_and_print("f16 time"):
     with timer.record("implicit_gemm", stream):
         for j in range(num_split):
@@ -1613,11 +1632,13 @@ def implicit_gemm_backward(features: torch.Tensor,
         auto_fp32_accum = fp32_accum is None
         if fp32_accum is None:
             fp32_accum = False
+        arch = get_arch()
+
         ConvGemmOps.implicit_gemm_backward(
             alloc, CONV_CPP, features_tv, filters_tv, out_bp_tv, pair_fwd_tv,
             pair_bwd_tv, pair_mask_fwd_splits_tv, pair_mask_bwd_splits_tv,
             mask_argsort_fwd_splits_tv, mask_argsort_bwd_splits_tv,
-            mask_output_fwd_tv, mask_tv, mask_width, is_subm, stream,
+            mask_output_fwd_tv, mask_tv, arch, mask_width, is_subm, stream,
             timer_cpp, auto_fp32_accum, fp32_accum)
         din = alloc.allocated[AllocKeys.DIn]
         dfilters = alloc.allocated[AllocKeys.DFilters]

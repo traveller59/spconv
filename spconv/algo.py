@@ -752,7 +752,7 @@ class SimpleConv:
                     use_f32_as_accum = weight.dim(0) * kv > 128 * 27
             else:
                 use_f32_as_accum = fp32_accum
-        use_f32_as_accum = False
+        # use_f32_as_accum = False
         for algo in avail_algos:
             static_key = (layout_i.layout_type.value,
                           layout_w.layout_type.value,

@@ -1377,6 +1377,8 @@ class ConvGemmOps(pccm.ParameterizedClass):
         code.arg("features, filters, indice_pairs", "tv::Tensor")
 
         code.arg("indice_pair_num", "tv::Tensor")
+        code.arg("arch", "std::tuple<int, int>")
+
         code.arg("num_activate_out", "int")
         code.arg("inverse", "bool", "false")
         code.arg("subm", "bool", "false")
@@ -1489,7 +1491,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
             }}
         }}
         TV_ASSERT_RT_ERR(nhot_profile > 0, "this shouldn't happen");
-        auto arch = get_compute_capability();
+        // auto arch = get_compute_capability();
         auto a_shape = a.shape();
         auto c_shape = c.shape();
         int sac_shuffle_type = static_cast<int>(tv::gemm::ShuffleStrideType::kShuffleAC);
@@ -1584,6 +1586,8 @@ class ConvGemmOps(pccm.ParameterizedClass):
         code.arg("all_w_is_krsc, filter_hwio", "bool")
         code.arg("features, filters, out_bp, indice_pairs", "tv::Tensor")
         code.arg("indice_pair_num", "tv::Tensor")
+        code.arg("arch", "std::tuple<int, int>")
+
         code.arg("inverse", "bool", "false")
         code.arg("subm", "bool", "false")
         code.arg("algo", "int", f"{ConvAlgo.Native.value}")
@@ -1594,6 +1598,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
         std::vector<int64_t> filter_shape_per_kv;
         auto prev_filter_shape_vec = filters.shape_vector();
         bool is_KC_not_CK;
+        
         if (!all_w_is_krsc){{
             kv_dim = 0;
             is_KC_not_CK = !filter_hwio;
@@ -1700,7 +1705,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
             }}
         }}
         TV_ASSERT_RT_ERR(nhot_profile > 0, "this shouldn't happen");
-        auto arch = get_compute_capability();
+        // auto arch = get_compute_capability();
         int sac_shuffle_type = static_cast<int>(tv::gemm::ShuffleStrideType::kShuffleAC);
         int sab_shuffle_type = static_cast<int>(tv::gemm::ShuffleStrideType::kShuffleAB);
 
@@ -1899,6 +1904,8 @@ class ConvGemmOps(pccm.ParameterizedClass):
                  "std::vector<tv::Tensor>")
         code.arg("num_activate_out", "int")
         code.arg("masks", "tv::Tensor")
+        code.arg("arch", "std::tuple<int, int>")
+
         code.arg("is_train, is_subm", "bool", "false")
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
         code.arg("timer", "tv::CUDAKernelTimer", "tv::CUDAKernelTimer(false)",
@@ -1926,7 +1933,11 @@ class ConvGemmOps(pccm.ParameterizedClass):
             out_features = allocator.zeros({pccm.literal(AllocKeys.OutFeatures)}, 
                 {{num_activate_out, out_channel}}, features.dtype(), features.device(), stream_int);
         }}
-        auto arch = get_compute_capability();
+        // auto start_ev = tv::CUDAEvent();
+        // start_ev.record(stream_int);
+
+        // auto arch = get_compute_capability();
+
         constexpr auto kForwardInt = static_cast<int>(tv::gemm::ConvOpType::kForward);
         constexpr auto kChannelLastInt = static_cast<int>(tv::gemm::ConvLayoutType::kChannelLast);
         auto tuned_res_exist = conv_tuner.get_tuned_algo(
@@ -1959,6 +1970,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 fp32_accum);
             tune_res = std::get<0>(tune_res_time);
         }}
+
         int mask_width = tune_res.algo_desp.tile_shape[0];
         tv::Tensor mask_output_fwd;
         std::vector<tv::Tensor> mask_output_fwd_splits;
@@ -1974,6 +1986,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 mask_output_fwd_splits.push_back(tv::Tensor());
             }}
         }}
+        
         for (int j = 0; j < num_split; ++j){{
             float beta = j == 0 ? 0 : 1;
             conv_tuner.run_with_tuned_result(
@@ -1995,6 +2008,11 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 false, // verbose
                 timer);
         }}
+        // auto end_ev = tv::CUDAEvent();
+        // end_ev.record(stream_int);
+        // tv::ssprint(tune_res.algo_desp.__repr__(), "WTF", exists, 
+        //     features.shape(), filters.shape(), out_features.shape(), tv::CUDAEvent::sync_and_duration(start_ev, end_ev));
+
         return mask_width;
         """)
         return code.ret("int")
@@ -2013,6 +2031,8 @@ class ConvGemmOps(pccm.ParameterizedClass):
         code.arg("mask_output_fwd", "tv::Tensor")
 
         code.arg("masks", "tv::Tensor")
+        code.arg("arch", "std::tuple<int, int>")
+
         code.arg("mask_width", "int")
         code.arg("is_subm", "bool")
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
@@ -2056,7 +2076,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
 
         constexpr auto kChannelLastInt = static_cast<int>(tv::gemm::ConvLayoutType::kChannelLast);
 
-        auto arch = get_compute_capability();
+        // auto arch = get_compute_capability();
 
         auto dgrad_tuned_res_exist = conv_tuner.get_tuned_algo(
             kBackwardInputInt,
