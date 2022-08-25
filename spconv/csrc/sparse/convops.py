@@ -2013,9 +2013,9 @@ class ConvGemmOps(pccm.ParameterizedClass):
         // tv::ssprint(tune_res.algo_desp.__repr__(), "WTF", exists, 
         //     features.shape(), filters.shape(), out_features.shape(), tv::CUDAEvent::sync_and_duration(start_ev, end_ev));
 
-        return mask_width;
+        return std::make_tuple(mask_width, tune_res);
         """)
-        return code.ret("int")
+        return code.ret("std::tuple<int, ConvTuneResult>")
 
     @pccm.pybind.mark
     @pccm.static_function

@@ -1413,7 +1413,7 @@ def implicit_gemm(features: torch.Tensor,
             fp32_accum = False
         arch = get_arch()
 
-        mask_width = ConvGemmOps.implicit_gemm(
+        mask_width, tune_res_cpp = ConvGemmOps.implicit_gemm(
             alloc, CONV_CPP, features_tv, filters_tv, pair_fwd_tv,
             pair_mask_fwd_splits_tv, mask_argsort_fwd_splits_tv,
             num_activate_out, mask_tv, arch, is_train, is_subm, stream,

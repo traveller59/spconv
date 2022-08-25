@@ -56,7 +56,7 @@ class ConvGemmOps:
         """
         ...
     @staticmethod
-    def implicit_gemm(allocator, conv_tuner, features: Tensor, filters: Tensor, pair_fwd: Tensor, pair_mask_fwd_splits: List[Tensor], mask_argsort_fwd_splits: List[Tensor], num_activate_out: int, masks: Tensor, arch: Tuple[int, int], is_train: bool = False, is_subm: bool = False, stream_int: int = 0, timer: CUDAKernelTimer =  CUDAKernelTimer(False), auto_fp32_accum: bool = True, fp32_accum: bool = False) -> int: 
+    def implicit_gemm(allocator, conv_tuner, features: Tensor, filters: Tensor, pair_fwd: Tensor, pair_mask_fwd_splits: List[Tensor], mask_argsort_fwd_splits: List[Tensor], num_activate_out: int, masks: Tensor, arch: Tuple[int, int], is_train: bool = False, is_subm: bool = False, stream_int: int = 0, timer: CUDAKernelTimer =  CUDAKernelTimer(False), auto_fp32_accum: bool = True, fp32_accum: bool = False) -> Tuple[int, Any]: 
         """
         Args:
             allocator: 

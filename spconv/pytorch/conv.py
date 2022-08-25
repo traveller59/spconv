@@ -136,6 +136,12 @@ class SparseConvolution(SparseModule):
             self._register_load_state_dict_pre_hook(
                 self._load_weight_different_layout)
 
+    def get_max_num_voxels(self) -> Optional[torch.Tensor]:
+        if hasattr(self, _MAX_NUM_VOXELS_DURING_TRAINING):
+            return getattr(self, _MAX_NUM_VOXELS_DURING_TRAINING)
+        return None 
+
+
     def _load_weight_different_layout(self, state_dict, prefix, local_metadata,
                                       strict, missing_keys, unexpected_keys,
                                       error_msgs):
