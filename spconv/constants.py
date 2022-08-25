@@ -95,13 +95,19 @@ class AllocKeys:
     HashV = "HashV"
 
     ThrustTemp = "ThrustTemp"
+    TightUniqueCount = "TightUniqueCount"
 
 
 SPCONV_DEBUG_WEIGHT = False
 
 SPCONV_CPP_INDICE_PAIRS = False 
-SPCONV_CPP_INDICE_PAIRS_IGEMM = False 
 
-SPCONV_CPP_GEMM = False
+# currently use cpp pair gen is slightly slower than python, I don't know why.
+SPCONV_CPP_INDICE_PAIRS_IGEMM = os.getenv("SPCONV_CPP_INDICE_PAIRS_IGEMM", "0") == "1" 
+
+SPCONV_CPP_GEMM = True
 
 SPCONV_FX_TRACE_MODE = os.getenv("SPCONV_FX_TRACE_MODE", "0") == "1"
+
+
+SPCONV_DIRECT_TABLE_HASH_SIZE_SCALE = 1.1

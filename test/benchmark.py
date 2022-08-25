@@ -323,6 +323,8 @@ def main():
     #     pickle.dump((voxels, coors, spatial_shape), f)
     with open(Path(__file__).parent / "data" / "test_spconv.pkl", "rb") as f:
         (voxels, coors, spatial_shape) = pickle.load(f)
+    # voxels, coors, spatial_shape = waymo_data_large()
+
     print(spatial_shape)
     print(voxels.shape)
     # voxels = voxels[:100]
@@ -366,16 +368,15 @@ def main():
     dout = np.random.uniform(-0.2, 0.2, out.features.shape).astype(np.float32)
     dout_t = torch.from_numpy(dout).to(device).to(dtype)
 
-    print(out.spatial_shape, out.features.mean(), out.features.max(),
+    print(out.spatial_shape, out.features.sum(1).mean(), out.features.max(),
           out.features.min())
     times = []
     show_metrics = False
     with torch.no_grad():
-        for i in range(20):
-            print("------------")
-            torch.cuda.synchronize()
-            t = time.time()
-            out_nograd = net(voxels_th, coors_th, 1, show_metrics)
+        for i in range(100):
+            # print("------------")
+            with tv.measure_duration() as measure:
+                out_nograd = net(voxels_th, coors_th, 1, show_metrics)
             # res = timer.collect_by_name("forward", timer.get_all_pair_time())
             # res2 = timer.collect_by_name("forward0", timer.get_all_pair_time())
 
@@ -383,14 +384,19 @@ def main():
             # print(timer.get_all_pair_time())
 
             # print(sum(timer.get_all_pair_time().values()))
-            torch.cuda.synchronize()
             # sort_bench()
-            times.append(time.time() - t)
+            times.append(measure.duration)
             if show_metrics:
                 timer = out_nograd._timer
                 items = list(timer.get_all_pair_time().items())
                 items.sort(key=lambda x: x[0])
+                print("SUM TIME:",  sum([x[1] for x in items]))
                 print(json.dumps(dict(items), indent=2))
+                inds_sum = 0
+                for k, v in items:
+                    if "gen_pairs" in k:
+                        inds_sum += v 
+                print("SUM GEN INDS:",  inds_sum)
 
     # state = net.state_dict()
     # state.pop("net.2.max_num_voxels_during_training")

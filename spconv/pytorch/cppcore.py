@@ -33,13 +33,21 @@ _TORCH_DTYPE_TO_TV = {
     torch.int16: tv.int16,
     torch.uint8: tv.uint8,
 }
-_TV_DTYPE_TO_TORCH = {v: k for k, v in _TORCH_DTYPE_TO_TV.items()}
 
 _TORCH_UINT_WORKAROUNDS = {
     tv.uint32: tv.int32,
     tv.uint16: tv.int16,
     tv.uint64: tv.int64
 }
+
+_TV_DTYPE_TO_TORCH = {v: k for k, v in _TORCH_DTYPE_TO_TV.items()}
+_TV_DTYPE_TO_TORCH.update({
+    tv.uint32: torch.int32,
+    tv.uint16: torch.int16,
+    tv.uint64: torch.int64
+
+})
+
 _ALL_INTS = {
     tv.int32, tv.int16, tv.int8, tv.int64, tv.uint64, tv.uint8, tv.uint32,
     tv.uint16
@@ -106,91 +114,66 @@ class TorchAllocator(ExternalAllocator):
               device: int, stream: int = 0, is_temp_memory: bool = False) -> tv.Tensor:
         # TODO free memory by name if its already free by pointer.
         # provide a name if you want to access it after c++ function exit.
-        torch_uint_workaround = dtype in _TORCH_UINT_WORKAROUNDS
         dtype_bkp = dtype
-        if dtype in _TORCH_UINT_WORKAROUNDS:
-            # assert name == "", "must be temp memory for uint dtypes"
-            dtype = _TORCH_UINT_WORKAROUNDS[dtype]
         th_dtype = _TV_DTYPE_TO_TORCH[dtype]
         if device == -1:
             dev = self.cpudevice
         else:
             dev = self.gpudevice
         ten = torch.zeros(shape, dtype=th_dtype, device=dev)
-        ten_tv = torch_tensor_to_tv(ten)
-        self.allocated[ten.data_ptr()] = ten
+        ten_tv = torch_tensor_to_tv(ten, dtype_bkp)
+        self.allocated[ten_tv.byte_pointer()] = ten
         if name and not is_temp_memory:
             self.allocated[name] = ten
-        if torch_uint_workaround:
-            return ten_tv.type_view(dtype_bkp)
         return ten_tv
 
     def empty(self, name: str, shape: List[int], dtype: int,
               device: int, stream: int = 0, is_temp_memory: bool = False) -> tv.Tensor:
-        torch_uint_workaround = dtype in _TORCH_UINT_WORKAROUNDS
         dtype_bkp = dtype
-        if dtype in _TORCH_UINT_WORKAROUNDS:
-            # assert name == "", "must be temp memory for uint dtypes"
-            dtype = _TORCH_UINT_WORKAROUNDS[dtype]
         th_dtype = _TV_DTYPE_TO_TORCH[dtype]
         if device == -1:
             dev = self.cpudevice
         else:
             dev = self.gpudevice
         ten = torch.empty(shape, dtype=th_dtype, device=dev)
-        ten_tv = torch_tensor_to_tv(ten)
-        self.allocated[ten.data_ptr()] = ten
+        ten_tv = torch_tensor_to_tv(ten, dtype_bkp)
+        self.allocated[ten_tv.byte_pointer()] = ten
         if name and not is_temp_memory:
             self.allocated[name] = ten
-        if torch_uint_workaround:
-            return ten_tv.type_view(dtype_bkp)
         return ten_tv
 
     def full_int(self, name: str, shape: List[int], value: int, dtype: int,
                  device: int, stream: int = 0, is_temp_memory: bool = False) -> tv.Tensor:
         if dtype in _TORCH_UINT_WORKAROUNDS and value < 0:
             raise NotImplementedError("you can't use full for unsigned dtypes")
-        torch_uint_workaround = dtype in _TORCH_UINT_WORKAROUNDS
         dtype_bkp = dtype
-        if dtype in _TORCH_UINT_WORKAROUNDS:
-            assert name == "", "must be temp memory for uint dtypes"
-            dtype = _TORCH_UINT_WORKAROUNDS[dtype]
-
         th_dtype = _TV_DTYPE_TO_TORCH[dtype]
         if device == -1:
             dev = self.cpudevice
         else:
             dev = self.gpudevice
         ten = torch.full(shape, value, dtype=th_dtype, device=dev)
-        ten_tv = torch_tensor_to_tv(ten)
-        self.allocated[ten.data_ptr()] = ten
+        ten_tv = torch_tensor_to_tv(ten, dtype_bkp)
+        self.allocated[ten_tv.byte_pointer()] = ten
         if name and not is_temp_memory:
             self.allocated[name] = ten
-        if torch_uint_workaround:
-            return ten_tv.type_view(dtype_bkp)
         return ten_tv
 
     def full_float(self, name: str, shape: List[int], value: float, dtype: int,
                    device: int, stream: int = 0, is_temp_memory: bool = False) -> tv.Tensor:
         if dtype in _TORCH_UINT_WORKAROUNDS and value < 0:
             raise NotImplementedError("you can't use full for unsigned dtypes")
-        torch_uint_workaround = dtype in _TORCH_UINT_WORKAROUNDS
         dtype_bkp = dtype
-        if dtype in _TORCH_UINT_WORKAROUNDS:
-            assert name == "", "must be temp memory for uint dtypes"
-            dtype = _TORCH_UINT_WORKAROUNDS[dtype]
         th_dtype = _TV_DTYPE_TO_TORCH[dtype]
         if device == -1:
             dev = self.cpudevice
         else:
             dev = self.gpudevice
         ten = torch.full(shape, value, dtype=th_dtype, device=dev)
-        ten_tv = torch_tensor_to_tv(ten)
-        self.allocated[ten.data_ptr()] = ten
+        ten_tv = torch_tensor_to_tv(ten, dtype_bkp)
+        self.allocated[ten_tv.byte_pointer()] = ten
         if name and not is_temp_memory:
             self.allocated[name] = ten
-        if torch_uint_workaround:
-            return ten_tv.type_view(dtype_bkp)
         return ten_tv
 
     def get_tensor_by_name(self, name: str):

@@ -73,7 +73,9 @@ class CudaCommonKernel(pccm.ParameterizedClass):
         """)
         return code
 
+
 class ConvOutLocIter(pccm.ParameterizedClass):
+
     def __init__(self, problem: ConvProblem):
         super().__init__()
         self.add_dependency(TensorView)
@@ -264,6 +266,7 @@ class ConvOutLocIter(pccm.ParameterizedClass):
 
 
 class SparseConvIndicesKernel(pccm.ParameterizedClass):
+
     def __init__(self, problem: ConvProblem, dtype_indices: dtypes.DType):
         super().__init__()
         self.add_dependency(TensorView, TensorViewKernel, TensorViewHashKernel)
@@ -277,7 +280,6 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         self.dtype_indices_uniq = dtype_indices
 
         assert dtype_indices == dtypes.int32 or dtype_indices == dtypes.int64
-
 
     @pccm.cuda.cuda_global_function
     def calc_conv_indices_stage1(self):
@@ -331,8 +333,9 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
 
         code.arg("table", f"TTable")  # [N, ndim + 1]
         code.arg("indices_out", f"int*")  # [N, ndim + 1]
-        code.arg("indice_pairs_for_uniq",
-                 f"const typename TTable::key_type*")  # [2, kernelProd, MaxSize]
+        code.arg(
+            "indice_pairs_for_uniq",
+            f"const typename TTable::key_type*")  # [2, kernelProd, MaxSize]
 
         code.arg("layout_npq",
                  f"spinds::LayoutNPQ")  # [2, kernelProd, MaxSize]
@@ -349,12 +352,86 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         return code
 
     @pccm.cuda.cuda_global_function
+    def arange_hash_table_and_assign_out(self):
+        code = pccm.FunctionCode()
+        code.targ("TTable")
+        code.arg("table", f"TTable")  # [N, ndim + 1]
+        code.arg("indices_out", f"int*")  # [N, ndim + 1]
+        code.arg("count", f"int*")  # [N, ndim + 1]
+        code.arg("limit", f"int")  # [N, ndim + 1]
+
+        code.arg("layout_npq",
+                 f"spinds::LayoutNPQ")  # [2, kernelProd, MaxSize]
+        code.raw(f"""
+        
+        auto key_ptr = table.key_ptr();
+        auto value_ptr = table.value_ptr();
+
+        for (auto i : tv::KernelLoopX<int>(table.size())) {{
+            auto output_coord_offset = key_ptr[i];
+            if (output_coord_offset != TTable::empty_key) {{
+                auto output_index = tv::cuda::atomicAggInc(count);
+                if (output_index < limit){{
+                    value_ptr[i] = output_index;
+                    layout_npq.inverse(output_coord_offset, indices_out + {self.ndim + 1} * output_index);
+                }}else{{
+                    value_ptr[i] = -1;
+                }}
+            }}
+        }}
+        """)
+        return code
+
+    @pccm.cuda.cuda_global_function
+    def arange_hash_table(self):
+        code = pccm.FunctionCode()
+        code.targ("TTable")
+        code.arg("table", f"TTable")  # [N, ndim + 1]
+        code.arg("out_indices_offset", f"typename TTable::key_type *")  # [N, ndim + 1]
+
+        code.arg("count", f"int*")  # [N, ndim + 1]
+        code.arg("limit", f"int")  # [N, ndim + 1]
+        code.raw(f"""
+        
+        auto key_ptr = table.key_ptr();
+        auto value_ptr = table.value_ptr();
+
+        for (auto i : tv::KernelLoopX<int>(table.size())) {{
+            auto output_coord_offset = key_ptr[i];
+            if (output_coord_offset != TTable::empty_key) {{
+                auto output_index = tv::cuda::atomicAggInc(count);
+                value_ptr[i] = output_index < limit ? output_index : -1;
+                out_indices_offset[output_index] = output_coord_offset;
+            }}
+        }}
+        """)
+        return code
+
+    @pccm.cuda.cuda_global_function
+    def assign_out_indices(self):
+        code = pccm.FunctionCode()
+        code.targ("T")
+        code.arg("indices_out", f"int*")  # [N, ndim + 1]
+        code.arg("out_indices_offset", f"const T*")  # [N, ndim + 1]
+        code.arg("layout_npq",
+                 f"spinds::LayoutNPQ")  # [2, kernelProd, MaxSize]
+        code.arg("size", f"int")  # [N, ndim + 1]
+
+        code.raw(f"""
+        for (auto i : tv::KernelLoopX<int>(size)) {{
+            layout_npq.inverse(out_indices_offset[i], indices_out + {self.ndim + 1} * i);
+        }}
+        """)
+        return code
+
+
+    @pccm.cuda.cuda_global_function
     def calc_conv_indices_stage2(self):
         code = pccm.FunctionCode()
         code.targ("TTable")
-
         code.arg("table", f"TTable")  # [N, ndim + 1]
-        code.arg("indice_pairs_uniq_before_sort", f"const typename TTable::key_type*")  # [kernelProd, MaxSize]
+        code.arg("indice_pairs_uniq_before_sort",
+                 f"const typename TTable::key_type*")  # [kernelProd, MaxSize]
         code.arg("indice_pairs_out_part", f"int*")  # [kernelProd, MaxSize]
         code.arg("num_indices_in", "int")
         code.arg("indices_pair_size", "int")
@@ -362,7 +439,6 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         int filter_offset = blockIdx.y;
         auto indice_pairs_out_part_filter = indice_pairs_out_part + filter_offset * indices_pair_size;
         auto indice_pairs_uniq_before_sort_filter = indice_pairs_uniq_before_sort + filter_offset * indices_pair_size;
-
         for (int i : tv::KernelLoopX<int>(num_indices_in)) {{
             {self.dtype_indices} output_coord_offset = indice_pairs_uniq_before_sort_filter[i];
             if (output_coord_offset != std::numeric_limits<typename TTable::key_type>::max()){{
@@ -386,8 +462,10 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         code.targ("TTable")
 
         code.arg("table", f"TTable")  # [N, ndim + 1]
-        code.arg("indice_pairs_uniq_before_sort", f"const typename TTable::key_type*")  # [kernelProd, MaxSize]
-        code.arg("indice_pairs_in_part_temp", f"const int*")  # [kernelProd, MaxSize]
+        code.arg("indice_pairs_uniq_before_sort",
+                 f"const typename TTable::key_type*")  # [kernelProd, MaxSize]
+        code.arg("indice_pairs_in_part_temp",
+                 f"const int*")  # [kernelProd, MaxSize]
         code.arg("indice_pairs_in_part", f"int*")  # [kernelProd, MaxSize]
         code.arg("indice_pairs_out_part", f"int*")  # [kernelProd, MaxSize]
         code.arg("indice_num_per_loc", f"int*")  # [kernelProd]
@@ -448,7 +526,7 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                 valid = loc_iter.query_npq(indices_in + input_index * {self.ndim + 1}, npq_offset);
             }}
             if (valid){{
-                int old_num = tv::cuda::atomicAggInc(indice_num_per_loc + filter_offset);
+                // int old_num = tv::cuda::atomicAggInc(indice_num_per_loc + filter_offset);
                 TIndiceUniq output_coord_offset = loc_iter.layout_npq(npq_offset);
                 // if (old_num < indices_pair_size){{
                 // indice_pairs[filter_offset_mul_indices_pair_size + old_num] = i;
@@ -463,15 +541,68 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         return code
 
     @pccm.cuda.cuda_global_function
+    def calc_conv_indices_stage1_mask_direct_table(self):
+        code = pccm.FunctionCode()
+        code.targ("TIndiceUniq")
+        code.targ("TTable")
+        code.arg("table", f"TTable")  # [N, ndim + 1]
+
+        code.arg("loc_iter", f"ConvLocIter")  # [N, ndim + 1]
+
+        code.arg("indices_in", f"const int*")  # [N, ndim + 1]
+        code.arg("indice_pairs_bwd",
+                 f"{self.dtype_indices}*")  # [kernelProd, MaxSize]
+        code.arg("indice_pairs_for_uniq",
+                 f"TIndiceUniq*")  # [kernelProd * MaxSize + 1]
+        code.arg("indice_num_per_loc", f"int*")  # [kernelProd]
+
+        code.arg("num_indices_in", "int")
+
+        code.arg("RS", "int")
+        code.arg("transposed", "bool")
+
+        code.raw(f"""
+        int filter_offset = blockIdx.y;
+        loc_iter.set_filter_offset(filter_offset);
+        // int indices_pair_size_mul_RS = num_indices_in * RS;
+        int filter_offset_mul_indices_pair_size = filter_offset * num_indices_in;
+        for (int input_index : tv::KernelLoopX<int>(num_indices_in)) {{
+            tv::array<int, {self.ndim + 1}> npq_offset;
+            bool valid;
+            if (transposed){{
+                valid = loc_iter.query_nhw_out(indices_in + input_index * {self.ndim + 1}, npq_offset);
+            }}else{{
+                valid = loc_iter.query_npq(indices_in + input_index * {self.ndim + 1}, npq_offset);
+            }}
+            if (valid){{
+                // int old_num = tv::cuda::atomicAggInc(indice_num_per_loc + filter_offset);
+                TIndiceUniq output_coord_offset = loc_iter.layout_npq(npq_offset);
+                // if (old_num < indices_pair_size){{
+                // indice_pairs[filter_offset_mul_indices_pair_size + old_num] = i;
+                // indice_pairs_bwd[filter_offset_mul_indices_pair_size + input_index] = output_coord_offset;
+                // indice_pairs_for_uniq[filter_offset_mul_indices_pair_size + old_num] = output_coord_offset;
+                
+                table.insert_key_only(output_coord_offset);
+                indice_pairs_for_uniq[filter_offset_mul_indices_pair_size + input_index] = output_coord_offset;
+                // }}
+            }}
+        }}
+        """)
+        return code
+
+    @pccm.cuda.cuda_global_function
     def calc_conv_indices_stage2_mask(self):
         code = pccm.FunctionCode()
         code.targ("TTable")
+        code.nontype_targ("CheckValueValid", "bool")
+
         code.arg("table", f"TTable")  # [N, ndim + 1]
         code.arg("indice_pairs_fwd",
                  f"int*")  # [kernelProd, MaxSize], inp -> out
         code.arg("indice_pairs_bwd",
                  f"int*")  # [kernelProd, MaxSize], out -> inp
-        code.arg("indice_pairs_uniq_before_sort", f"const typename TTable::key_type*")  # [kernelProd, MaxSize]
+        code.arg("indice_pairs_uniq_before_sort",
+                 f"const typename TTable::key_type*")  # [kernelProd, MaxSize]
         code.arg("mask_fwd", f"uint32_t*")  # [kernelProd]
         code.arg("mask_bwd", f"uint32_t*")  # [kernelProd]
 
@@ -495,11 +626,14 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                 auto table_offset = table.lookup_offset(output_coord_offset);
                 if (table_offset != -1){{
                     auto output_index = table.value_ptr()[table_offset];
-                    atomicOr(mask_fwd + output_index, filter_mask_fwd);
-                    // atomicOr(mask_bwd + input_index, filter_mask_bwd);
-                    indice_pairs_fwd_filter[output_index] = input_index;
-                    if (indice_pairs_bwd != nullptr){{
-                        indice_pairs_bwd_filter[input_index] = output_index;
+                    bool valid = CheckValueValid ? output_index >= 0 : true;
+                    if (valid){{
+                        atomicOr(mask_fwd + output_index, filter_mask_fwd);
+                        // atomicOr(mask_bwd + input_index, filter_mask_bwd);
+                        indice_pairs_fwd_filter[output_index] = input_index;
+                        if (indice_pairs_bwd != nullptr){{
+                            indice_pairs_bwd_filter[input_index] = output_index;
+                        }}
                     }}
                 }}
             }}
@@ -533,13 +667,15 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
     def calc_conv_indices_stage2_inference_mask(self):
         code = pccm.FunctionCode()
         code.targ("TTable")
+        code.nontype_targ("CheckValueValid", "bool")
 
         code.arg("table", f"TTable")  # [N, ndim + 1]
         code.arg("indice_pairs_fwd",
                  f"int*")  # [kernelProd, MaxSize], inp -> out
         code.arg("indice_pairs_bwd",
                  f"int*")  # [kernelProd, MaxSize], out -> inp
-        code.arg("indice_pairs_uniq_before_sort", f"const typename TTable::key_type*")  # [kernelProd, MaxSize]
+        code.arg("indice_pairs_uniq_before_sort",
+                 f"const typename TTable::key_type*")  # [kernelProd, MaxSize]
 
         code.arg("mask_fwd", f"uint32_t*")  # [kernelProd]
         code.arg("num_indices_in", "int")
@@ -559,8 +695,11 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                 auto table_offset = table.lookup_offset(output_coord_offset);
                 if (table_offset != -1){{
                     auto output_index = table.value_ptr()[table_offset];
-                    atomicOr(mask_fwd + output_index, filter_mask_fwd);
-                    indice_pairs_fwd_filter[output_index] = input_index;
+                    bool valid = CheckValueValid ? output_index >= 0 : true;
+                    if (valid){{
+                        atomicOr(mask_fwd + output_index, filter_mask_fwd);
+                        indice_pairs_fwd_filter[output_index] = input_index;
+                    }}
                 }}
             }}
         }}
@@ -854,7 +993,9 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
     def generate_conv_inds_stage2(self):
         code = pccm.FunctionCode()
         code.arg("indices, hashdata_k, hashdata_v", "tv::Tensor")
-        code.arg("indice_pairs, indice_pairs_uniq, indice_pairs_uniq_before_sort, out_inds", "tv::Tensor")
+        code.arg(
+            "indice_pairs, indice_pairs_uniq, indice_pairs_uniq_before_sort, out_inds",
+            "tv::Tensor")
         code.arg("indice_num_per_loc", "tv::Tensor")
 
         code.arg("num_out_act", "int")
@@ -938,8 +1079,8 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
     def generate_conv_inds_mask_stage1(self):
         code = pccm.FunctionCode()
         code.arg("indices", "tv::Tensor")
-        code.arg("indice_pairs_bwd, indice_pairs_uniq, indice_num_per_loc",
-                 "tv::Tensor")
+        code.arg("indice_pairs_bwd, indice_pairs_uniq", "tv::Tensor")
+        code.arg("indice_num_per_loc", "tv::Tensor")
         code.arg("batch_size", "int")
         code.arg("output_dims, input_dims", f"tv::array<int, {self.ndim}>")
         code.arg("ksize, stride, padding, dilation",
@@ -982,8 +1123,67 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         """)
         return code  # .ret("int")
 
+
     @pccm.cuda.static_function
-    def generate_conv_inds_stage2_mask(self):
+    def generate_conv_inds_mask_stage1_direct_table(self):
+        code = pccm.FunctionCode()
+        code.arg("indices, hashdata_k, hashdata_v", "tv::Tensor")
+        code.arg("indice_pairs_bwd, indice_pairs_uniq",
+                 "tv::Tensor")
+        code.arg("indice_num_per_loc", "tv::Tensor")
+        code.arg("batch_size", "int")
+        code.arg("output_dims, input_dims", f"tv::array<int, {self.ndim}>")
+        code.arg("ksize, stride, padding, dilation",
+                 f"tv::array<int, {self.ndim}>")
+        code.arg("transposed", f"bool", "false")
+
+        code.arg("stream_int", f"std::uintptr_t", "0")
+
+        code.raw(f"""
+        // TODO stream
+        // TODO handle num input == 0
+        int kv = ksize.op<tv::arrayops::prod>();
+        int num_act_in = indices.dim(0);
+        // indice_pairs_bwd: [kv, num_act_in] or empty
+        // indice_pairs_uniq: [kv * num_act_in + 1]
+        if (!indice_pairs_bwd.empty()){{
+            tv::check_shape(indice_pairs_bwd, {{kv, num_act_in}});
+        }}
+        tv::check_shape(indice_num_per_loc, {{kv}});
+        int64_t uniq_size = kv * num_act_in + 1;
+
+        TV_ASSERT_RT_ERR(indice_pairs_uniq.dim(0) == uniq_size, "error");
+
+        tv::cuda::Launch launcher_num_act_in(indices.dim(0), reinterpret_cast<cudaStream_t>(stream_int));
+        // tv::cuda::Launch launcher_num_act_in_2(indices.dim(0));
+        launcher_num_act_in.blocks.y = kv;
+        ConvProblem problem(batch_size, 1, 1, input_dims, output_dims, ksize, padding, stride, dilation);
+        ConvLocIter loc_iter(problem);
+        tv::cuda::Launch launcher_clean_uniq(uniq_size, reinterpret_cast<cudaStream_t>(stream_int));
+        tv::dispatch<int32_t, int64_t>(indice_pairs_uniq.dtype(), [&](auto I){{
+            using V = {self.dtype_indices};
+            using K = TV_DECLTYPE(I);
+            using table_t =
+                tv::hash::LinearHashTableSplit<K, V, tv::hash::Murmur3Hash<K>,
+                                            tv::hash::default_empty_key_v<K>, false>;
+            table_t table = table_t(hashdata_k.data_ptr<K>(), hashdata_v.data_ptr<V>(), hashdata_k.dim(0));
+            tv::hash::clear_map_split(table, reinterpret_cast<cudaStream_t>(stream_int));
+            using T = TV_DECLTYPE(I);
+            TV_ASSERT_RT_ERR(input_dims.op<tv::arrayops::prod>() < std::numeric_limits<T>::max(), 
+                "kernel volume must smaller than max value of T");
+            launcher_clean_uniq(clean_indices_uniq<T>, indice_pairs_uniq.data_ptr<T>(), uniq_size);
+            launcher_num_act_in(calc_conv_indices_stage1_mask_direct_table<T, table_t>, table, 
+                loc_iter, indices.data_ptr<const int>(), 
+                indice_pairs_bwd.data_ptr<{self.dtype_indices}>(), 
+                indice_pairs_uniq.data_ptr<T>(), indice_num_per_loc.data_ptr<int>(), 
+                indices.dim(0),
+                kv, transposed);
+        }});
+        """)
+        return code
+
+
+    def generate_conv_inds_stage2_mask_template(self, is_direct_table: bool):
         """here indice_pairs_uniq may be bounded, some
         points may be dropped.
         """
@@ -1013,8 +1213,12 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         ctx.set_cuda_stream(custream);
         int num_act_in = indices.dim(0);
         int num_act_out = num_out_act;
-
-        TV_ASSERT_RT_ERR(hashdata_k.dtype() == indice_pairs_uniq.dtype(), "error");
+        """)
+        if not is_direct_table:
+            code.raw(f"""
+            TV_ASSERT_RT_ERR(hashdata_k.dtype() == indice_pairs_uniq.dtype(), "error");
+            """)
+        code.raw(f"""
         TV_ASSERT_RT_ERR(hashdata_v.dtype() == tv::int32, "error");
         // out_inds: [num_out_act, {self.ndim + 1}]
         // auto timer = tv::CudaContextTimer<>();
@@ -1030,11 +1234,17 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
 
         ConvProblem problem(batch_size, 1, 1, input_dims, output_dims, ksize, padding, stride, dilation);
         ConvLocIter loc_iter(problem);
-        
-        // TODO handle invalid num_out_act
-        indice_pairs_uniq = indice_pairs_uniq.slice_first_axis(0, num_out_act);
         tv::cuda::Launch lanucher_build_hash(num_out_act, custream);
-        tv::dispatch<int32_t, int64_t>(hashdata_k.dtype(), [&](auto I){{
+
+        // TODO handle invalid num_out_act
+        """)
+        if not is_direct_table:
+            code.raw(f"""
+            indice_pairs_uniq = indice_pairs_uniq.slice_first_axis(0, num_out_act);
+            """)
+        with code.block("", start="tv::dispatch<int32_t, int64_t>(hashdata_k.dtype(), [&](auto I){",
+            end="});"):
+            code.raw(f"""
             using V = {self.dtype_indices};
             using K = TV_DECLTYPE(I);
             using table_t =
@@ -1042,13 +1252,18 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                                             tv::hash::default_empty_key_v<K>, false>;
             TV_ASSERT_RT_ERR(hashdata_k.dim(0) >= num_out_act, "hash size not enough");
             table_t hash = table_t(hashdata_k.data_ptr<K>(), hashdata_v.data_ptr<V>(), hashdata_k.dim(0));
-            tv::hash::clear_map_split(hash, custream);
-
-            lanucher_build_hash(build_conv_hash_table<table_t>, hash, 
-                out_inds.data_ptr<int>(), indice_pairs_uniq.data_ptr<const K>(), 
-                loc_iter.layout_npq, num_out_act);
+            """)
+            if not is_direct_table:
+                # direct table built in stage 1.
+                code.raw(f"""
+                tv::hash::clear_map_split(hash, custream);
+                lanucher_build_hash(build_conv_hash_table<table_t>, hash, 
+                    out_inds.data_ptr<int>(), indice_pairs_uniq.data_ptr<const K>(), 
+                    loc_iter.layout_npq, num_out_act);
+                """)
+            code.raw(f"""
             if (!mask_bwd.empty()){{
-                launcher_num_act_in(calc_conv_indices_stage2_mask<table_t>, hash, 
+                launcher_num_act_in(calc_conv_indices_stage2_mask<table_t, {pccm.literal(is_direct_table)}>, hash, 
                     indice_pairs_fwd.data_ptr<int>(), indice_pairs_bwd.data_ptr<int>(), 
                     indice_pairs_uniq_before_sort.data_ptr<K>(),
                     mask_fwd.data_ptr<uint32_t>(), mask_bwd.data_ptr<uint32_t>(),
@@ -1064,7 +1279,7 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                     mask_bwd[1].copy_(mask_bwd[0], ctx);
                 }}
             }}else{{
-                launcher_num_act_in(calc_conv_indices_stage2_inference_mask<table_t>, hash, 
+                launcher_num_act_in(calc_conv_indices_stage2_inference_mask<table_t, {pccm.literal(is_direct_table)}>, hash, 
                     indice_pairs_fwd.data_ptr<int>(), indice_pairs_bwd.data_ptr<int>(), 
                     indice_pairs_uniq_before_sort.data_ptr<K>(),
                     mask_fwd.data_ptr<uint32_t>(),
@@ -1073,10 +1288,129 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                     mask_fwd[1].copy_(mask_fwd[0], ctx);
                 }}
             }}
-        }});
+            """)
+        code.raw(f"""
         return num_out_act;
         """)
         return code.ret("int")
+        
+    @pccm.cuda.static_function
+    def generate_conv_inds_stage2_mask(self):
+        """here indice_pairs_uniq may be bounded, some
+        points may be dropped.
+        """
+        return self.generate_conv_inds_stage2_mask_template(False)
+    
+    @pccm.cuda.static_function
+    def generate_conv_inds_stage2_mask_direct_table(self):
+        """here indice_pairs_uniq may be bounded, some
+        points may be dropped.
+        """
+        return self.generate_conv_inds_stage2_mask_template(True)
+
+    @pccm.cuda.static_function
+    def unique_and_assign_output_direct_hash(self):
+        """unique by hash
+        """
+        code = pccm.FunctionCode()
+        code.arg("hashdata_k, hashdata_v, uniq_cnt", "tv::Tensor")
+        code.arg(
+            "out_inds",
+            "tv::Tensor")
+        code.arg("num_out_bound", "int")
+        code.arg("batch_size", "int")
+        code.arg("output_dims, input_dims", f"tv::array<int, {self.ndim}>")
+        code.arg("ksize, stride, padding, dilation",
+                 f"tv::array<int, {self.ndim}>")
+
+        code.arg("stream_int", f"std::uintptr_t", "0")
+        code.raw(f"""
+        auto custream = reinterpret_cast<cudaStream_t>(stream_int);
+        tv::cuda::Launch lanucher_build_hash(hashdata_k.size(), custream);
+        ConvProblem problem(batch_size, 1, 1, input_dims, output_dims, ksize, padding, stride, dilation);
+        ConvLocIter loc_iter(problem);
+        auto tvctx = tv::Context();
+        tvctx.set_cuda_stream(reinterpret_cast<cudaStream_t>(stream_int));
+        if (num_out_bound <= 0){{
+            num_out_bound = hashdata_k.size();
+        }}
+        tv::dispatch<int32_t, int64_t>(hashdata_k.dtype(), [&](auto I){{
+            using V = {self.dtype_indices};
+            using K = TV_DECLTYPE(I);
+            using table_t =
+                tv::hash::LinearHashTableSplit<K, V, tv::hash::Murmur3Hash<K>,
+                                            tv::hash::default_empty_key_v<K>, false>;
+            table_t table = table_t(hashdata_k.data_ptr<K>(), hashdata_v.data_ptr<V>(), hashdata_k.dim(0));
+            lanucher_build_hash(arange_hash_table_and_assign_out<table_t>, table, 
+                out_inds.data_ptr<int>(), uniq_cnt.data_ptr<int>(), num_out_bound,
+                loc_iter.layout_npq);
+        }});
+        auto uniq_cnt_cpu = uniq_cnt.cpu(tvctx);
+        return std::min(uniq_cnt_cpu.data_ptr<int>()[0], num_out_bound);
+        """)
+        return code.ret("int")
+
+    @pccm.cuda.static_function
+    def unique_hash(self):
+        """unique by hash
+        """
+        code = pccm.FunctionCode()
+        code.arg("hashdata_k, hashdata_v, uniq_cnt, out_indices_offset", "tv::Tensor")
+        code.arg("num_out_bound", "int")
+        code.arg("stream_int", f"std::uintptr_t", "0")
+        code.raw(f"""
+        auto custream = reinterpret_cast<cudaStream_t>(stream_int);
+        tv::cuda::Launch lanucher_build_hash(hashdata_k.size(), custream);
+        auto tvctx = tv::Context();
+        tvctx.set_cuda_stream(reinterpret_cast<cudaStream_t>(stream_int));
+        if (num_out_bound <= 0){{
+            num_out_bound = out_indices_offset.dim(0);
+        }}
+        tv::dispatch<int32_t, int64_t>(hashdata_k.dtype(), [&](auto I){{
+            using V = {self.dtype_indices};
+            using K = TV_DECLTYPE(I);
+            using table_t =
+                tv::hash::LinearHashTableSplit<K, V, tv::hash::Murmur3Hash<K>,
+                                            tv::hash::default_empty_key_v<K>, false>;
+            table_t table = table_t(hashdata_k.data_ptr<K>(), hashdata_v.data_ptr<V>(), hashdata_k.dim(0));
+            lanucher_build_hash(arange_hash_table<table_t>, table, 
+                out_indices_offset.data_ptr<K>(),
+                uniq_cnt.data_ptr<int>(), num_out_bound);
+        }});
+        auto uniq_cnt_cpu = uniq_cnt.cpu(tvctx);
+        return std::min(uniq_cnt_cpu.data_ptr<int>()[0], num_out_bound);
+        """)
+        return code.ret("int")
+
+    @pccm.cuda.static_function
+    def assign_output_direct_hash(self):
+        """unique by hash
+        """
+        code = pccm.FunctionCode()
+        code.arg("out_indices_offset", "tv::Tensor")
+        code.arg("out_inds", "tv::Tensor")
+        code.arg("batch_size", "int")
+        code.arg("output_dims, input_dims", f"tv::array<int, {self.ndim}>")
+        code.arg("ksize, stride, padding, dilation",
+                 f"tv::array<int, {self.ndim}>")
+
+        code.arg("stream_int", f"std::uintptr_t", "0")
+        code.raw(f"""
+        auto custream = reinterpret_cast<cudaStream_t>(stream_int);
+        tv::cuda::Launch lanucher_build_hash(out_inds.dim(0), custream);
+        TV_ASSERT_RT_ERR(out_indices_offset.dim(0) >= out_inds.dim(0), "error");
+        ConvProblem problem(batch_size, 1, 1, input_dims, output_dims, ksize, padding, stride, dilation);
+        ConvLocIter loc_iter(problem);
+        auto tvctx = tv::Context();
+        tvctx.set_cuda_stream(reinterpret_cast<cudaStream_t>(stream_int));
+        tv::dispatch<int32_t, int64_t>(out_indices_offset.dtype(), [&](auto I){{
+            using K = TV_DECLTYPE(I);
+            lanucher_build_hash(assign_out_indices<K>, out_inds.data_ptr<int>(),
+                out_indices_offset.data_ptr<const K>(),
+                loc_iter.layout_npq, out_inds.dim(0));
+        }});
+        """)
+        return code
 
     @pccm.cuda.static_function
     def generate_subm_conv_inds(self):
@@ -1175,6 +1509,7 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
 
 
 class SparseConvIndicesCPU(pccm.ParameterizedClass):
+
     def __init__(self, problem: ConvProblem, dtype_indices: dtypes.DType):
         super().__init__()
         self.add_dependency(TensorView)

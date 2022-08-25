@@ -231,8 +231,8 @@ def _test_impgemm_conv_cuda(subm: bool):
     # out_channels = [32, 48, 64]
     in_channels = [32, 47]
     out_channels = [32, 48, 62]
-    in_channels = [32]
-    out_channels = [32]
+    # in_channels = [32]
+    # out_channels = [32]
 
     multiple_base = 16
     if subm:

@@ -1,6 +1,7 @@
 from typing import overload, Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 from pccm.stubs import EnumValue, EnumClassValue
 from cumm.tensorview import Tensor
+from cumm.tensorview import CUDAKernelTimer
 class ThrustCustomAllocatorV2:
     alloc_func: Callable[int, int]
 class SpconvOps:
@@ -92,7 +93,82 @@ class SpconvOps:
         """
         ...
     @staticmethod
+    def generate_conv_inds_mask_stage1_direct_table(indices: Tensor, hashdata_k: Tensor, hashdata_v: Tensor, indice_pairs_bwd: Tensor, indice_pairs_uniq: Tensor, indice_num_per_loc: Tensor, batch_size: int, output_dims: List[int], input_dims: List[int], ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], transposed: bool = False, stream_int: int = 0) -> None: 
+        """
+        Args:
+            indices: 
+            hashdata_k: 
+            hashdata_v: 
+            indice_pairs_bwd: 
+            indice_pairs_uniq: 
+            indice_num_per_loc: 
+            batch_size: 
+            output_dims: 
+            input_dims: 
+            ksize: 
+            stride: 
+            padding: 
+            dilation: 
+            transposed: 
+            stream_int: 
+        """
+        ...
+    @staticmethod
+    def unique_hash(hashdata_k: Tensor, hashdata_v: Tensor, uniq_cnt: Tensor, out_indices_offset: Tensor, num_out_bound: int, stream_int: int = 0) -> int: 
+        """
+        Args:
+            hashdata_k: 
+            hashdata_v: 
+            uniq_cnt: 
+            out_indices_offset: 
+            num_out_bound: 
+            stream_int: 
+        """
+        ...
+    @staticmethod
+    def assign_output_direct_hash(out_indices_offset: Tensor, out_indices: Tensor, batch_size: int, output_dims: List[int], input_dims: List[int], ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], stream_int: int = 0) -> None: 
+        """
+        Args:
+            out_indices_offset: 
+            out_indices: 
+            batch_size: 
+            output_dims: 
+            input_dims: 
+            ksize: 
+            stride: 
+            padding: 
+            dilation: 
+            stream_int: 
+        """
+        ...
+    @staticmethod
     def generate_conv_inds_mask_stage2(indices: Tensor, hashdata_k: Tensor, hashdata_v: Tensor, indice_pairs_fwd: Tensor, indice_pairs_bwd: Tensor, indice_pairs_uniq: Tensor, indice_pairs_uniq_before_sort: Tensor, out_inds: Tensor, mask_fwd: Tensor, mask_bwd: Tensor, num_out_act: int, batch_size: int, output_dims: List[int], input_dims: List[int], ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], transposed: bool = False, stream_int: int = 0) -> int: 
+        """
+        Args:
+            indices: 
+            hashdata_k: 
+            hashdata_v: 
+            indice_pairs_fwd: 
+            indice_pairs_bwd: 
+            indice_pairs_uniq: 
+            indice_pairs_uniq_before_sort: 
+            out_inds: 
+            mask_fwd: 
+            mask_bwd: 
+            num_out_act: 
+            batch_size: 
+            output_dims: 
+            input_dims: 
+            ksize: 
+            stride: 
+            padding: 
+            dilation: 
+            transposed: 
+            stream_int: 
+        """
+        ...
+    @staticmethod
+    def generate_conv_inds_stage2_mask_direct_table(indices: Tensor, hashdata_k: Tensor, hashdata_v: Tensor, indice_pairs_fwd: Tensor, indice_pairs_bwd: Tensor, indice_pairs_uniq: Tensor, indice_pairs_uniq_before_sort: Tensor, out_inds: Tensor, mask_fwd: Tensor, mask_bwd: Tensor, num_out_act: int, batch_size: int, output_dims: List[int], input_dims: List[int], ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], transposed: bool = False, stream_int: int = 0) -> int: 
         """
         Args:
             indices: 
@@ -427,30 +503,45 @@ class SpconvOps:
     @staticmethod
     def get_int32_max() -> int: ...
     @staticmethod
-    def get_indice_gen_workspace_size(kv: int, num_act_in: int, num_act_out_bound: int, subm: bool, use_int64_hash_k: bool) -> int: 
+    def get_handcrafted_max_act_out(num_act_in: int, ksize: List[int], stride: List[int], padding: List[int], dilation: List[int]) -> int: 
+        """
+        Args:
+            num_act_in: 
+            ksize: 
+            stride: 
+            padding: 
+            dilation: 
+        """
+        ...
+    @staticmethod
+    def get_indice_gen_workspace_size(kv: int, num_act_in: int, num_act_out_bound: int, max_act_out_in_theory: int, subm: bool, use_int64_hash_k: bool, direct_table: bool) -> int: 
         """
         Args:
             kv: 
             num_act_in: 
             num_act_out_bound: 
+            max_act_out_in_theory: 
             subm: 
             use_int64_hash_k: 
+            direct_table: 
         """
         ...
     @staticmethod
-    def get_indice_gen_tensors_from_workspace(workspace, kv: int, num_act_in: int, num_act_out_bound: int, subm: bool, use_int64_hash_k: bool) -> Dict[str, Tensor]: 
+    def get_indice_gen_tensors_from_workspace(workspace, kv: int, num_act_in: int, num_act_out_bound: int, max_act_out_in_theory: int, subm: bool, use_int64_hash_k: bool, direct_table: bool) -> Dict[str, Tensor]: 
         """
         Args:
             workspace: 
             kv: 
             num_act_in: 
             num_act_out_bound: 
+            max_act_out_in_theory: 
             subm: 
             use_int64_hash_k: 
+            direct_table: 
         """
         ...
     @staticmethod
-    def get_indice_pairs_implicit_gemm(allocator, indices: Tensor, batch_size: int, input_dims: List[int], algo: int, ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], out_padding: List[int], subm: bool, transposed: bool, is_train: bool, stream_int: int = 0, num_out_act_bound: int = -1) -> Tuple[Tensor, int]: 
+    def get_indice_pairs_implicit_gemm(allocator, indices: Tensor, batch_size: int, input_dims: List[int], algo: int, ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], out_padding: List[int], subm: bool, transposed: bool, is_train: bool, stream_int: int = 0, num_out_act_bound: int = -1, timer: CUDAKernelTimer =  CUDAKernelTimer(False), direct_table: bool = False, preallocated: Dict[str, Tensor] =  {}) -> Tuple[Tensor, int]: 
         """
         Args:
             allocator: 
@@ -468,6 +559,9 @@ class SpconvOps:
             is_train: 
             stream_int: 
             num_out_act_bound: 
+            timer: 
+            direct_table: 
+            preallocated: 
         """
         ...
     @staticmethod
