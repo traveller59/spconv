@@ -90,6 +90,12 @@ class SparseMaxPool(SparseModule):
             s += f', algo={self.algo}'
         return s.format(**self.__dict__)
 
+    def get_max_num_voxels(self) -> Optional[torch.Tensor]:
+        if hasattr(self, _MAX_NUM_VOXELS_DURING_TRAINING):
+            return getattr(self, _MAX_NUM_VOXELS_DURING_TRAINING)
+        return None 
+
+
     def forward(self, input):
         assert isinstance(input, spconv.SparseConvTensor)
         features = input.features
@@ -282,6 +288,11 @@ class SparseAvgPool(SparseModule):
         if self.algo is not None:
             s += f', algo={self.algo}'
         return s.format(**self.__dict__)
+        
+    def get_max_num_voxels(self) -> Optional[torch.Tensor]:
+        if hasattr(self, _MAX_NUM_VOXELS_DURING_TRAINING):
+            return getattr(self, _MAX_NUM_VOXELS_DURING_TRAINING)
+        return None 
 
     def forward(self, input):
         assert isinstance(input, spconv.SparseConvTensor)

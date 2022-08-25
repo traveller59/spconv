@@ -1366,7 +1366,7 @@ def implicit_gemm(features: torch.Tensor,
             fp32_accum = False
         arch = get_arch()
 
-        mask_width = ConvGemmOps.implicit_gemm(
+        mask_width, tune_res_cpp = ConvGemmOps.implicit_gemm(
             alloc, CONV_CPP, features_tv, filters_tv, pair_fwd_tv,
             pair_mask_fwd_splits_tv, mask_argsort_fwd_splits_tv,
             num_activate_out, mask_tv, arch, is_train, is_subm, stream, timer_cpp,
@@ -1460,7 +1460,7 @@ def implicit_gemm(features: torch.Tensor,
     # CONV.stream_synchronize(stream)
 
     # t = time.time()
-    print(tune_res.algo_desp, "REF", features_tv.shape, filters.shape)
+    # print(tune_res.algo_desp, "REF", features_tv.shape, filters.shape)
     # with tv.measure_and_print("f16 time"):
     with timer.record("implicit_gemm", stream):
         for j in range(num_split):
