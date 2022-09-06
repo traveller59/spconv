@@ -32,9 +32,9 @@ def waymo_data(batch_size=1, num_features=-1):
     #                        150000)
     data = np.load(Path(__file__).parent / "data" / "benchmark-pc.npz")
     pc = np.ascontiguousarray(data["pc"])
-    print(pc.shape)
     voxels_tv, indices_tv, _ = gen.point_to_voxel(tv.from_numpy(pc))
     voxels = voxels_tv.numpy().reshape(-1, 3)
+
     if num_features > 0:
         voxels = np.zeros((voxels.shape[0], num_features), dtype=voxels.dtype)
     coors = indices_tv.numpy()
@@ -316,6 +316,7 @@ import json
 
 def main():
     import pickle
+
     np.random.seed(50051)
     torch.manual_seed(50051)
     # voxels, coors, spatial_shape = waymo_data(num_features=128)
@@ -377,14 +378,6 @@ def main():
             # print("------------")
             with tv.measure_duration() as measure:
                 out_nograd = net(voxels_th, coors_th, 1, show_metrics)
-            # res = timer.collect_by_name("forward", timer.get_all_pair_time())
-            # res2 = timer.collect_by_name("forward0", timer.get_all_pair_time())
-
-            # print(sum(res.values()) + sum(res2.values()))
-            # print(timer.get_all_pair_time())
-
-            # print(sum(timer.get_all_pair_time().values()))
-            # sort_bench()
             times.append(measure.duration)
             if show_metrics:
                 timer = out_nograd._timer

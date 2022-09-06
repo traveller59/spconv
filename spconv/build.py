@@ -36,6 +36,7 @@ if project_is_installed(PACKAGE_NAME) and project_is_editable(
     from spconv.csrc.sparse.convops import GemmTunerSimple, ExternalSpconvMatmul
     from spconv.csrc.sparse.convops import ConvTunerSimple, ConvGemmOps
     from spconv.csrc.sparse.convops import SimpleExternalSpconvMatmul
+    from spconv.csrc.sparse.inference import InferenceOps
 
     all_shuffle = SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS
     all_shuffle = list(filter(lambda x: not x.is_nvrtc, all_shuffle))
@@ -63,6 +64,7 @@ if project_is_installed(PACKAGE_NAME) and project_is_editable(
         ExternalAllocator(),
         ExternalSpconvMatmul(),
         SimpleExternalSpconvMatmul(), # for debug, won't be included in release
+        InferenceOps(),
     ]
     pccm.builder.build_pybind(cus,
                               PACKAGE_ROOT / "core_cc",

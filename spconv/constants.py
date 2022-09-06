@@ -100,7 +100,9 @@ class AllocKeys:
 
 SPCONV_DEBUG_WEIGHT = False
 
-SPCONV_CPP_INDICE_PAIRS = False 
+SPCONV_CPP_INDICE_PAIRS = True 
+
+SPCONV_USE_DIRECT_TABLE = True 
 
 # currently use cpp pair gen is slightly slower than python, I don't know why.
 SPCONV_CPP_INDICE_PAIRS_IGEMM = os.getenv("SPCONV_CPP_INDICE_PAIRS_IGEMM", "0") == "1" 

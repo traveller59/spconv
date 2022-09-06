@@ -162,6 +162,7 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
             assert len(spatial_shape) == ndim, "spatial shape must equal to ndim"
             assert indices.dtype == torch.int32, "only support int32"
             assert batch_size > 0
+            # assert features.shape[0] == indices.shape[0]
         self._features = features
         self.indices = indices
         self.spatial_shape = [int(v) for v in spatial_shape]
@@ -196,6 +197,9 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
         new_spt.force_algo = self.force_algo
 
         return new_spt
+
+    def minus(self):
+        return self.replace_feature(-self.features)
 
     @property
     def features(self):

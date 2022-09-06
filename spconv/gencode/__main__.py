@@ -17,6 +17,7 @@ from spconv.csrc.sparse.convops import (ConvGemmOps, ConvTunerSimple,
 from spconv.csrc.utils import BoxOps
 from cumm.gemm.algospec.core import (GemmAlgo, ShuffleStrideType)
 from cumm.conv.bases import ConvLayout, ConvLayoutType, ConvOpType
+from spconv.csrc.sparse.inference import InferenceOps
 
 
 def main(include: str,
@@ -60,6 +61,7 @@ def main(include: str,
         ExternalSpconvMatmul(),
         SimpleExternalSpconvMatmul(),
         StaticAllocator(),
+        InferenceOps(),
     ]
 
     gen_cmake(libname, cus, include, src, namespace_prefix=prefix)

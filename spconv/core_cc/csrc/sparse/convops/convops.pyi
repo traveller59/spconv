@@ -5,6 +5,7 @@ from cumm.tensorview import Tensor
 from cumm.tensorview.gemm import NVRTCParams
 from spconv.core_cc.csrc.sparse.convops import ConvTuneResult
 from cumm.tensorview import CUDAKernelTimer
+from cumm.tensorview.gemm import Activation
 class ConvTunerSimple:
     def __init__(self, desps: List[ConvAlgoDesp]) -> None: 
         """
@@ -88,7 +89,7 @@ class ConvTunerSimple:
             mask_width: 
         """
         ...
-    def run_with_tuned_result(self, profile_res, op_type: int, inp: Tensor, weight: Tensor, output: Tensor, mask: Tensor, mask_argsort: Tensor, mask_output: Tensor, indices: Tensor, reverse_mask: bool, mask_filter: int = 0xffffffff, mask_width: int = -1, alpha: float = 1.0, beta: float = 0.0, stream_int: int = 0, workspace: Tensor =  Tensor(), verbose: bool = False, timer: CUDAKernelTimer =  CUDAKernelTimer(false), force_nvrtc: bool = False) -> None: 
+    def run_with_tuned_result(self, profile_res, op_type: int, inp: Tensor, weight: Tensor, output: Tensor, mask: Tensor, mask_argsort: Tensor, mask_output: Tensor, indices: Tensor, reverse_mask: bool, mask_filter: int = 0xffffffff, mask_width: int = -1, alpha: float = 1.0, beta: float = 0.0, stream_int: int = 0, workspace: Tensor =  Tensor(), verbose: bool = False, timer: CUDAKernelTimer =  CUDAKernelTimer(false), force_nvrtc: bool = False, bias: Tensor =  Tensor(), act_alpha: float = 0.0, act_beta: float = 0.0, act_type: Activation =  Activation.None_) -> None: 
         """
         Args:
             profile_res: 
@@ -110,6 +111,10 @@ class ConvTunerSimple:
             verbose: 
             timer: 
             force_nvrtc: 
+            bias: 
+            act_alpha: 
+            act_beta: 
+            act_type: 
         """
         ...
     def query_workspace_size(self, desp: ConvAlgoDesp, splitk: int, op_type: int, N: int, C: int, K: int, kv: int) -> int: 

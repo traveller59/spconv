@@ -14,7 +14,7 @@ from spconv.csrc.sparse.gather import GatherCPU
 
 from .alloc import ExternalAllocator
 from cumm.common import CompileInfo
-
+from .inference import InferenceOps
 
 class ExternalSpconvMatmul(pccm.Class):
     """a helper class to warp matmul operations
@@ -834,6 +834,12 @@ class GemmTunerSimple(pccm.ParameterizedClass):
         code.arg("timer", "tv::CUDAKernelTimer", "tv::CUDAKernelTimer(false)",
                  "cumm.tensorview.CUDAKernelTimer = CUDAKernelTimer(False)")
         code.arg("force_nvrtc", f"bool", "false")
+        code.arg("bias", "tv::Tensor", "tv::Tensor()",
+                 "cumm.tensorview.Tensor = Tensor()")
+        code.arg("act_alpha", f"float", "0.0")
+        code.arg("act_beta", f"float", "0.0")
+        code.arg("act_type", f"tv::gemm::Activation", "tv::gemm::Activation::kNone", "cumm.tensorview.gemm.Activation = Activation.None_")
+
         if CUMM_CPU_ONLY_BUILD:
             code.raw(f"TV_THROW_RT_ERR(\"not implemented for cpu!!!\")")
             return code
@@ -847,12 +853,13 @@ class GemmTunerSimple(pccm.ParameterizedClass):
 
         tv::gemm::GemmParams params;
         bool desp_is_static = prebuilt_names_.find(desp.__repr__()) == prebuilt_names_.end();
-        if (desp.is_nvrtc && (desp_is_static || force_nvrtc)){{
+        if (force_nvrtc || (desp.is_nvrtc && desp_is_static)){{
             params.nvrtc_params = cached_get_nvrtc_params(desp, profile_res.arch, stream_int);
         }}
         params.a = a;
         params.b = b;
         params.c = c;
+        params.d = bias;
         params.a_inds = a_inds;
         params.b_inds = b_inds;
         params.c_inds = c_inds;
@@ -861,6 +868,10 @@ class GemmTunerSimple(pccm.ParameterizedClass):
         params.stream = stream_int;
         params.alpha = alpha;
         params.beta = beta;
+        params.act_alpha = act_alpha;
+        params.act_beta = act_beta;
+        params.act_type = act_type;
+
         params.workspace = workspace;
         GemmMain::matmul2(params);
         """)
@@ -1257,15 +1268,18 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         code.arg("timer", "tv::CUDAKernelTimer", "tv::CUDAKernelTimer(false)",
                  "cumm.tensorview.CUDAKernelTimer = CUDAKernelTimer(false)")
         code.arg("force_nvrtc", f"bool", "false")
+        code.arg("bias", "tv::Tensor", "tv::Tensor()",
+                 "cumm.tensorview.Tensor = Tensor()")
+        code.arg("act_alpha", f"float", "0.0")
+        code.arg("act_beta", f"float", "0.0")
+        code.arg("act_type", f"tv::gemm::Activation", "tv::gemm::Activation::kNone", "cumm.tensorview.gemm.Activation = Activation.None_")
+
         if CUMM_CPU_ONLY_BUILD:
             code.raw(f"TV_THROW_RT_ERR(\"not implemented for cpu!!!\")")
             return code
 
         code.raw(f"""
         auto desp = profile_res.algo_desp;
-        if (force_nvrtc){{
-            desp.is_nvrtc = true;
-        }}
         int split_k_slices = 1;
         if (profile_res.splitk > 1){{
             split_k_slices = profile_res.splitk;
@@ -1276,7 +1290,7 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         auto arch = profile_res.arch;
         tv::gemm::ConvParams params({NDIM_DONT_CARE}, op_type_cpp, timer);
         bool desp_is_static = prebuilt_names_.find(desp.__repr__()) == prebuilt_names_.end();
-        if (desp.is_nvrtc && (desp_is_static || force_nvrtc)){{
+        if (force_nvrtc || (desp.is_nvrtc && desp_is_static)){{
             params.nvrtc_params = cached_get_nvrtc_params(desp, arch, stream_int);
         }}
         params.conv_algo_desp = desp;
@@ -1284,10 +1298,15 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         params.weight = weight.view(channel_k, -1, channel_c);
         params.output = output;
         params.verbose = verbose;
+        params.bias = bias;
 
         params.split_k_slices = split_k_slices;
         params.alpha = alpha;
         params.beta = beta;
+        params.act_alpha = act_alpha;
+        params.act_beta = act_beta;
+        params.act_type = act_type;
+
         params.stream = stream_int;
         params.mask_argsort = mask_argsort;
         params.indices = indices;
@@ -1336,6 +1355,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
             GemmTuneResult,
             ConvTuneResult,
             ExternalSpconvMatmul,
+            InferenceOps,
         )
         self.add_param_class("gemm", gemm_tuner, "GemmTuner")
         self.add_param_class("conv", conv_tuner, "ConvTuner")
@@ -1384,11 +1404,18 @@ class ConvGemmOps(pccm.ParameterizedClass):
         code.arg("subm", "bool", "false")
         code.arg("algo", "int", f"{ConvAlgo.Native.value}")
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
+        code.arg("bias", "tv::Tensor", "tv::Tensor()",
+                 "cumm.tensorview.Tensor = Tensor()")
+        code.arg("act_alpha", f"float", "0.0")
+        code.arg("act_beta", f"float", "0.0")
+        code.arg("act_type", f"tv::gemm::Activation", "tv::gemm::Activation::kNone", "cumm.tensorview.gemm.Activation = Activation.None_")
 
         code.raw(f"""
         int kv_dim, out_channel, kv;
         std::vector<int64_t> filter_shape_per_kv;
         bool is_KC_not_CK;
+        bool has_bias = !bias.empty();
+        bool has_act = act_type != tv::gemm::Activation::kNone;
         if (!all_w_is_krsc){{
             kv_dim = 0;
             is_KC_not_CK = !filter_hwio;
@@ -1419,10 +1446,22 @@ class ConvGemmOps(pccm.ParameterizedClass):
             out_features = allocator.zeros({pccm.literal(AllocKeys.OutFeatures)}, 
                 {{num_activate_out, out_channel}}, features.dtype(), features.device(), stream_int);
         }}
+        if (has_act || has_bias){{
+            TV_ASSERT_RT_ERR(!features.is_cpu(), "bias and act don't support cpu.");
+        }}
         if (kv == 1 && subm){{
+            if (has_bias && has_act){{
+                InferenceOps::bias_add_act_inplace(out_features, bias, act_type, act_alpha, act_beta, stream_int);
+            }}else{{
+                if (has_bias){{
+                    InferenceOps::bias_add_inplace(out_features, bias, stream_int);
+                }}
+                if (has_act){{
+                    InferenceOps::activation_inplace(out_features, act_type, act_alpha, act_beta, stream_int);
+                }}
+            }}
             return;
         }}
-        
         auto indice_pair_num_cpu = indice_pair_num.cpu();
         auto indice_pair_num_cpu_ptr = indice_pair_num_cpu.data_ptr<int>();
         int maxnhot = 0;
@@ -1570,6 +1609,16 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 1.0,
                 beta);
             inited = true;
+        }}
+        if (has_bias && has_act){{
+            InferenceOps::bias_add_act_inplace(out_features, bias, act_type, act_alpha, act_beta, stream_int);
+        }}else{{
+            if (has_bias){{
+                InferenceOps::bias_add_inplace(out_features, bias, stream_int);
+            }}
+            if (has_act){{
+                InferenceOps::activation_inplace(out_features, act_type, act_alpha, act_beta, stream_int);
+            }}
         }}
         """)
         return code
@@ -1913,11 +1962,21 @@ class ConvGemmOps(pccm.ParameterizedClass):
         code.arg("auto_fp32_accum", "bool", "true")
         code.arg("fp32_accum", "bool", "false")
 
+        code.arg("bias", "tv::Tensor", "tv::Tensor()",
+                 "cumm.tensorview.Tensor = Tensor()")
+        code.arg("act_alpha", f"float", "0.0")
+        code.arg("act_beta", f"float", "0.0")
+        code.arg("act_type", f"tv::gemm::Activation", "tv::gemm::Activation::kNone", "cumm.tensorview.gemm.Activation = Activation.None_")
+
+
         if CUMM_CPU_ONLY_BUILD:
             code.raw(f"TV_THROW_RT_ERR(\"not implemented for cpu!!!\")")
             return code.ret("int")
 
         code.raw(f"""
+        if (!bias.empty() || act_type != tv::gemm::Activation::kNone){{
+            TV_ASSERT_RT_ERR(pair_mask_fwd_splits.size() == 1, "SplitGemm don't support fused bias/act for now.");
+        }}
         uint32_t* mask_ptr = masks.data_ptr<uint32_t>();
         int num_mask = masks.dim(0);
         int out_channel = filters.dim(0);
@@ -1989,6 +2048,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
         
         for (int j = 0; j < num_split; ++j){{
             float beta = j == 0 ? 0 : 1;
+
             conv_tuner.run_with_tuned_result(
                 tune_res,
                 kForwardInt,
@@ -2006,7 +2066,12 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 stream_int,
                 tv::Tensor(), // workspace
                 false, // verbose
-                timer);
+                timer, 
+                false,
+                bias,
+                act_alpha,
+                act_beta,
+                act_type);
         }}
         // auto end_ev = tv::CUDAEvent();
         // end_ev.record(stream_int);

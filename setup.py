@@ -52,7 +52,7 @@ REQUIRES_PYTHON = '>=3.6'
 VERSION = None
 
 # What packages are required for this module to be executed?
-REQUIRED = ["pccm>=0.2.21", "pybind11>=2.6.0", "fire", "numpy", *deps]
+REQUIRED = ["pccm>=0.3.5", "pybind11>=2.6.0", "fire", "numpy", *deps]
 
 # What packages are optional?
 EXTRAS = {
@@ -162,6 +162,7 @@ if disable_jit is not None and disable_jit == "1":
     from spconv.csrc.sparse.alloc import ExternalAllocator
     from spconv.csrc.sparse.convops import GemmTunerSimple, ExternalSpconvMatmul
     from spconv.csrc.sparse.convops import ConvTunerSimple, ConvGemmOps
+    from spconv.csrc.sparse.inference import InferenceOps
 
     cu = GemmMainUnitTest(SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS)
     convcu = ConvMainUnitTest(IMPLGEMM_SIMT_PARAMS + IMPLGEMM_VOLTA_PARAMS + IMPLGEMM_TURING_PARAMS)
@@ -192,7 +193,7 @@ if disable_jit is not None and disable_jit == "1":
     cus = [gemmtuner, convtuner,
         convops, SpconvOps(), BoxOps(), HashTable(), CompileInfo(), 
         ExternalAllocator(),
-        ExternalSpconvMatmul()]
+        ExternalSpconvMatmul(), InferenceOps()]
     if not CUMM_CPU_ONLY_BUILD:
         cus.extend([cu, convcu])
     ext_modules: List[Extension] = [

@@ -606,7 +606,11 @@ class SimpleGemm:
                               gather_data: tv.Tensor = tv.Tensor(),
                               workspace: tv.Tensor = tv.Tensor(),
                               timer: CUDAKernelTimer = CUDAKernelTimer(False),
-                              force_nvrtc: bool = False):
+                              force_nvrtc: bool = False,
+                              bias: Optional[tv.Tensor] = None,
+                              act_alpha: float = 0.0,
+                              act_beta: float = 0.0,
+                              act_type: tv.gemm.Activation = tv.gemm.Activation.None_):
         m, n, k = GemmMainUnitTest.extract_mnk(a.shape, b.shape, trans_a,
                                                trans_b, trans_c,
                                                shuffle_type.value,
@@ -630,6 +634,8 @@ class SimpleGemm:
         params.a = a
         params.b = b
         params.c = c
+        if bias is not None:
+            params.d = bias
         params.a_inds = a_inds
         params.b_inds = b_inds
         params.c_inds = c_inds
@@ -638,6 +644,9 @@ class SimpleGemm:
         params.stream = stream
         params.alpha = alpha
         params.beta = beta
+        params.act_alpha = act_alpha
+        params.act_beta = act_beta
+        params.act_type = act_type
         params.workspace = workspace
         # gather = 0
         # if profile_res.external_gather and not gather_data.empty():
@@ -973,7 +982,11 @@ class SimpleConv:
                               workspace: tv.Tensor = tv.Tensor(),
                               verbose: bool = False,
                               timer: CUDAKernelTimer = CUDAKernelTimer(False),
-                              force_nvrtc: bool = False):
+                              force_nvrtc: bool = False,
+                              bias: Optional[tv.Tensor] = None,
+                              act_alpha: float = 0.0,
+                              act_beta: float = 0.0,
+                              act_type: tv.gemm.Activation = tv.gemm.Activation.None_):
         channel_k = output.dim(1)
         channel_c = inp.dim(1)
         # GemmMainUnitTest.stream_synchronize(stream)
@@ -989,7 +1002,7 @@ class SimpleConv:
         params = ConvParams(NDIM_DONT_CARE, ConvOpTypeCpp(op_type_value))
         is_not_static = str(
                 algo_desp) not in self.prebuilt_desp_names
-        if algo_desp.is_nvrtc and (is_not_static or force_nvrtc):
+        if force_nvrtc or (algo_desp.is_nvrtc and is_not_static):
             params.nvrtc_params = self._cached_get_nvrtc_params(
                 algo_desp, profile_res.arch)
         params.conv_algo_desp = profile_res.algo_desp
@@ -1001,6 +1014,9 @@ class SimpleConv:
         params.split_k_slices = split_k_slices
         params.alpha = alpha
         params.beta = beta
+        params.act_alpha = act_alpha
+        params.act_beta = act_beta
+        params.act_type = act_type
         params.stream = stream
         params.mask_argsort = mask_argsort
         params.indices = indices
@@ -1011,6 +1027,8 @@ class SimpleConv:
         params.mask_filter = mask_filter
         params.mask_output = mask_output
         params.reverse_mask = reverse_mask
+        if bias is not None:
+            params.bias = bias
         if timer.enable:
             assert timer._timer is not None
             params.timer = timer._timer

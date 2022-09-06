@@ -41,7 +41,7 @@ else:
     GEMM_CPP = None
     CONV_CPP = None
 import time
-from spconv.constants import FILTER_HWIO, ALL_WEIGHT_IS_KRSC, AllocKeys
+from spconv.constants import FILTER_HWIO, ALL_WEIGHT_IS_KRSC, AllocKeys, SPCONV_USE_DIRECT_TABLE
 from cumm.gemm import codeops
 from spconv.tools import CUDAKernelTimer
 
@@ -101,8 +101,12 @@ class _HashData:
                                         dtype=torch.int32,
                                         device=device)
             hashdata_tv = torch_tensor_to_tv(self.hashdata)
-            self.hashdata_k_tv = hashdata_tv[0]
-            self.hashdata_v_tv = hashdata_tv[1]
+            if num == 0:
+                self.hashdata_k_tv = tv.Tensor()
+                self.hashdata_v_tv = tv.Tensor()
+            else:
+                self.hashdata_k_tv = hashdata_tv[0]
+                self.hashdata_v_tv = hashdata_tv[1]
 
 
 def get_indice_pairs(indices: torch.Tensor,
@@ -315,7 +319,7 @@ def get_indice_pairs_implicit_gemm(
         alloc: Optional[ThrustSortAllocator] = None,
         timer: CUDAKernelTimer = CUDAKernelTimer(False),
         num_out_act_bound: int = -1,
-        direct_table: bool = True):
+        direct_table: bool = SPCONV_USE_DIRECT_TABLE):
     """
     Why return tuple? because pytorch seems don't support custom object in autograd.
     return: (
@@ -535,7 +539,6 @@ def get_indice_pairs_implicit_gemm(
             indices.shape[0], ksize, stride, padding, dilation)
         if transpose:
             max_num_act = kv * indices.shape[0]
-
         pair_bwd = pair
         pair_bwd_tv = pair_tv
         indice_pairs_uniq = torch.empty((pair.numel() + 1, ),
