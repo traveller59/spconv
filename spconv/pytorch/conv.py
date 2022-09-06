@@ -35,6 +35,7 @@ from spconv.pytorch.modules import SparseModule
 from spconv.constants import SAVED_WEIGHT_LAYOUT, ALL_WEIGHT_IS_KRSC, SPCONV_DEBUG_WEIGHT
 from spconv.utils import nullcontext
 from torch.nn.init import calculate_gain
+from cumm import tensorview as tv
 
 FILTER_HWIO = False
 
@@ -65,6 +66,9 @@ class SparseConvolution(SparseModule):
                  algo: Optional[ConvAlgo] = None,
                  fp32_accum: Optional[bool] = None,
                  record_voxel_count: bool = False,
+                 act_type: tv.gemm.Activation = tv.gemm.Activation.None_,
+                 act_alpha: float = 0,
+                 act_beta: float = 0,
                  name=None):
         super(SparseConvolution, self).__init__(name=name)
         assert groups == 1, "don't support groups for now"
@@ -131,6 +135,12 @@ class SparseConvolution(SparseModule):
             self.bias = Parameter(torch.Tensor(out_channels))
         else:
             self.register_parameter('bias', None)
+
+        self.act_type = act_type
+        self.act_alpha = act_alpha
+        self.act_beta = act_beta
+        if self.conv1x1:
+            assert act_type == tv.gemm.Activation.None_, "conv1x1 don't support fused act"
         self.reset_parameters()
         if hasattr(self, "_register_load_state_dict_pre_hook"):
             self._register_load_state_dict_pre_hook(
@@ -139,8 +149,7 @@ class SparseConvolution(SparseModule):
     def get_max_num_voxels(self) -> Optional[torch.Tensor]:
         if hasattr(self, _MAX_NUM_VOXELS_DURING_TRAINING):
             return getattr(self, _MAX_NUM_VOXELS_DURING_TRAINING)
-        return None 
-
+        return None
 
     def _load_weight_different_layout(self, state_dict, prefix, local_metadata,
                                       strict, missing_keys, unexpected_keys,
@@ -255,6 +264,12 @@ class SparseConvolution(SparseModule):
         indices = input.indices
         spatial_shape = input.spatial_shape
         batch_size = input.batch_size
+        bias_for_training = self.bias if self.training else None
+        bias_for_infer = self.bias if not self.training else None
+
+        if self.training:
+            msg =  "act don't support backward, only used in inference"
+            assert self.act_type == tv.gemm.Activation.None_, msg
         if not self.subm:
             if self.transposed:
                 out_spatial_shape = ops.get_deconv_output_size(
@@ -393,19 +408,43 @@ class SparseConvolution(SparseModule):
                     indice_pairs_calc = indice_pairs.to(features.device)
                 if self.subm:
                     out_features = Fsp.indice_subm_conv(
-                        features, self.weight, indice_pairs_calc,
-                        indice_pair_num, outids.shape[0], algo, input._timer)
+                        features,
+                        self.weight,
+                        indice_pairs_calc,
+                        indice_pair_num,
+                        outids.shape[0],
+                        algo,
+                        input._timer,
+                        bias_for_infer,
+                        self.act_alpha,
+                        self.act_beta,
+                        self.act_type)
                 else:
                     if self.inverse:
                         out_features = Fsp.indice_inverse_conv(
-                            features, self.weight, indice_pairs_calc,
-                            indice_pair_num, outids.shape[0], algo)
+                            features,
+                            self.weight,
+                            indice_pairs_calc,
+                            indice_pair_num,
+                            outids.shape[0],
+                            algo,
+                            bias_for_infer,
+                            self.act_alpha,
+                            self.act_beta,
+                            self.act_type)
                     else:
-                        out_features = Fsp.indice_conv(features, self.weight,
-                                                       indice_pairs_calc,
-                                                       indice_pair_num,
-                                                       outids.shape[0], algo,
-                                                       input._timer)
+                        out_features = Fsp.indice_conv(
+                            features,
+                            self.weight,
+                            indice_pairs_calc,
+                            indice_pair_num,
+                            outids.shape[0],
+                            algo,
+                            input._timer,
+                            bias_for_infer,
+                            self.act_alpha,
+                            self.act_beta,
+                            self.act_type)
 
             else:
                 datas = input.find_indice_pair(self.indice_key)
@@ -507,9 +546,14 @@ class SparseConvolution(SparseModule):
                     pair_mask_fwd_splits, pair_mask_bwd_splits,
                     mask_argsort_fwd_splits, mask_argsort_bwd_splits,
                     num_activate_out, masks, self.training, self.subm,
-                    input._timer, self.fp32_accum)
-        if self.bias is not None:
-            out_features += self.bias
+                    input._timer, self.fp32_accum,
+                    bias_for_infer,
+                    self.act_alpha,
+                    self.act_beta,
+                    self.act_type)
+        
+        if bias_for_training is not None:
+            out_features += bias_for_training
         if input.benchmark:
             torch.cuda.synchronize()
             interval = time.time() - t
@@ -519,12 +563,9 @@ class SparseConvolution(SparseModule):
             out_tensor.benchmark_record[self.name]["num_out_points"].append(
                 out_features.shape[0])
         if not self.subm and not self.inverse and self.record_voxel_count:
-            if hasattr(self,
-                        _MAX_NUM_VOXELS_DURING_TRAINING):
+            if hasattr(self, _MAX_NUM_VOXELS_DURING_TRAINING):
                 ops.maximum_value_int_(
-                    getattr(
-                        self,
-                        _MAX_NUM_VOXELS_DURING_TRAINING),
+                    getattr(self, _MAX_NUM_VOXELS_DURING_TRAINING),
                     outids.shape[0])
         out_tensor = out_tensor.replace_feature(out_features)
         out_tensor.indices = outids

@@ -29,6 +29,8 @@ from spconv.core_cc.csrc.sparse.alloc import ExternalAllocator
 from spconv.constants import SPCONV_CPP_INDICE_PAIRS, SPCONV_CPP_INDICE_PAIRS_IGEMM, SPCONV_CPP_GEMM, SPCONV_DIRECT_TABLE_HASH_SIZE_SCALE
 import spconv.core_cc as _ext
 from spconv.core_cc.csrc.sparse.convops.spops import ConvGemmOps
+from spconv.core_cc.csrc.sparse.inference import InferenceOps
+
 from spconv.utils import nullcontext
 
 if hasattr(_ext, "cumm"):
@@ -784,7 +786,11 @@ def indice_conv(features: torch.Tensor,
                 inverse: bool = False,
                 subm: bool = False,
                 algo: ConvAlgo = ConvAlgo.Native,
-                timer: CUDAKernelTimer = CUDAKernelTimer(False)):
+                timer: CUDAKernelTimer = CUDAKernelTimer(False),
+                bias: Optional[torch.Tensor] = None,
+                act_alpha: float = 0.0,
+                act_beta: float = 0.0,
+                act_type: tv.gemm.Activation = tv.gemm.Activation.None_):
     # filters: RSKC
     # stream = get_current_stream()
     # CONV.stream_synchronize(stream)
@@ -793,6 +799,9 @@ def indice_conv(features: torch.Tensor,
         features = features.contiguous()
     if features.dtype == torch.int8 or features.dtype == torch.qint8:
         raise NotImplementedError("work in progress")
+    bias_tv = tv.Tensor()
+    if bias is not None:
+        bias_tv = torch_tensor_to_tv(bias)
 
     if SPCONV_CPP_GEMM and GEMM_CPP is not None:
         # print("CPPPPPP!!!", features.device)
@@ -822,10 +831,18 @@ def indice_conv(features: torch.Tensor,
                                 FILTER_HWIO, features_tv, filters_tv,
                                 indice_pairs_tv, indice_pair_num_tv, arch,
                                 num_activate_out, inverse, subm, algo.value,
-                                stream)
+                                stream, bias_tv, act_alpha, act_beta, act_type)
         out_features = alloc.allocated[AllocKeys.OutFeatures]
         return out_features
+    if not features.is_cuda:
+        stream = 0
+    else:
+        stream = get_current_stream()
 
+    has_bias = bias is not None
+    has_act = act_type != tv.gemm.Activation.None_
+    if has_bias or has_act:
+        assert features.is_cuda, "cpu don't support act and bias"
     if not ALL_WEIGHT_IS_KRSC:
         kv_dim = 0
         is_KC_not_CK = not FILTER_HWIO
@@ -875,7 +892,17 @@ def indice_conv(features: torch.Tensor,
         out_features = torch.zeros((num_activate_out, out_channel),
                                    dtype=features.dtype,
                                    device=features.device)
+    c = torch_tensor_to_tv(out_features)
+
     if kv == 1 and subm:
+        if (has_act and has_bias):
+            InferenceOps.bias_add_act_inplace(c, bias_tv, act_type, act_alpha, act_beta, stream)
+        else:
+            if has_act:
+                InferenceOps.activation_inplace(c, act_type, act_alpha, act_beta, stream)
+            if has_bias:
+                InferenceOps.bias_add_inplace(c, bias_tv, stream)
+
         return out_features
 
     indice_pair_num_cpu = indice_pair_num.cpu().tolist()
@@ -928,7 +955,6 @@ def indice_conv(features: torch.Tensor,
             SpconvOps.scatter_add_cpu(c, out_buffer_tv, out_indices)
 
         return out_features
-    stream = get_current_stream()
 
     profile_idx = kv_center
     if subm:
@@ -1020,6 +1046,14 @@ def indice_conv(features: torch.Tensor,
 
             # gather_times += gather_time
             inited = True
+        if (has_act and has_bias):
+            InferenceOps.bias_add_act_inplace(c, bias_tv, act_type, act_alpha, act_beta, stream)
+        else:
+            if has_act:
+                InferenceOps.activation_inplace(c, act_type, act_alpha, act_beta, stream)
+            if has_bias:
+                InferenceOps.bias_add_inplace(c, bias_tv, stream)
+
     # CONV.stream_synchronize(stream)
     # print(out_features.mean(), out_features.max(), out_features.min())
 
@@ -1391,8 +1425,16 @@ def implicit_gemm(features: torch.Tensor,
                   is_train: bool,
                   is_subm: bool,
                   timer: CUDAKernelTimer = CUDAKernelTimer(False),
-                  fp32_accum: Optional[bool] = None):
+                  fp32_accum: Optional[bool] = None,
+                  bias: Optional[torch.Tensor] = None,
+                  act_alpha: float = 0.0,
+                  act_beta: float = 0.0,
+                  act_type: tv.gemm.Activation = tv.gemm.Activation.None_):
     stream = get_current_stream()
+    bias_tv = tv.Tensor()
+    if bias is not None:
+        bias_tv = torch_tensor_to_tv(bias)
+
 
     if SPCONV_CPP_GEMM and CONV_CPP is not None:
         alloc = TorchAllocator(features.device)
@@ -1420,7 +1462,7 @@ def implicit_gemm(features: torch.Tensor,
             alloc, CONV_CPP, features_tv, filters_tv, pair_fwd_tv,
             pair_mask_fwd_splits_tv, mask_argsort_fwd_splits_tv,
             num_activate_out, mask_tv, arch, is_train, is_subm, stream,
-            timer_cpp, auto_fp32_accum, fp32_accum)
+            timer_cpp, auto_fp32_accum, fp32_accum, bias_tv, act_alpha, act_beta, act_type)
         out_features = alloc.allocated[AllocKeys.OutFeatures]
         mask_output_fwd = alloc.allocated.get(AllocKeys.MaskOutputFwd, None)
         if is_train:
@@ -1512,6 +1554,10 @@ def implicit_gemm(features: torch.Tensor,
     # t = time.time()
     # print(tune_res.algo_desp, "REF", features_tv.shape, filters.shape)
     # with tv.measure_and_print("f16 time"):
+    bias_tv = tv.Tensor()
+    if bias is not None:
+        bias_tv = torch_tensor_to_tv(bias)
+
     with timer.record("implicit_gemm", stream):
         for j in range(num_split):
             beta = 0 if j == 0 else 1
@@ -1530,7 +1576,11 @@ def implicit_gemm(features: torch.Tensor,
                 mask_width=-1,
                 beta=beta,
                 stream=stream,
-                verbose=False)
+                verbose=False,
+                bias=bias_tv,
+                act_type=act_type,
+                act_alpha=act_alpha,
+                act_beta=act_beta)
     # INT8_TEST = True
     # if INT8_TEST:
     #     if features.shape[1] % 32 != 0:

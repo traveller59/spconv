@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import sys
-import pickle 
+import pickle
 
 import torch
 from torch import nn
@@ -30,14 +30,17 @@ from pathlib import Path
 from spconv.pytorch.hash import HashTable
 from cumm.gemm.layout import to_stride
 from typing import List
-from functools import reduce 
+from functools import reduce
+from cumm import tensorview as tv
 
 _MAX_INT32 = 2147483647
 
 _T = TypeVar("_T")
 
+
 def identity_decorator(func: _T) -> _T:
     return func
+
 
 if PYTORCH_VERSION >= [1, 6, 0]:
     import torch.cuda.amp as amp
@@ -47,6 +50,7 @@ if PYTORCH_VERSION >= [1, 6, 0]:
 else:
     _TORCH_CUSTOM_FWD = identity_decorator
     _TORCH_CUSTOM_BWD = identity_decorator
+
 
 class SparseConvFunction(Function):
     @staticmethod
@@ -58,26 +62,34 @@ class SparseConvFunction(Function):
                 indice_pair_num,
                 num_activate_out,
                 algo,
-                timer: CUDAKernelTimer = CUDAKernelTimer(False)):
+                timer: CUDAKernelTimer = CUDAKernelTimer(False),
+                bias: Optional[torch.Tensor] = None,
+                act_alpha: float = 0.0,
+                act_beta: float = 0.0,
+                act_type: tv.gemm.Activation = tv.gemm.Activation.None_):
         ctx.save_for_backward(indice_pairs, indice_pair_num, features, filters)
         ctx.algo = algo
         ctx.timer = timer
         try:
             return ops.indice_conv(features,
-                                filters,
-                                indice_pairs,
-                                indice_pair_num,
-                                num_activate_out,
-                                False,
-                                algo=algo,
-                                timer=timer)
+                                   filters,
+                                   indice_pairs,
+                                   indice_pair_num,
+                                   num_activate_out,
+                                   False,
+                                   algo=algo,
+                                   timer=timer,
+                                   bias=bias,
+                                   act_alpha=act_alpha,
+                                   act_beta=act_beta,
+                                   act_type=act_type)
         except Exception as e:
             msg = "[Exception|indice_conv]"
             msg += f"feat={features.shape},w={filters.shape},pair={indice_pairs.shape},"
             msg += f"pairnum={indice_pair_num},act={num_activate_out},algo={algo}"
             print(msg, file=sys.stderr)
             spconv_save_debug_data((indice_pairs, indice_pair_num))
-            raise e 
+            raise e
 
     @staticmethod
     @once_differentiable
@@ -100,9 +112,9 @@ class SparseConvFunction(Function):
             msg += f"pairnum={indice_pair_num},do={grad_output.shape}"
             print(msg, file=sys.stderr)
             spconv_save_debug_data((indice_pairs, indice_pair_num))
-            raise e 
+            raise e
 
-        return input_bp, filters_bp, None, None, None, None, None
+        return input_bp, filters_bp, None, None, None, None, None, None, None, None, None
 
 
 class SparseInverseConvFunction(Function):
@@ -115,27 +127,35 @@ class SparseInverseConvFunction(Function):
                 indice_pair_num,
                 num_activate_out,
                 algo,
-                timer: CUDAKernelTimer = CUDAKernelTimer(False)):
+                timer: CUDAKernelTimer = CUDAKernelTimer(False),
+                bias: Optional[torch.Tensor] = None,
+                act_alpha: float = 0.0,
+                act_beta: float = 0.0,
+                act_type: tv.gemm.Activation = tv.gemm.Activation.None_):
         ctx.save_for_backward(indice_pairs, indice_pair_num, features, filters)
         ctx.algo = algo
         ctx.timer = timer
         try:
             return ops.indice_conv(features,
-                                filters,
-                                indice_pairs,
-                                indice_pair_num,
-                                num_activate_out,
-                                True,
-                                False,
-                                algo=algo,
-                                timer=timer)
+                                   filters,
+                                   indice_pairs,
+                                   indice_pair_num,
+                                   num_activate_out,
+                                   True,
+                                   False,
+                                   algo=algo,
+                                   timer=timer,
+                                   bias=bias,
+                                   act_alpha=act_alpha,
+                                   act_beta=act_beta,
+                                   act_type=act_type)
         except Exception as e:
             msg = "[Exception|indice_conv|inverse]"
             msg += f"feat={features.shape},w={filters.shape},pair={indice_pairs.shape},"
             msg += f"pairnum={indice_pair_num},act={num_activate_out},algo={algo}"
             print(msg, file=sys.stderr)
             spconv_save_debug_data((indice_pairs, indice_pair_num))
-            raise e 
+            raise e
 
     @staticmethod
     @once_differentiable
@@ -159,9 +179,9 @@ class SparseInverseConvFunction(Function):
             msg += f"pairnum={indice_pair_num},do={grad_output.shape}"
             print(msg, file=sys.stderr)
             spconv_save_debug_data((indice_pairs, indice_pair_num))
-            raise e 
+            raise e
 
-        return input_bp, filters_bp, None, None, None, None, None
+        return input_bp, filters_bp, None, None, None, None, None, None, None, None, None
 
 
 class SparseImplicitGemmFunction(Function):
@@ -181,25 +201,28 @@ class SparseImplicitGemmFunction(Function):
                 is_train: bool,
                 is_subm: bool,
                 timer: CUDAKernelTimer = CUDAKernelTimer(False),
-                fp32_accum: Optional[bool] = None):
+                fp32_accum: Optional[bool] = None,
+                bias: Optional[torch.Tensor] = None,
+                act_alpha: float = 0.0,
+                act_beta: float = 0.0,
+                act_type: tv.gemm.Activation = tv.gemm.Activation.None_):
         try:
-            out, mask_out, mask_width = ops.implicit_gemm(features, filters,
-                                                        pair_fwd,
-                                                        pair_mask_fwd_splits,
-                                                        mask_argsort_fwd_splits,
-                                                        num_activate_out, masks,
-                                                        is_train, is_subm, timer,
-                                                        fp32_accum)
+            out, mask_out, mask_width = ops.implicit_gemm(
+                features, filters, pair_fwd, pair_mask_fwd_splits,
+                mask_argsort_fwd_splits, num_activate_out, masks, is_train,
+                is_subm, timer, fp32_accum, bias, act_alpha, act_beta,
+                act_type)
         except Exception as e:
             msg = "[Exception|implicit_gemm]"
             msg += f"feat={features.shape},w={filters.shape},pair={pair_fwd.shape},"
             msg += f"act={num_activate_out},issubm={is_subm},istrain={is_train}"
             print(msg, file=sys.stderr)
-            spconv_save_debug_data((pair_fwd, pair_bwd, pair_mask_fwd_splits, 
-                pair_mask_bwd_splits, mask_argsort_fwd_splits, mask_argsort_bwd_splits,
-                masks))
-            raise e 
-            
+            spconv_save_debug_data(
+                (pair_fwd, pair_bwd, pair_mask_fwd_splits,
+                 pair_mask_bwd_splits, mask_argsort_fwd_splits,
+                 mask_argsort_bwd_splits, masks))
+            raise e
+
         ctx.save_for_backward(features, filters, pair_fwd, pair_bwd)
         ctx.mask_width = mask_width
         ctx.mask_out = mask_out
@@ -253,12 +276,13 @@ class SparseImplicitGemmFunction(Function):
             msg += f"feat={features.shape},w={filters.shape},pair={pair_fwd.shape},"
             msg += f"issubm={is_subm},do={grad_output.shape}"
             print(msg, file=sys.stderr)
-            spconv_save_debug_data((pair_fwd, pair_bwd, pair_mask_fwd_splits, 
-                pair_mask_bwd_splits, mask_argsort_fwd_splits, mask_argsort_bwd_splits,
-                masks))
-            raise e 
+            spconv_save_debug_data(
+                (pair_fwd, pair_bwd, pair_mask_fwd_splits,
+                 pair_mask_bwd_splits, mask_argsort_fwd_splits,
+                 mask_argsort_bwd_splits, masks))
+            raise e
 
-        None_9 = [None] * 12
+        None_9 = [None] * 16
         return (input_bp, filters_bp, *None_9)
 
 
@@ -272,27 +296,35 @@ class SubMConvFunction(Function):
                 indice_pair_num,
                 num_activate_out,
                 algo,
-                timer: CUDAKernelTimer = CUDAKernelTimer(False)):
+                timer: CUDAKernelTimer = CUDAKernelTimer(False),
+                bias: Optional[torch.Tensor] = None,
+                act_alpha: float = 0.0,
+                act_beta: float = 0.0,
+                act_type: tv.gemm.Activation = tv.gemm.Activation.None_):
         ctx.save_for_backward(indice_pairs, indice_pair_num, features, filters)
         ctx.algo = algo
         ctx.timer = timer
         try:
             return ops.indice_conv(features,
-                                filters,
-                                indice_pairs,
-                                indice_pair_num,
-                                num_activate_out,
-                                False,
-                                True,
-                                algo=algo,
-                                timer=timer)
+                                   filters,
+                                   indice_pairs,
+                                   indice_pair_num,
+                                   num_activate_out,
+                                   False,
+                                   True,
+                                   algo=algo,
+                                   timer=timer,
+                                   bias=bias,
+                                   act_alpha=act_alpha,
+                                   act_beta=act_beta,
+                                   act_type=act_type)
         except Exception as e:
             msg = "[Exception|indice_conv|subm]"
             msg += f"feat={features.shape},w={filters.shape},pair={indice_pairs.shape},"
             msg += f"pairnum={indice_pair_num},act={num_activate_out},algo={algo}"
             print(msg, file=sys.stderr)
             spconv_save_debug_data((indice_pairs, indice_pair_num))
-            raise e 
+            raise e
 
     @staticmethod
     @once_differentiable
@@ -316,10 +348,9 @@ class SubMConvFunction(Function):
             msg += f"pairnum={indice_pair_num},do={grad_output.shape}"
             print(msg, file=sys.stderr)
             spconv_save_debug_data((indice_pairs, indice_pair_num))
-            raise e 
+            raise e
 
-
-        return input_bp, filters_bp, None, None, None, None, None
+        return input_bp, filters_bp, None, None, None, None, None, None, None, None, None
 
 
 class SparseMaxPoolFunction(Function):
@@ -361,13 +392,17 @@ class SparseMaxPoolImplicitGemmFunction(Function):
             features, out, grad_output, indice_pairs_bwd)
         return input_bp, None, None, None
 
+
 class SparseAvgPoolImplicitGemmFunction(Function):
     @staticmethod
     @_TORCH_CUSTOM_FWD
     def forward(ctx, features: torch.Tensor, indice_pairs_fwd: torch.Tensor,
-                indice_pairs_bwd: torch.Tensor, num_activate_out: int, calc_count):
-        out, count = ops.indice_avgpool_implicit_gemm(features, indice_pairs_fwd,
-                                               num_activate_out, calc_count)
+                indice_pairs_bwd: torch.Tensor, num_activate_out: int,
+                calc_count):
+        out, count = ops.indice_avgpool_implicit_gemm(features,
+                                                      indice_pairs_fwd,
+                                                      num_activate_out,
+                                                      calc_count)
         ctx.save_for_backward(indice_pairs_bwd, features, out, count)
         return out
 
@@ -398,6 +433,7 @@ def _indice_to_scalar(indices: torch.Tensor, shape: List[int]):
         scalar_inds += stride[i] * indices[:, i]
     return scalar_inds.contiguous()
 
+
 def sparse_add_hash_based(*tens: SparseConvTensor):
     """ sparse add with misaligned indices.
     if you use sparse add, the indice_dict will be dropped and impossible
@@ -417,7 +453,7 @@ def sparse_add_hash_based(*tens: SparseConvTensor):
         if max_num_indices < ten.features.shape[0]:
             max_num_indices_idx = i
             max_num_indices = ten.features.shape[0]
-        
+
     first = tens[0]
     feat = first.features
     shape = [first.batch_size, *first.spatial_shape]
@@ -438,21 +474,29 @@ def sparse_add_hash_based(*tens: SparseConvTensor):
     # assign arange to values of hash table
     count = table.assign_arange_()
     count_val = count.item()
-    out_features = torch.zeros([int(count_val), feat.shape[1]], dtype=feat.dtype, device=feat.device)
-    out_indices = torch.zeros([int(count_val), first.indices.shape[1]], dtype=first.indices.dtype, device=first.indices.device)
+    out_features = torch.zeros([int(count_val), feat.shape[1]],
+                               dtype=feat.dtype,
+                               device=feat.device)
+    out_indices = torch.zeros([int(count_val), first.indices.shape[1]],
+                              dtype=first.indices.dtype,
+                              device=first.indices.device)
     for ten, scalar in zip(tens, scalars):
         out_inds, _ = table.query(scalar)
         out_inds = out_inds.long()
         out_features[out_inds] += ten.features
         out_indices[out_inds] = ten.indices
-    res = SparseConvTensor(out_features, out_indices, first.spatial_shape, first.batch_size, 
-        benchmark=first.benchmark)
+    res = SparseConvTensor(out_features,
+                           out_indices,
+                           first.spatial_shape,
+                           first.batch_size,
+                           benchmark=first.benchmark)
     if count_val == max_num_indices:
         res.indice_dict = tens[max_num_indices_idx].indice_dict
     res.benchmark_record = first.benchmark_record
-    res._timer = first._timer 
+    res._timer = first._timer
     res.thrust_allocator = first.thrust_allocator
-    return res 
+    return res
+
 
 def sparse_add(*tens: SparseConvTensor):
     """reuse torch.sparse. the internal is sort + unique 
@@ -461,7 +505,9 @@ def sparse_add(*tens: SparseConvTensor):
     max_num_indices_idx = 0
     ten_ths: List[torch.Tensor] = []
     first = tens[0]
-    res_shape = [first.batch_size, *first.spatial_shape, first.features.shape[1]]
+    res_shape = [
+        first.batch_size, *first.spatial_shape, first.features.shape[1]
+    ]
 
     for i, ten in enumerate(tens):
         assert ten.spatial_shape == tens[0].spatial_shape
@@ -470,18 +516,25 @@ def sparse_add(*tens: SparseConvTensor):
         if max_num_indices < ten.features.shape[0]:
             max_num_indices_idx = i
             max_num_indices = ten.features.shape[0]
-        ten_ths.append(torch.sparse_coo_tensor(ten.indices.T, ten.features, res_shape, requires_grad=True))
-    
+        ten_ths.append(
+            torch.sparse_coo_tensor(ten.indices.T,
+                                    ten.features,
+                                    res_shape,
+                                    requires_grad=True))
+
     c_th = reduce(lambda x, y: x + y, ten_ths).coalesce()
     c_th_inds = c_th.indices().T.contiguous().int()
     c_th_values = c_th.values()
     assert c_th_values.is_contiguous()
 
-    res = SparseConvTensor(c_th_values, c_th_inds, first.spatial_shape, first.batch_size, 
-        benchmark=first.benchmark)
+    res = SparseConvTensor(c_th_values,
+                           c_th_inds,
+                           first.spatial_shape,
+                           first.batch_size,
+                           benchmark=first.benchmark)
     if c_th_values.shape[0] == max_num_indices:
         res.indice_dict = tens[max_num_indices_idx].indice_dict
     res.benchmark_record = first.benchmark_record
-    res._timer = first._timer 
+    res._timer = first._timer
     res.thrust_allocator = first.thrust_allocator
-    return res 
+    return res
