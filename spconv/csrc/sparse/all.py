@@ -1530,16 +1530,19 @@ class SpconvOps(pccm.Class):
         if (direct_table){{
             hash_size = int({SPCONV_DIRECT_TABLE_HASH_SIZE_SCALE} * max_act_out_in_theory);
         }}
+        size_t res = 0;
         if (subm){{
-            return hash_size * (use_int64_hash_k ? 3 : 2) * sizeof(int) + 1 * sizeof(int);
+            res = hash_size * (use_int64_hash_k ? 3 : 2) * sizeof(int) + 1 * sizeof(int);
         }}else{{
             size_t pair_single_size = kv * num_act_in; // 40000
             size_t ind_uniq_and_bkp_size = (pair_single_size + 1) * 2 * (use_int64_hash_k ? sizeof(int64_t) : sizeof(int32_t));
-            size_t hash_size = hash_size * (use_int64_hash_k ? 3 : 2) * sizeof(int);
-            return ind_uniq_and_bkp_size + hash_size + 1 * sizeof(int);
+            hash_size = hash_size * (use_int64_hash_k ? 3 : 2) * sizeof(int);
+            res = ind_uniq_and_bkp_size + hash_size + 1 * sizeof(int);
         }}
+        return res;
         """)
         return code.ret("std::size_t")
+
 
     @pccm.pybind.mark 
     @pccm.static_function
@@ -1561,14 +1564,14 @@ class SpconvOps(pccm.Class):
             hash_size = int({SPCONV_DIRECT_TABLE_HASH_SIZE_SCALE} * max_act_out_in_theory);
         }}
         if (use_int64_hash_k){{
-            auto ten = tv::from_blob(workspace, {{int64_t(hash_size) * 2}}, tv::int64, 0);
+            auto ten = tv::from_blob(workspace, {{int64_t(hash_size)}}, tv::int64, 0);
             res.insert({{{pccm.literal(AllocKeys.HashKOrKV)}, ten}});
             workspace += ten.nbytes();
-            auto ten2 = tv::from_blob(workspace, {{int64_t(hash_size) * 2}}, tv::int32, 0);
+            auto ten2 = tv::from_blob(workspace, {{int64_t(hash_size)}}, tv::int32, 0);
             res.insert({{{pccm.literal(AllocKeys.HashV)}, ten2}});
             workspace += ten2.nbytes();
         }}else{{
-            auto ten = tv::from_blob(workspace, {{2, int64_t(hash_size) * 2}}, tv::int32, 0);
+            auto ten = tv::from_blob(workspace, {{2, int64_t(hash_size)}}, tv::int32, 0);
             res.insert({{{pccm.literal(AllocKeys.HashKOrKV)}, ten}});
             workspace += ten.nbytes();
         }}
@@ -1585,7 +1588,8 @@ class SpconvOps(pccm.Class):
         res.insert({{{pccm.literal(AllocKeys.TightUniqueCount)}, uniq_cnt}});
         workspace += uniq_cnt.nbytes();
 
-        TV_ASSERT_RT_ERR(workspace - ws_prev == expected_size, "this shouldn't happen");
+        TV_ASSERT_RT_ERR(workspace - ws_prev == expected_size, "this shouldn't happen", kv, num_act_in,num_act_out_bound,  max_act_out_in_theory,
+            subm, use_int64_hash_k, direct_table, "expected", expected_size, workspace - ws_prev);
         return res;
         """)
         return code.ret("std::unordered_map<std::string, tv::Tensor>")
@@ -1782,13 +1786,14 @@ class SpconvOps(pccm.Class):
                     hash_v = hash_kv_gurad->tensor[1];
                 }}
             }}
-            indice_pairs_uniq_guard = allocator.empty_guard({{2, int64_t(pair_size + 1)}}, 
+            indice_pairs_uniq_guard = allocator.empty_guard({{int64_t(pair_size + 1)}}, 
                 indice_uniq_dtype, 0, {pccm.literal(AllocKeys.IndicePairsUniq)});
             
-            indice_pairs_uniq = indice_pairs_uniq_guard->tensor[0];
-            auto indice_pairs_uniq_bkp = indice_pairs_uniq_guard->tensor[1];
-            // indice_pairs_uniq_bkp_guard = allocator.empty_guard({{int64_t(pair_size + 1)}}, 
-            //     indice_uniq_dtype, 0, {pccm.literal(AllocKeys.IndicePairsUniqBackup)});
+            indice_pairs_uniq = indice_pairs_uniq_guard->tensor;
+            // auto indice_pairs_uniq_bkp = indice_pairs_uniq_guard->tensor[1];
+            indice_pairs_uniq_bkp_guard = allocator.empty_guard({{int64_t(pair_size + 1)}}, 
+                indice_uniq_dtype, 0, {pccm.literal(AllocKeys.IndicePairsUniqBackup)});
+            auto indice_pairs_uniq_bkp = indice_pairs_uniq_bkp_guard->tensor;
             {{
                 tv::CUDAKernelTimerGuard timer_guard("gen_conv_inds_stage1", 
                     timer, reinterpret_cast<cudaStream_t>(stream_int));
