@@ -5,9 +5,9 @@ from cumm.common import CompileInfo
 from cumm.conv.main import ConvMainUnitTest
 from cumm.gemm.main import GemmMainUnitTest
 from pccm.builder.pybind import gen_cmake
-from spconv.core import (IMPLGEMM_SIMT_PARAMS, IMPLGEMM_TURING_PARAMS,
+from spconv.core import (IMPLGEMM_SIMT_PARAMS, IMPLGEMM_TURING_PARAMS, IMPLGEMM_AMPERE_PARAMS,
                          IMPLGEMM_VOLTA_PARAMS, SHUFFLE_SIMT_PARAMS,
-                         SHUFFLE_TURING_PARAMS, SHUFFLE_VOLTA_PARAMS)
+                         SHUFFLE_TURING_PARAMS, SHUFFLE_VOLTA_PARAMS, SHUFFLE_AMPERE_PARAMS)
 from spconv.csrc.hash.core import HashTable
 from spconv.csrc.sparse.all import SpconvOps
 from spconv.csrc.sparse.alloc import ExternalAllocator, StaticAllocator
@@ -24,7 +24,7 @@ def main(include: str,
          libname: str = "spconv",
          prefix: str = "spconvlib",
          inference_only: bool = False):
-    all_shuffle = SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS
+    all_shuffle = SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS + SHUFFLE_AMPERE_PARAMS
     all_shuffle = list(filter(lambda x: not x.is_nvrtc, all_shuffle))
     if inference_only:
         all_shuffle = list(filter(lambda x: x.shuffle_stride != ShuffleStrideType.ShuffleAB, all_shuffle))
@@ -32,7 +32,7 @@ def main(include: str,
     cu = GemmMainUnitTest(all_shuffle)
     cu.namespace = "cumm.gemm.main"
     all_imp = (IMPLGEMM_SIMT_PARAMS + IMPLGEMM_VOLTA_PARAMS +
-               IMPLGEMM_TURING_PARAMS)
+               IMPLGEMM_TURING_PARAMS + IMPLGEMM_AMPERE_PARAMS)
     # all_imp = IMPLGEMM_SIMT_PARAMS
     all_imp = list(filter(lambda x: not x.is_nvrtc, all_imp))
     if inference_only:

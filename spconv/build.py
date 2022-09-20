@@ -22,8 +22,8 @@ from .constants import PACKAGE_NAME, PACKAGE_ROOT, DISABLE_JIT
 
 if project_is_installed(PACKAGE_NAME) and project_is_editable(
         PACKAGE_NAME) and not DISABLE_JIT:
-    from spconv.core import SHUFFLE_SIMT_PARAMS, SHUFFLE_VOLTA_PARAMS, SHUFFLE_TURING_PARAMS
-    from spconv.core import IMPLGEMM_SIMT_PARAMS, IMPLGEMM_VOLTA_PARAMS, IMPLGEMM_TURING_PARAMS
+    from spconv.core import SHUFFLE_SIMT_PARAMS, SHUFFLE_VOLTA_PARAMS, SHUFFLE_TURING_PARAMS, SHUFFLE_AMPERE_PARAMS
+    from spconv.core import IMPLGEMM_SIMT_PARAMS, IMPLGEMM_VOLTA_PARAMS, IMPLGEMM_TURING_PARAMS, IMPLGEMM_AMPERE_PARAMS
 
     from cumm.gemm.main import GemmMainUnitTest
     from cumm.conv.main import ConvMainUnitTest
@@ -37,12 +37,12 @@ if project_is_installed(PACKAGE_NAME) and project_is_editable(
     from spconv.csrc.sparse.convops import ConvTunerSimple, ConvGemmOps
     from spconv.csrc.sparse.convops import SimpleExternalSpconvMatmul
 
-    all_shuffle = SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS
+    all_shuffle = SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS + SHUFFLE_AMPERE_PARAMS
     all_shuffle = list(filter(lambda x: not x.is_nvrtc, all_shuffle))
     cu = GemmMainUnitTest(all_shuffle)
     cu.namespace = "cumm.gemm.main"
     all_imp = (IMPLGEMM_SIMT_PARAMS + IMPLGEMM_VOLTA_PARAMS +
-               IMPLGEMM_TURING_PARAMS)
+               IMPLGEMM_TURING_PARAMS + IMPLGEMM_AMPERE_PARAMS)
     all_imp = list(filter(lambda x: not x.is_nvrtc, all_imp))
     convcu = ConvMainUnitTest(all_imp)
     convcu.namespace = "cumm.conv.main"
