@@ -13,3 +13,4 @@
 # limitations under the License.
 
 from .boxops import BoxOps
+from .pcc import PointCloudCompress

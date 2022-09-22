@@ -1384,7 +1384,8 @@ class SpconvOps(pccm.Class):
         code.arg("voxels, indices, num_per_voxel, hashdata, point_indice_data, pc_voxel_id",
                  "tv::Tensor")
         code.arg("vsize", f"std::vector<float>")
-        code.arg("grid_size, grid_stride", f"std::vector<int>")
+        code.arg("grid_size", f"std::vector<int>")
+        code.arg("grid_stride", f"std::vector<int64_t>")
         code.arg("coors_range", f"std::vector<float>")
 
         code.arg("empty_mean", "bool", "false")
@@ -1404,7 +1405,9 @@ class SpconvOps(pccm.Class):
             code.raw(f"""
             if (ndim == {ndim}){{
                 std::array<float, {ndim}> vsize_;
-                std::array<int, {ndim}> grid_size_, grid_stride_;
+                std::array<int, {ndim}> grid_size_;
+                std::array<int64_t, {ndim}> grid_stride_;
+
                 std::array<float, {ndim * 2}> coors_range_;
                 for (int i = 0; i < {ndim}; ++i){{
                     vsize_[i] = vsize[i];

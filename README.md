@@ -17,16 +17,15 @@
 [pypi-ver-114]: https://img.shields.io/pypi/v/spconv-cu114
 [pypi-ver-111]: https://img.shields.io/pypi/v/spconv-cu111
 [pypi-ver-113]: https://img.shields.io/pypi/v/spconv-cu113
-[pypi-ver-102]: https://img.shields.io/pypi/v/spconv-cu102
 
 [pypi-url-111]: https://pypi.org/project/spconv-cu111/
 [pypi-download-111]: https://img.shields.io/pypi/dm/spconv-cu111
 [pypi-url-113]: https://pypi.org/project/spconv-cu113/
 [pypi-download-113]: https://img.shields.io/pypi/dm/spconv-cu113
-[pypi-url-102]: https://pypi.org/project/spconv-cu102/
-[pypi-download-102]: https://img.shields.io/pypi/dm/spconv-cu102
 [pypi-url-114]: https://pypi.org/project/spconv-cu114/
 [pypi-download-114]: https://img.shields.io/pypi/dm/spconv-cu114
+[pypi-url-120]: https://pypi.org/project/spconv-cu120/
+[pypi-download-120]: https://img.shields.io/pypi/dm/spconv-cu120
 [pypi-url-cpu]: https://pypi.org/project/spconv/
 [pypi-download-cpu]: https://img.shields.io/pypi/dm/spconv
 
@@ -37,10 +36,10 @@
 |                | PyPI   | Install  |Downloads  |
 | -------------- |:---------------------:| ---------------------:| ---------------------:| 
 | CPU (Linux Only) | [![PyPI Version][pypi-ver-cpu]][pypi-url-cpu] | ```pip install spconv``` | [![pypi monthly download][pypi-download-cpu]][pypi-url-cpu] | 
-| CUDA 10.2 | [![PyPI Version][pypi-ver-102]][pypi-url-102] | ```pip install spconv-cu102``` | [![pypi monthly download][pypi-download-102]][pypi-url-102] | 
 | CUDA 11.1 | [![PyPI Version][pypi-ver-111]][pypi-url-111] | ```pip install spconv-cu111```| [![pypi monthly download][pypi-download-111]][pypi-url-111]| 
 | CUDA 11.3 (Linux Only) | [![PyPI Version][pypi-ver-113]][pypi-url-113] | ```pip install spconv-cu113```| [![pypi monthly download][pypi-download-113]][pypi-url-113]| 
 | CUDA 11.4 | [![PyPI Version][pypi-ver-114]][pypi-url-114] | ```pip install spconv-cu114```| [![pypi monthly download][pypi-download-114]][pypi-url-114]|
+| CUDA 12.0 | [![PyPI Version][pypi-ver-120]][pypi-url-120] | ```pip install spconv-cu120```| [![pypi monthly download][pypi-download-120]][pypi-url-120]|
 
 ```spconv``` is a project that provide heavily-optimized sparse convolution implementation with tensor core support. check [benchmark](docs/BENCHMARK.md) to see how fast spconv 2.x runs.
 
@@ -50,9 +49,9 @@ Check [spconv 2.x algorithm introduction](docs/spconv2_algo.pdf) to understand s
 
 **WARNING** spconv < 2.1.18 users need to upgrade your version to 2.1.18, it fix a bug in conv weight init which cause std of inited weight too large, and a bug in PointToVoxel.
 
-## Breaking changes in Spconv 2.x
+## NEWS
 
-Spconv 1.x users **NEED READ [THIS](docs/SPCONV_2_BREAKING_CHANGEs.md)** before using spconv 2.x.
+* spconv 2.2: ampere feature support (by @[EvernightAurora](https://github.com/EvernightAurora)), pure c++ code generation, nvrtc, drop cuda 10.2, drop python 3.6
 
 ## Spconv 2.1 vs Spconv 1.x
 
@@ -63,6 +62,13 @@ Spconv 1.x users **NEED READ [THIS](docs/SPCONV_2_BREAKING_CHANGEs.md)** before 
 * int8 op is ready, but we still need some time to figure out how to run int8 in pytorch.
 * [doesn't depend on pytorch binary](docs/FAQ.md#What-does-no-dependency-on-pytorch-mean), but you may need at least pytorch >= 1.5.0 to run spconv 2.x.
 * since spconv 2.x doesn't depend on pytorch binary (never in future), it's impossible to support torch.jit/libtorch inference.
+
+## Spconv 2.2 vs Spconv 2.1
+
+* faster fp16 kernels (~10-30%) in ampere GPUs (tested in RTX 3090)
+* greatly faster int8 kernels (~1.2x~2.7x) in ampere GPUs (tested in RTX 3090)
+* no python 3.6 support
+* no CUDA 10.2 support
 
 ## Spconv 2.x Development and Roadmap
 
@@ -80,17 +86,17 @@ Don't forget to check [performance guide](docs/PERFORMANCE_GUIDE.md).
 
 ## Install
 
-You need to install python >= 3.6 (>=3.7 for windows) first to use spconv 2.x.
+You need to install python >= 3.7 first to use spconv 2.x.
 
 You need to install CUDA toolkit first before using prebuilt binaries or build from source.
 
-You need at least CUDA 10.2 to build and run spconv 2.x. We won't offer any support for CUDA < 10.2.
+You need at least CUDA 11.0 to build and run spconv 2.x. We won't offer any support for CUDA < 11.0.
 
 ### Prebuilt
 
-We offer python 3.6-3.10 and cuda 10.2/11.1/11.3/11.4 prebuilt binaries for linux (manylinux).
+We offer python 3.7-3.10 and cuda 11.1/11.3/11.4/12.0 prebuilt binaries for linux (manylinux).
 
-We offer python 3.7-3.10 and cuda 10.2/11.1/11.4 prebuilt binaries for windows 10/11.
+We offer python 3.7-3.10 and cuda 11.1/11.4/12.0 prebuilt binaries for windows 10/11.
 
 We will provide prebuilts for CUDA versions supported by latest pytorch release. For example, pytorch 1.10 provide cuda 10.2 and 11.3 prebuilts, so we provide them too.
 
@@ -100,17 +106,15 @@ CUDA 11.1 will be removed in spconv 2.2 because pytorch 1.10 don't provide prebu
 
 ```pip install spconv``` for CPU only (**Linux Only**). you should only use this for debug usage, the performance isn't optimized due to manylinux limit (no omp support).
 
-```pip install spconv-cu102``` for CUDA 10.2
-
 ```pip install spconv-cu111``` for CUDA 11.1
 
 ```pip install spconv-cu113``` for CUDA 11.3 (**Linux Only**)
 
 ```pip install spconv-cu114``` for CUDA 11.4
 
-**NOTE** It's safe to have different **minor** cuda version between system and conda (pytorch) in **CUDA >= 11.0** because of [CUDA Minor Version Compatibility](https://docs.nvidia.com/deploy/cuda-compatibility/#minor-version-compatibility). For example, you can use spconv-cu114 with anaconda version of pytorch cuda 11.1 in a OS with CUDA 11.2 installed.
+```pip install spconv-cu120``` for CUDA 12.0
 
-For CUDA 10, we don't know whether ```spconv-cu102``` works with CUDA 10.0 and 10.1. Users can have a try.
+**NOTE** It's safe to have different **minor** cuda version between system and conda (pytorch) in **CUDA >= 11.0** because of [CUDA Minor Version Compatibility](https://docs.nvidia.com/deploy/cuda-compatibility/#minor-version-compatibility). For example, you can use spconv-cu114 with anaconda version of pytorch cuda 11.1 in a OS with CUDA 11.2 installed.
 
 **NOTE** In Linux, you can install spconv-cuxxx without install CUDA to system! only suitable NVIDIA driver is required. for CUDA 11, we need driver >= 450.82.
 
@@ -118,11 +122,12 @@ For CUDA 10, we don't know whether ```spconv-cu102``` works with CUDA 10.0 and 1
 
 See [this page](https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/) to check supported GPU names by arch.
 
+If you use a GPU architecture that isn't compiled in prebuilt, spconv will use NVRTC to compile a slightly slower kernel.
+
 | CUDA version | GPU Arch List  |
 | -------------- |:---------------------:|
-| 10.2 | 50,52,60,61,70,75     | 
 | 11.x       | 52,60,61,70,75,80,86     | 
-| 12.x       | 60,61,70,75,80,86,90     | 
+| 12.x       | 70,75,80,86,90     | 
 
 ### Build from source for development (JIT, recommend)
 
@@ -170,10 +175,6 @@ You need to rebuild ```cumm``` first if you are build along a CUDA version that 
 4. run ```$Env:SPCONV_DISABLE_JIT = "1"```
 5. run ```pip install pccm cumm wheel```
 6. run ```python setup.py bdist_wheel```+```pip install dists/xxx.whl```
-
-## Know issues
-
-* Spconv 2.x F16 runs slow in A100. 
 
 ## Note
 

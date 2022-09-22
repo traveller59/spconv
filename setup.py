@@ -38,9 +38,9 @@ if cuda_ver:
     cuda_ver = cuda_ver.replace(".", "") # 10.2 to 102
 
     RELEASE_NAME += "-cu{}".format(cuda_ver)
-    deps = ["cumm-cu{}>=0.2.8".format(cuda_ver)]
+    deps = ["cumm-cu{}>=0.3.0".format(cuda_ver)]
 else:
-    deps = ["cumm>=0.2.8"]
+    deps = ["cumm>=0.3.0"]
 
 
 
@@ -156,7 +156,7 @@ if disable_jit is not None and disable_jit == "1":
     from cumm.conv.main import ConvMainUnitTest
     from cumm.constants import CUMM_CPU_ONLY_BUILD
     from spconv.csrc.sparse.all import SpconvOps
-    from spconv.csrc.utils import BoxOps
+    from spconv.csrc.utils import BoxOps, PointCloudCompress
     from spconv.csrc.hash.core import HashTable
     from cumm.common import CompileInfo
     from spconv.csrc.sparse.alloc import ExternalAllocator
@@ -192,7 +192,7 @@ if disable_jit is not None and disable_jit == "1":
         convops.namespace = "csrc.sparse.convops.spops"
     cus = [gemmtuner, convtuner,
         convops, SpconvOps(), BoxOps(), HashTable(), CompileInfo(), 
-        ExternalAllocator(),
+        ExternalAllocator(), PointCloudCompress(),
         ExternalSpconvMatmul(), InferenceOps()]
     if not CUMM_CPU_ONLY_BUILD:
         cus.extend([cu, convcu])

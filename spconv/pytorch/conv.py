@@ -270,6 +270,7 @@ class SparseConvolution(SparseModule):
         if self.training:
             msg =  "act don't support backward, only used in inference"
             assert self.act_type == tv.gemm.Activation.None_, msg
+        
         if not self.subm:
             if self.transposed:
                 out_spatial_shape = ops.get_deconv_output_size(
@@ -428,6 +429,7 @@ class SparseConvolution(SparseModule):
                             indice_pair_num,
                             outids.shape[0],
                             algo,
+                            input._timer,
                             bias_for_infer,
                             self.act_alpha,
                             self.act_beta,
@@ -551,7 +553,6 @@ class SparseConvolution(SparseModule):
                     self.act_alpha,
                     self.act_beta,
                     self.act_type)
-        
         if bias_for_training is not None:
             out_features += bias_for_training
         if input.benchmark:
@@ -571,6 +572,9 @@ class SparseConvolution(SparseModule):
         out_tensor.indices = outids
         out_tensor.indice_dict = indice_dict
         out_tensor.spatial_shape = out_spatial_shape
+        # print(outids.shape, spatial_shape, self.kernel_size, self.stride, self.padding,
+        #             self.dilation, self.output_padding, out_spatial_shape)
+
         return out_tensor
 
     def _check_subm_reuse_valid(self, inp: SparseConvTensor,

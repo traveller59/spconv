@@ -550,7 +550,7 @@ class GemmTunerSimple(pccm.ParameterizedClass):
         }}
         auto avail_algos = get_available_algo_str_from_arch(arch);
         std::vector<tv::gemm::GemmAlgoDesp> finally_algos;
-        auto is_arch_compiled = CompileInfo::arch_is_compiled(arch);
+        auto is_arch_compiled = CompileInfo::arch_is_compiled_gemm(arch);
         for (auto algo : avail_algos){{
             static_key_t static_key = std::make_tuple(trans_a, trans_b, trans_c, int(a.dtype()),
                 int(b.dtype()), int(c.dtype()), shuffle_type, algo);
@@ -996,7 +996,7 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         use_f32_as_accum = false;
 
         std::vector<tv::gemm::ConvAlgoDesp> finally_algos;
-        auto is_arch_compiled = CompileInfo::arch_is_compiled(arch);
+        auto is_arch_compiled = CompileInfo::arch_is_compiled_gemm(arch);
         for (auto algo : avail_algos){{
             static_key_t static_key = std::make_tuple(
                 layout_i, layout_w, layout_o,
@@ -2048,7 +2048,12 @@ class ConvGemmOps(pccm.ParameterizedClass):
         
         for (int j = 0; j < num_split; ++j){{
             float beta = j == 0 ? 0 : 1;
-
+            if (!bias.empty()){{
+                beta = 1;
+            }}
+            if (j > 0){{
+                bias = tv::Tensor();
+            }}
             conv_tuner.run_with_tuned_result(
                 tune_res,
                 kForwardInt,

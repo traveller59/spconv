@@ -32,9 +32,11 @@ class Point2VoxelCommon(pccm.ParameterizedClass):
         self.ndim = ndim
         self.zyx = zyx
         ret_str = f"std::array<int, {self.ndim}>"
+        ret64_str = f"std::array<int64_t, {self.ndim}>"
+
         retf_str = f"std::array<float, {self.ndim}>"
         retf2_str = f"std::array<float, {self.ndim * 2}>"
-        self.calc_meta_ret = f"std::tuple<{retf_str}, {ret_str}, {ret_str}, {retf2_str}>"
+        self.calc_meta_ret = f"std::tuple<{retf_str}, {ret_str}, {ret64_str}, {retf2_str}>"
 
     @pccm.static_function
     def calc_meta_data(self):
@@ -43,8 +45,8 @@ class Point2VoxelCommon(pccm.ParameterizedClass):
         code.arg("coors_range_xyz", f"std::array<float, {self.ndim * 2}>")
         code.raw(f"""
         std::array<float, {self.ndim}> vsize;
-        std::array<int, {self.ndim}> grid_size, grid_stride;
-
+        std::array<int, {self.ndim}> grid_size;
+        std::array<int64_t, {self.ndim}> grid_stride;
         std::array<float, {self.ndim * 2}> coors_range;
 
         """)
@@ -79,9 +81,10 @@ class Point2VoxelCommon(pccm.ParameterizedClass):
         ret_str = f"std::array<int, {self.ndim}>"
         retf_str = f"std::array<float, {self.ndim}>"
         retf2_str = f"std::array<float, {self.ndim * 2}>"
+        ret64_str = f"std::array<int64_t, {self.ndim}>"
 
         return code.ret(
-            f"std::tuple<{retf_str}, {ret_str}, {ret_str}, {retf2_str}>")
+            f"std::tuple<{retf_str}, {ret_str}, {ret64_str}, {retf2_str}>")
 
     @pccm.static_function
     def array2tvarray(self):
@@ -143,7 +146,7 @@ class Point2VoxelKernel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         code.arg("vsize", f"tv::array<float, {self.ndim}>")
         code.arg("coors_range", f"tv::array<float, {self.ndim * 2}>")
         code.arg("grid_bound", f"tv::array<int, {self.ndim}>")
-        code.arg("grid_stride", f"tv::array<int, {self.ndim}>")
+        code.arg("grid_stride", f"tv::array<int64_t, {self.ndim}>")
 
         code.arg("num_points", f"int")
         point_xyz = f"{self.ndim - 1} - j"
@@ -163,7 +166,7 @@ class Point2VoxelKernel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
                 if ((c < 0 || c >= grid_bound[j])) {{
                     failed = true;
                 }}
-                prod += grid_stride[j] * c;
+                prod += grid_stride[j] * int64_t(c);
             }}
             if (!failed){{
                 points_indice_data[i] = prod;
@@ -218,7 +221,7 @@ class Point2VoxelKernel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         code.arg("vsize", f"tv::array<float, {self.ndim}>")
         code.arg("coors_range", f"tv::array<float, {self.ndim * 2}>")
         code.arg("grid_bound", f"tv::array<int, {self.ndim}>")
-        code.arg("grid_stride", f"tv::array<int, {self.ndim}>")
+        code.arg("grid_stride", f"tv::array<int64_t, {self.ndim}>")
 
         code.arg("num_points", f"int")
         # TODO add backward?
@@ -323,7 +326,7 @@ class Point2Voxel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         self.add_member("vsize", f"tv::array<float, {self.ndim}>")
         self.add_member("coors_range", f"tv::array<float, {self.ndim * 2}>")
         self.add_member("grid_size", f"tv::array<int, {self.ndim}>")
-        self.add_member("grid_stride", f"tv::array<int, {self.ndim}>")
+        self.add_member("grid_stride", f"tv::array<int64_t, {self.ndim}>")
 
     @pccm.pybind.mark_prop_getter(prop_name="grid_size")
     @pccm.member_function
@@ -414,7 +417,9 @@ class Point2Voxel(pccm.ParameterizedClass, pccm.pybind.PybindClassMixin):
         code.arg("voxels, indices, num_per_voxel, hashdata, point_indice_data, points_voxel_id",
                  "tv::Tensor")
         code.arg("vsize", f"std::array<float, {self.ndim}>")
-        code.arg("grid_size, grid_stride", f"std::array<int, {self.ndim}>")
+        code.arg("grid_size", f"std::array<int, {self.ndim}>")
+        code.arg("grid_stride", f"std::array<int64_t, {self.ndim}>")
+
         code.arg("coors_range", f"std::array<float, {self.ndim * 2}>")
         code.arg("clear_voxels", "bool", "true")
         code.arg("empty_mean", "bool", "false")

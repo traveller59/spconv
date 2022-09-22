@@ -1561,6 +1561,8 @@ def implicit_gemm(features: torch.Tensor,
     with timer.record("implicit_gemm", stream):
         for j in range(num_split):
             beta = 0 if j == 0 else 1
+            if bias is not None:
+                beta = 1 
             CONV.run_with_tuned_result(
                 tune_res,
                 ConvOpType.kForward,
