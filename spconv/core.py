@@ -39,17 +39,17 @@ class AlgoHint(Enum):
 # TODO two step build: build gemm kernels first, then bind for every python
 
 SHUFFLE_SIMT_PARAMS: List[GemmAlgoParams] = [
-    *gen_shuffle_params((64, 128, 32), (32, 64, 32), ["s8,s8,s32,s32,s32"], "",
+    *gen_shuffle_params((64, 128, 32), (32, 64, 32), ["s8,s8,s8,s32,s32"], "",
                         2, kernel.GemmAlgo.SimtDP4A, None),
-    *gen_shuffle_params((128, 64, 32), (64, 32, 32), ["s8,s8,s32,s32,s32"], "",
+    *gen_shuffle_params((128, 64, 32), (64, 32, 32), ["s8,s8,s8,s32,s32"], "",
                         2, kernel.GemmAlgo.SimtDP4A, None),
-    *gen_shuffle_params((128, 128, 32), (32, 64, 32), ["s8,s8,s32,s32,s32"],
+    *gen_shuffle_params((128, 128, 32), (32, 64, 32), ["s8,s8,s8,s32,s32"],
                         "", 2, kernel.GemmAlgo.SimtDP4A, None),
     *gen_shuffle_params(
         (128, 128, 32),
-        (64, 32, 32), ["s8,s8,s8,s32,s32", "s8,s8,s32,s32,s32"], "", 2,
+        (64, 32, 32), ["s8,s8,s8,s32,s32"], "", 2,
         kernel.GemmAlgo.SimtDP4A, None),
-    *gen_shuffle_params((64, 64, 32), (32, 32, 32), ["s8,s8,s32,s32,s32"], "",
+    *gen_shuffle_params((64, 64, 32), (32, 32, 32), ["s8,s8,s8,s32,s32"], "",
                         2, kernel.GemmAlgo.SimtDP4A, None),
     *gen_shuffle_params((64, 256, 8), (32, 64, 8), ["f32,f32,f32,f32,f32"],
                         "f32,f32,f32,f32,f32", 2, kernel.GemmAlgo.Simt, None),
@@ -164,7 +164,7 @@ SHUFFLE_TURING_PARAMS: List[GemmAlgoParams] = [
         (64, 128, 32),
         (32, 64, 32), ["f16,f16,f16,f16,f16"], "f16,f16,f16,f32,f32", 2,
         kernel.GemmAlgo.Turing, TensorOp((16, 8, 8))),
-    *gen_shuffle_params((64, 64, 32), (32, 32, 32), ["s8,s8,s32,s32,s32"], "",
+    *gen_shuffle_params((64, 64, 32), (32, 32, 32), ["s8,s8,s8,s32,s32"], "",
                         2, kernel.GemmAlgo.Turing, TensorOp((8, 8, 16))),
     *gen_shuffle_params(
         (128, 128, 32),
@@ -182,9 +182,9 @@ SHUFFLE_TURING_PARAMS: List[GemmAlgoParams] = [
         (256, 128, 32),
         (64, 64, 32), ["s8,s8,s8,s32,s32"], "", 2, kernel.GemmAlgo.Turing,
         TensorOp((8, 8, 16))),
-    *gen_shuffle_params((128, 64, 32), (64, 32, 32), ["s8,s8,s32,s32,s32"], "",
+    *gen_shuffle_params((128, 64, 32), (64, 32, 32), ["s8,s8,s8,s32,s32"], "",
                         2, kernel.GemmAlgo.Turing, TensorOp((8, 8, 16))),
-    *gen_shuffle_params((64, 128, 32), (32, 64, 32), ["s8,s8,s32,s32,s32"], "",
+    *gen_shuffle_params((64, 128, 32), (32, 64, 32), ["s8,s8,s8,s32,s32"], "",
                         2, kernel.GemmAlgo.Turing, TensorOp((8, 8, 16))),
 ]
 

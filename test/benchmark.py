@@ -57,8 +57,14 @@ def waymo_data_large(batch_size=1):
     pc4[:, 1] += 3
     pc5 = pc.copy()
     pc5[:, 1] += 4
+    pc6 = pc.copy()
+    pc6[:, 1] += 5
+    pc7 = pc.copy()
+    pc7[:, 1] += 6
+    pc8 = pc.copy()
+    pc8[:, 1] += 7
 
-    pc = np.concatenate([pc, pc2, pc3, pc4, pc5])
+    pc = np.concatenate([pc, pc2, pc3, pc4, pc5, pc6, pc7, pc8])
     print(pc.shape)
     voxels_tv, indices_tv, _ = gen.point_to_voxel(tv.from_numpy(pc))
     voxels = voxels_tv.numpy().reshape(-1, 3)
@@ -402,7 +408,7 @@ def main():
     # MaskImpGemm: 51.0ms
     # MaskSplitImpGemm: 41.1ms
     # algo = None
-    net = NetSm(spatial_shape, algo).to(device).eval().to(dtype)# .train()
+    net = Net(spatial_shape, algo).to(device).eval().to(dtype)# .train()
     # net.load_state_dict(net.state_dict())
     spconv.assign_name_for_sparse_modules(net)
     print(coors_th.shape)
@@ -427,12 +433,17 @@ def main():
                 items = list(timer.get_all_pair_time().items())
                 items.sort(key=lambda x: x[0])
                 print("SUM TIME:",  sum([x[1] for x in items]))
-                print(json.dumps(dict(items), indent=2))
+                # print(json.dumps(dict(items), indent=2))
                 inds_sum = 0
+                gemm_sum = 0
                 for k, v in items:
                     if "gen_pairs" in k:
                         inds_sum += v 
-                print("SUM GEN INDS:",  inds_sum)
+                for k, v in items:
+                    if "gemm" in k:
+                        gemm_sum += v 
+
+                print("SUM GEN INDS:",  inds_sum, "GEMM:", gemm_sum)
 
     # state = net.state_dict()
     # state.pop("net.2.max_num_voxels_during_training")
