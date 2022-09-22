@@ -290,6 +290,49 @@ class Net2(nn.Module):
         return self.net(x)
 
 
+
+class NetSm(nn.Module):
+    def __init__(self, shape, algo):
+        super().__init__()
+        self.net = spconv.SparseSequential(
+            spconv.SubMConv3d(3,
+                              8,
+                              3,
+                              bias=False,
+                              indice_key="c0",
+                              algo=algo),
+            spconv.SubMConv3d(8,
+                              16,
+                              3,
+                              bias=False,
+                              indice_key="c0",
+                              algo=algo),
+            spconv.SubMConv3d(16,
+                              32,
+                              3,
+                              bias=False,
+                              indice_key="c0",
+                              algo=algo),
+            spconv.SubMConv3d(32,
+                              64,
+                              3,
+                              bias=False,
+                              indice_key="c0",
+                              algo=algo),
+            
+        )
+        max_batch_size = 1
+        # grid (dense map) is used for indice generation. use pre-allocated grid can run faster.
+        self.grid = torch.full([max_batch_size, *shape], -1,
+                               dtype=torch.int32).cuda()
+        # self.grid = None
+        self.shape = shape
+
+    def forward(self, features, coors, batch_size, enable_timer: bool = False):
+        x = spconv.SparseConvTensor(features, coors, self.shape, batch_size,
+                                    self.grid, enable_timer=enable_timer)
+        return self.net(x)
+
 import numpy as np
 from cumm import tensorview as tv
 from spconv.core_cc.csrc.sparse.all import SpconvOps
@@ -359,7 +402,7 @@ def main():
     # MaskImpGemm: 51.0ms
     # MaskSplitImpGemm: 41.1ms
     # algo = None
-    net = Net(spatial_shape, algo).to(device).eval().to(dtype)# .train()
+    net = NetSm(spatial_shape, algo).to(device).eval().to(dtype)# .train()
     # net.load_state_dict(net.state_dict())
     spconv.assign_name_for_sparse_modules(net)
     print(coors_th.shape)
