@@ -51,7 +51,7 @@ Check [spconv 2.x algorithm introduction](docs/spconv2_algo.pdf) to understand s
 
 ## NEWS
 
-* spconv 2.2: ampere feature support (by @[EvernightAurora](https://github.com/EvernightAurora)), pure c++ code generation, nvrtc, drop cuda 10.2, drop python 3.6
+* spconv 2.2: ampere feature support (by [EvernightAurora](https://github.com/EvernightAurora)), pure c++ code generation, nvrtc, drop python 3.6
 
 ## Spconv 2.1 vs Spconv 1.x
 
@@ -68,7 +68,7 @@ Check [spconv 2.x algorithm introduction](docs/spconv2_algo.pdf) to understand s
 * faster fp16 kernels (~10-30%) in ampere GPUs (tested in RTX 3090)
 * greatly faster int8 kernels (~1.2x~2.7x) in ampere GPUs (tested in RTX 3090)
 * no python 3.6 support
-* no CUDA 10.2 support
+* nvrtc support: kernel in old GPUs will be compiled in runtime.
 
 ## Spconv 2.x Development and Roadmap
 
@@ -94,15 +94,11 @@ You need at least CUDA 11.0 to build and run spconv 2.x. We won't offer any supp
 
 ### Prebuilt
 
-We offer python 3.7-3.10 and cuda 11.1/11.3/11.4/12.0 prebuilt binaries for linux (manylinux).
+We offer python 3.7-3.11 and cuda 10.2/11.1/11.3/11.4/12.0 prebuilt binaries for linux (manylinux).
 
-We offer python 3.7-3.10 and cuda 11.1/11.4/12.0 prebuilt binaries for windows 10/11.
-
-We will provide prebuilts for CUDA versions supported by latest pytorch release. For example, pytorch 1.10 provide cuda 10.2 and 11.3 prebuilts, so we provide them too.
+We offer python 3.7-3.11 and cuda 10.2/11.1/11.4/12.0 prebuilt binaries for windows 10/11.
 
 For Linux users, you need to install pip >= 20.3 first to install prebuilt.
-
-CUDA 11.1 will be removed in spconv 2.2 because pytorch 1.10 don't provide prebuilts for it.
 
 ```pip install spconv``` for CPU only (**Linux Only**). you should only use this for debug usage, the performance isn't optimized due to manylinux limit (no omp support).
 
@@ -175,6 +171,10 @@ You need to rebuild ```cumm``` first if you are build along a CUDA version that 
 4. run ```$Env:SPCONV_DISABLE_JIT = "1"```
 5. run ```pip install pccm cumm wheel```
 6. run ```python setup.py bdist_wheel```+```pip install dists/xxx.whl```
+
+## Contributers
+
+* [EvernightAurora](https://github.com/EvernightAurora): add ampere feature.
 
 ## Note
 

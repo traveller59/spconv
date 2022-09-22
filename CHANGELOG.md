@@ -14,7 +14,6 @@
 
 ### Removed
 - drop python 3.6 support.
-- drop CUDA 10.2 support.
 - pascal and kepler architecture is removed in CUDA 12 prebuilt.
 
 ## [2.1.22] - 2022-6-11
