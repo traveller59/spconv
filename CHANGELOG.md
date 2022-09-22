@@ -1,4 +1,9 @@
 # Changelog
+
+## [2.1.24] - 2022-9-24
+### Removed
+- no way to resolve thrust problem in spconv 2.1.x. fallback. resolve in spconv 2.2.x
+
 ## [2.1.23] - 2022-9-24
 ### Added
 - add version limit for pccm and ccimport
