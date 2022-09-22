@@ -31,7 +31,7 @@ if project_is_installed(PACKAGE_NAME) and project_is_editable(
 
     from spconv.csrc.sparse.all import SpconvOps
     from spconv.csrc.sparse.alloc import ExternalAllocator
-    from spconv.csrc.utils import BoxOps
+    from spconv.csrc.utils import BoxOps, PointCloudCompress
     from spconv.csrc.hash.core import HashTable
     from spconv.csrc.sparse.convops import GemmTunerSimple, ExternalSpconvMatmul
     from spconv.csrc.sparse.convops import ConvTunerSimple, ConvGemmOps
@@ -65,6 +65,7 @@ if project_is_installed(PACKAGE_NAME) and project_is_editable(
         ExternalSpconvMatmul(),
         SimpleExternalSpconvMatmul(), # for debug, won't be included in release
         InferenceOps(),
+        PointCloudCompress(),
     ]
     pccm.builder.build_pybind(cus,
                               PACKAGE_ROOT / "core_cc",

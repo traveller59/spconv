@@ -1,4 +1,21 @@
 # Changelog
+## [2.2.0] - 2022-9-24
+### Added 
+- Add Ampere support. faster fp16, faster tf32 and greatly faster int8 kernels in Ampere GPUs.
+- Add pure c++ code generation (libspconv.so) for deploy (or train in another deeplearning framework)
+- Add NVRTC support for all gemm kernels. if your GPU architecture isn't compiled in prebuilt, spconv will use slightly slower (10-20us overhead for every kernel launch) NVRTC kernels. 
+
+### Fixed
+- Fix launch fail in maxpool if too much voxels 
+
+### Changed
+- all weight layout will be KRSC, don't support old spconv 1.x weights anymore.
+- previous gemm ops in ops.py now move to c++ by default (controlled by spconv.constants.SPCONV_CPP_GEMM)
+
+### Removed
+- drop python 3.6 support.
+- pascal and kepler architecture is removed in CUDA 12 prebuilt.
+
 ## [2.1.22] - 2022-6-11
 ### Fixed
 - Fix thrust problem by adding -fvisibility=hidden

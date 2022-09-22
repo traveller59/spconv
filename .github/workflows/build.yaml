@@ -15,7 +15,7 @@ jobs:
     runs-on: windows-2019
     strategy:
       matrix:
-        python-version: ['3.7', '3.8', '3.9', '3.10'] 
+        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11'] 
         cuda-version: ['10.2', '11.1', '11.4']
     steps:
       - uses: actions/checkout@master
@@ -115,7 +115,7 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python-version: ['3.6', '3.7', '3.8', '3.9', '3.10'] # this version is only used for upload.
+        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11'] # this version is only used for upload.
         cuda-version: ['102', '111', '113', '114', '']
 
     steps:

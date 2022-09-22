@@ -22,7 +22,7 @@ from cumm import tensorview as tv
 from spconv.core import ConvAlgo
 
 import spconv.pytorch as spconv
-from spconv.utils import Point2VoxelCPU3d
+from spconv.utils import Point2VoxelCPU3d, Point2VoxelGPU3d
 
 # torch.backends.cudnn.enabled = False
 def waymo_data(batch_size=1, num_features=-1):
@@ -37,40 +37,33 @@ def waymo_data(batch_size=1, num_features=-1):
 
     if num_features > 0:
         voxels = np.zeros((voxels.shape[0], num_features), dtype=voxels.dtype)
+    print(voxels.shape)
     coors = indices_tv.numpy()
     N = coors.shape[0]
     coors = np.concatenate([np.full([N, 1], 0, coors.dtype), coors], axis=1)
     return voxels, coors, gen.grid_size
 
 def waymo_data_large(batch_size=1):
-    gen = Point2VoxelCPU3d([0.1, 0.1, 0.1], [-80, -80, -2, 80, 80, 6], 3,
-                           1200000, 1)
+    gen = Point2VoxelGPU3d([0.1, 0.1, 0.1], [-80, -80, -2, 80, 80, 6], 3,
+                           1600000, 1)
     # gen = VoxelGeneratorV2([0.1, 0.1, 0.1], [-80, -80, -2, 80, 80, 6], 1,
     #                        150000)
     data = np.load(Path(__file__).parent / "data" / "benchmark-pc.npz")
     pc = np.ascontiguousarray(data["pc"])
-    pc2 = pc.copy()
-    pc2[:, 1] += 1
-    pc3 = pc.copy()
-    pc3[:, 1] += 2
-    pc4 = pc.copy()
-    pc4[:, 1] += 3
-    pc5 = pc.copy()
-    pc5[:, 1] += 4
-    pc6 = pc.copy()
-    pc6[:, 1] += 5
-    pc7 = pc.copy()
-    pc7[:, 1] += 6
-    pc8 = pc.copy()
-    pc8[:, 1] += 7
+    pcs = [pc]
+    for i in range(7):
+        pc2 = pc.copy()
+        pc2[:, 1] += i + 1
+        pcs.append(pc2)
 
-    pc = np.concatenate([pc, pc2, pc3, pc4, pc5, pc6, pc7, pc8])
+    pc = np.concatenate(pcs)
     print(pc.shape)
-    voxels_tv, indices_tv, _ = gen.point_to_voxel(tv.from_numpy(pc))
-    voxels = voxels_tv.numpy().reshape(-1, 3)
-    coors = indices_tv.numpy()
+    voxels_tv, indices_tv, _ = gen.point_to_voxel_hash(tv.from_numpy(pc).cuda())
+    voxels = voxels_tv.cpu().numpy().reshape(-1, 3)
+    coors = indices_tv.cpu().numpy()
     N = coors.shape[0]
-    print("num voxels", N)
+    print("num voxels", N, gen.grid_size)
+    # breakpoint()
     coors = np.concatenate([np.full([N, 1], 0, coors.dtype), coors], axis=1)
     return voxels, coors, gen.grid_size
 
@@ -224,8 +217,8 @@ class Net(nn.Module):
         )
         max_batch_size = 1
         # grid (dense map) is used for indice generation. use pre-allocated grid can run faster.
-        self.grid = torch.full([max_batch_size, *shape], -1,
-                               dtype=torch.int32).cuda()
+        # self.grid = torch.full([max_batch_size, *shape], -1,
+        #                        dtype=torch.int32).cuda()
         # self.grid = None
         self.shape = shape
 
@@ -234,7 +227,7 @@ class Net(nn.Module):
                                     coors,
                                     self.shape,
                                     batch_size,
-                                    self.grid,
+                                    # self.grid,
                                     enable_timer=enable_timer)
         return self.net(x)
 
@@ -362,18 +355,48 @@ def sort_bench():
         a_tv_1 = a_tv.clone()
         SpconvOps.sort_1d_by_key(a_tv_1[0], mask_argsort_tv[0])
 import json
+def waymo_data_large_debug(batch_size=1):
+    gen = Point2VoxelCPU3d([0.1, 0.1, 0.1], [-80, -80, -2, 80, 80, 6], 3,
+                           1200000, 1)
+    # gen = VoxelGeneratorV2([0.1, 0.1, 0.1], [-80, -80, -2, 80, 80, 6], 1,
+    #                        150000)
+    data = np.load(Path(__file__).parent / "data" / "benchmark-pc.npz")
+    pc = np.ascontiguousarray(data["pc"])
+    pc2 = pc.copy()
+    pc2[:, 1] += 1
+    pc3 = pc.copy()
+    pc3[:, 1] += 2
+    pc4 = pc.copy()
+    pc4[:, 1] += 3
+    pc5 = pc.copy()
+    pc5[:, 1] += 4
+    pc6 = pc.copy()
+    pc6[:, 1] += 5
+    pc7 = pc.copy()
+    pc7[:, 1] += 6
+    pc8 = pc.copy()
+    pc8[:, 1] += 7
+
+    pc = np.concatenate([pc, pc2, pc3, pc4, pc5, pc6, pc7, pc8])
+    print(pc.shape)
+    voxels_tv, indices_tv, _ = gen.point_to_voxel(tv.from_numpy(pc))
+    voxels = voxels_tv.numpy().reshape(-1, 3)
+    coors = indices_tv.numpy()
+    N = coors.shape[0]
+    print("num voxels", N)
+    coors = np.concatenate([np.full([N, 1], 0, coors.dtype), coors], axis=1)
+    return voxels, coors, gen.grid_size
 
 def main():
     import pickle
 
     np.random.seed(50051)
     torch.manual_seed(50051)
-    # voxels, coors, spatial_shape = waymo_data(num_features=128)
-    # with open("/home/yy/test_spconv.pkl", "wb") as f:
-    #     pickle.dump((voxels, coors, spatial_shape), f)
+    # voxels, coors, spatial_shape = waymo_data(num_features=3)
     with open(Path(__file__).parent / "data" / "test_spconv.pkl", "rb") as f:
         (voxels, coors, spatial_shape) = pickle.load(f)
-    # voxels, coors, spatial_shape = waymo_data_large()
+    # voxels, coors, spatial_shape = waymo_data_large_debug()
+    # breakpoint()
 
     print(spatial_shape)
     print(voxels.shape)
