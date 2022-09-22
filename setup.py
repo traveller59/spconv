@@ -38,9 +38,9 @@ if cuda_ver:
     cuda_ver = cuda_ver.replace(".", "") # 10.2 to 102
 
     RELEASE_NAME += "-cu{}".format(cuda_ver)
-    deps = ["cumm-cu{}>=0.2.8".format(cuda_ver)]
+    deps = ["cumm-cu{}>=0.2.9".format(cuda_ver)]
 else:
-    deps = ["cumm>=0.2.8"]
+    deps = ["cumm>=0.2.9"]
 
 
 
@@ -52,7 +52,7 @@ REQUIRES_PYTHON = '>=3.6'
 VERSION = None
 
 # What packages are required for this module to be executed?
-REQUIRED = ["pccm>=0.2.21", "pybind11>=2.6.0", "fire", "numpy", *deps]
+REQUIRED = ["pccm<0.4.0", "ccimport<0.4.0", "pybind11>=2.6.0", "fire", "numpy", *deps]
 
 # What packages are optional?
 EXTRAS = {
