@@ -72,6 +72,7 @@ Check [spconv 2.x algorithm introduction](docs/spconv2_algo.pdf) to understand s
 * greatly faster int8 kernels (~1.2x~2.7x) in ampere GPUs (tested in RTX 3090)
 * no python 3.6 support
 * nvrtc support: kernel in old GPUs will be compiled in runtime.
+* [libspconv](docs/PURE_CPP_BUILD.md): pure c++ build of all spconv ops. see [example](example/libspconv/run_build.sh)
 
 ## Usage
 

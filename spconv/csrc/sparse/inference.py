@@ -72,6 +72,7 @@ class InferenceOpsKernel(pccm.ParameterizedClass):
 
         namespace op = tv::arrayops;
         using nv_scalar_t = tv::equivalent_data_type_t<T>;
+        using MathOp = op::MathScalarOp<nv_scalar_t>;
         for (int i : tv::KernelLoopY<int>(size, block_idx_y, OneDim ? num_blocks_y : gridDim.y)) {{
             auto out_ptr = out_features + i * num_features;
             for (int j : tv::KernelLoopX<int>(num_features, block_idx_x, OneDim ? num_blocks_x : gridDim.x)) {{
@@ -89,7 +90,7 @@ class InferenceOpsKernel(pccm.ParameterizedClass):
                         break;
                     }}
                     case tv::gemm::Activation::kSigmoid:{{
-                        auto e = op::MathScalarOp<nv_scalar_t>::exp(-*o_nv);
+                        auto e = MathOp::exp(MathOp::neg(*o_nv));
                         o = T(1) / (T(1) + *reinterpret_cast<T*>( &e ));
                         break;
                     }}
@@ -115,6 +116,8 @@ class InferenceOpsKernel(pccm.ParameterizedClass):
         code.raw(f"""
         namespace op = tv::arrayops;
         using nv_scalar_t = tv::equivalent_data_type_t<T>;
+        using MathOp = op::MathScalarOp<nv_scalar_t>;
+
         for (int i : tv::KernelLoopX<int>(size)) {{
             T o = out_features[i];
             auto* o_nv = reinterpret_cast<nv_scalar_t*>(&o);
@@ -131,7 +134,7 @@ class InferenceOpsKernel(pccm.ParameterizedClass):
                     break;
                 }}
                 case tv::gemm::Activation::kSigmoid:{{
-                    auto e = op::MathScalarOp<nv_scalar_t>::exp(-*o_nv);
+                    auto e = MathOp::exp(MathOp::neg(*o_nv));
                     out_features[i] = T(1) / (T(1) + *reinterpret_cast<T*>( &e ));
                     break;
                 }}

@@ -111,3 +111,7 @@ venv.bak/
 __version__.py
 
 wheelhouse_tmp
+
+example/libspconv/cumm
+example/libspconv/spconv/include
+example/libspconv/spconv/src
