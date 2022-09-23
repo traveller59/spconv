@@ -20,7 +20,7 @@ class GemmTunerSimple:
             arch: 
         """
         ...
-    def get_all_available(self, a: Tensor, b: Tensor, c: Tensor, trans_a: bool, trans_b: bool, trans_c: bool, arch: Tuple[int, int], shuffle_type: int) -> List[GemmAlgoDesp]: 
+    def get_all_available(self, a: Tensor, b: Tensor, c: Tensor, trans_a: bool, trans_b: bool, trans_c: bool, arch: Tuple[int, int], shuffle_type: int, use_tf32: bool = True) -> List[GemmAlgoDesp]: 
         """
         Args:
             a: 
@@ -31,6 +31,7 @@ class GemmTunerSimple:
             trans_c: 
             arch: 
             shuffle_type: 
+            use_tf32: 
         """
         ...
     def cached_get_nvrtc_params(self, desp: GemmAlgoDesp, arch: Tuple[int, int], stream_int: int) -> NVRTCParams: 
@@ -41,7 +42,7 @@ class GemmTunerSimple:
             stream_int: 
         """
         ...
-    def tune_and_cache(self, a: Tensor, b: Tensor, c: Tensor, trans_a: bool, trans_b: bool, trans_c: bool, arch: Tuple[int, int], shuffle_type: int, a_inds: Tensor, b_inds: Tensor, c_inds: Tensor, hint: int = 0, alpha: float = 1.0, beta: float = 0.0, stream_int: int = 0, num_run: int = 5) -> Tuple[GemmTuneResult, float]: 
+    def tune_and_cache(self, a: Tensor, b: Tensor, c: Tensor, trans_a: bool, trans_b: bool, trans_c: bool, arch: Tuple[int, int], shuffle_type: int, a_inds: Tensor, b_inds: Tensor, c_inds: Tensor, hint: int = 0, alpha: float = 1.0, beta: float = 0.0, stream_int: int = 0, num_run: int = 5, use_tf32: bool = True) -> Tuple[GemmTuneResult, float]: 
         """
         Args:
             a: 
@@ -60,6 +61,7 @@ class GemmTunerSimple:
             beta: 
             stream_int: 
             num_run: 
+            use_tf32: 
         """
         ...
     def get_tuned_algo(self, a_dtype: int, b_dtype: int, c_dtype: int, a_shape: List[int], b_shape: List[int], c_shape: List[int], trans_a: bool, trans_b: bool, trans_c: bool, arch: Tuple[int, int], shuffle_type: int, a_inds_shape: List[int], b_inds_shape: List[int], c_inds_shape: List[int], hint: int = 0) -> Tuple[Any, bool]: 

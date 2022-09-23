@@ -34,6 +34,7 @@ from spconv.core_cc.csrc.sparse.convops import GemmTuneResult, ConvTuneResult
 from spconv.pytorch.core import SparseConvTensor
 from spconv.test_utils import TestCase
 from cumm import tensorview as tv
+from spconv.constants import SPCONV_ALLOW_TF32
 from cumm.conv.bases import NCHW, NHWC, ConvIterAlgo, ConvOpType
 import os
 from cumm.gemm.codeops import div_up
@@ -279,6 +280,8 @@ def _test_impgemm_conv_cuda(subm: bool):
     shapes = [[19, 18, 17]]
     batchsizes = [1]
     dtypes = [np.float32, np.float16]
+    # dtypes = [np.float16]
+
     # dtypes = [np.int8]
     test_case = TestCase()
     # in_channels = [32]
@@ -331,9 +334,11 @@ def _test_impgemm_conv_cuda(subm: bool):
             if SPCONV_CPP_GEMM:
                 avail_desps = CONV_CPP.get_all_available(inp_tv, weight_tv, output_tv, 
                     NHWC.layout_type.value, NHWC.layout_type.value, 
-                    NHWC.layout_type.value, NHWC.interleave, NHWC.interleave, NHWC.interleave, arch, op_type.value, -1, True, False)
+                    NHWC.layout_type.value, NHWC.interleave, NHWC.interleave, NHWC.interleave, arch, op_type.value, -1, True, False,
+                        use_tf32=SPCONV_ALLOW_TF32)
             else:
-                avail_desps = CONV.get_all_available(inp_tv, weight_tv, output_tv, NHWC, NHWC, NHWC, arch, op_type, -1)
+                avail_desps = CONV.get_all_available(inp_tv, weight_tv, output_tv, NHWC, NHWC, NHWC, arch, op_type, -1,
+                        use_tf32=SPCONV_ALLOW_TF32)
             if op_type == ConvOpType.kForward and tester.check_act:
                 act = tv.gemm.Activation.ReLU
             else:
@@ -535,9 +540,11 @@ def _test_impgemm_conv_cuda(subm: bool):
                     avail_desps = CONV_CPP.get_all_available(inp_tv, weight_tv, output_tv, 
                         NHWC.layout_type.value, NHWC.layout_type.value, 
                         NHWC.layout_type.value, NHWC.interleave, NHWC.interleave, NHWC.interleave, arch, 
-                        ConvOpType.kBackwardWeight.value, mask_width, True, False)
+                        ConvOpType.kBackwardWeight.value, mask_width, True, False,
+                        use_tf32=SPCONV_ALLOW_TF32)
                 else:
-                    avail_desps = CONV.get_all_available(inp_tv, weight_tv, output_tv, NHWC, NHWC, NHWC, arch, ConvOpType.kBackwardWeight, mask_width)
+                    avail_desps = CONV.get_all_available(inp_tv, weight_tv, output_tv, NHWC, NHWC, NHWC, arch, ConvOpType.kBackwardWeight, mask_width,
+                        use_tf32=SPCONV_ALLOW_TF32)
                 for desp in avail_desps:
                     weight_tv.zero_()
                     if subm:
@@ -753,9 +760,11 @@ def _test_native_conv_cuda(subm: bool):
                 b = weight_tv.select(1, tester.kv // 2)
                 c = inp_tv
                 if SPCONV_CPP_GEMM:
-                    avail_desps = GEMM_CPP.get_all_available(a, b, c, False, False, False, arch, ShuffleStrideType.ShuffleAC.value)
+                    avail_desps = GEMM_CPP.get_all_available(a, b, c, False, False, False, arch, ShuffleStrideType.ShuffleAC.value,
+                        use_tf32=SPCONV_ALLOW_TF32)
                 else:
-                    avail_desps = GEMM.get_all_available(a, b, c, False, False, False, arch, ShuffleStrideType.ShuffleAC)
+                    avail_desps = GEMM.get_all_available(a, b, c, False, False, False, arch, ShuffleStrideType.ShuffleAC,
+                        use_tf32=SPCONV_ALLOW_TF32)
 
                 for desp in avail_desps:
                     if subm:
@@ -827,9 +836,11 @@ def _test_native_conv_cuda(subm: bool):
                 b = inp_tv
                 c = weight_tv.select(1, tester.kv // 2)
                 if SPCONV_CPP_GEMM:
-                    avail_desps = GEMM_CPP.get_all_available(a, b, c, True, False, False, arch, ShuffleStrideType.ShuffleAB.value)
+                    avail_desps = GEMM_CPP.get_all_available(a, b, c, True, False, False, arch, ShuffleStrideType.ShuffleAB.value,
+                        use_tf32=SPCONV_ALLOW_TF32)
                 else:
-                    avail_desps = GEMM.get_all_available(a, b, c, True, False, False, arch, ShuffleStrideType.ShuffleAB)
+                    avail_desps = GEMM.get_all_available(a, b, c, True, False, False, arch, ShuffleStrideType.ShuffleAB,
+                        use_tf32=SPCONV_ALLOW_TF32)
 
                 for desp in avail_desps:
                     # print(desp, C, K, k, s, p, d)
@@ -900,8 +911,8 @@ def test_all_algo_unit():
     # for i in range(5):
     _test_impgemm_conv_cuda(True)
     _test_impgemm_conv_cuda(False)
-    # _test_native_conv_cuda(True)
-    # _test_native_conv_cuda(False)
+    _test_native_conv_cuda(True)
+    _test_native_conv_cuda(False)
 
 
 if __name__ == "__main__":

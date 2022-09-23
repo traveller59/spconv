@@ -56,6 +56,16 @@ Check [spconv 2.x algorithm introduction](docs/spconv2_algo.pdf) to understand s
 
 * spconv 2.2: ampere feature support (by [EvernightAurora](https://github.com/EvernightAurora)), pure c++ code generation, nvrtc, drop python 3.6
 
+## Spconv 2.2 vs Spconv 2.1
+
+* faster fp16 kernels (~5-30%) in ampere GPUs (tested in RTX 3090)
+* greatly faster int8 kernels (~1.2x~2.7x) in ampere GPUs (tested in RTX 3090)
+* no python 3.6 support
+* nvrtc support: kernel in old GPUs will be compiled in runtime.
+* [libspconv](docs/PURE_CPP_BUILD.md): pure c++ build of all spconv ops. see [example](example/libspconv/run_build.sh)
+* tf32 kernels, faster fp32 training, disabled by default. set ```import spconv as spconv_core; spconv_core.constants.SPCONV_ALLOW_TF32 = True``` to enable them.
+
+
 ## Spconv 2.1 vs Spconv 1.x
 
 * spconv now can be installed by **pip**. see install section in readme for more details. Users don't need to build manually anymore!
@@ -65,14 +75,6 @@ Check [spconv 2.x algorithm introduction](docs/spconv2_algo.pdf) to understand s
 * int8 op is ready, but we still need some time to figure out how to run int8 in pytorch.
 * [doesn't depend on pytorch binary](docs/FAQ.md#What-does-no-dependency-on-pytorch-mean), but you may need at least pytorch >= 1.5.0 to run spconv 2.x.
 * since spconv 2.x doesn't depend on pytorch binary (never in future), it's impossible to support torch.jit/libtorch inference.
-
-## Spconv 2.2 vs Spconv 2.1
-
-* faster fp16 kernels (~5-30%) in ampere GPUs (tested in RTX 3090)
-* greatly faster int8 kernels (~1.2x~2.7x) in ampere GPUs (tested in RTX 3090)
-* no python 3.6 support
-* nvrtc support: kernel in old GPUs will be compiled in runtime.
-* [libspconv](docs/PURE_CPP_BUILD.md): pure c++ build of all spconv ops. see [example](example/libspconv/run_build.sh)
 
 ## Usage
 

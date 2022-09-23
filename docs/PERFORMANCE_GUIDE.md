@@ -24,5 +24,5 @@
 * Currently fast algorithm only support kernel volume (prod of kernel size) <= 32, so don't use large kernel size.
 * make sure your channel size is multiple of 8 when using fp16. multiple of 32 is better.
 * spconv 2.x in Windows 10 is 1.5x~2x slower than Linux. use Linux if possible.
-
+* If you train with float32 and ampere or later GPUs, you can set ```spconv.constants.SPCONV_ALLOW_TF32``` to enable faster fp32 training.
 See [benchmark](BENCHMARK.md) for more performance details of different algorithms.

@@ -301,7 +301,8 @@ class SimpleGemm:
             trans_b: bool,
             trans_c: bool,
             arch: Tuple[int, int],
-            shuffle_type: ShuffleStrideType = ShuffleStrideType.NoShuffle):
+            shuffle_type: ShuffleStrideType = ShuffleStrideType.NoShuffle,
+            use_tf32: bool = True):
         if trans_c:
             trans_a = not trans_a
             trans_b = not trans_b
@@ -327,6 +328,9 @@ class SimpleGemm:
             # skip volta tensor op since it is very slow in architectures except volta.
             if arch >= (7, 5) and desp.algo == GemmAlgo.Volta.value:
                 continue
+            if not use_tf32:
+                if desp.tensorop[0] > 0 and a.dtype == tv.float32 and b.dtype == tv.float32:
+                    continue
             lda = a.stride[0]
             ldb = b.stride[0]
             ldc = c.stride[0]
@@ -424,14 +428,15 @@ class SimpleGemm:
             gather_data: tv.Tensor = tv.Tensor(),
             scatter_data: tv.Tensor = tv.Tensor(),
             # mm_func
-            stream: int = 0):
+            stream: int = 0,
+            use_tf32: bool = True):
         m, n, k = GemmMainUnitTest.extract_mnk(a.shape, b.shape, trans_a,
                                                trans_b, trans_c,
                                                shuffle_type.value,
                                                a_inds.shape, b_inds.shape,
                                                c_inds.shape)
         avail = self.get_all_available(a, b, c, trans_a, trans_b, trans_c,
-                                       arch, shuffle_type)
+                                       arch, shuffle_type, use_tf32)
         # c may be weight, may non-contiguous.
         # cumm.tensorview.Tensor don't support non-contiguous clone
         c_ = c.clone_whole_storage()
@@ -660,7 +665,8 @@ class SimpleConv:
                           arch: Tuple[int, int],
                           op_type: ConvOpType,
                           mask_width: int,
-                          fp32_accum: Optional[bool] = None):
+                          fp32_accum: Optional[bool] = None,
+                          use_tf32: bool = True):
 
         avail_algos = get_available_algo_str_from_arch(arch)
         finally_algos: List[ConvAlgoDesp] = []
@@ -692,6 +698,10 @@ class SimpleConv:
             # skip volta tensor op since it is very slow in architectures except volta.
             if arch >= (7, 5) and desp.algo == GemmAlgo.Volta.value:
                 continue
+            if not use_tf32:
+                if (desp.tensorop[0] > 0 and inp.dtype == tv.float32 
+                        and weight.dtype == tv.float32 and out.dtype == tv.float32):
+                    continue
             if arch >= (7, 0) and is_fp16:
                 if desp.algo == GemmAlgo.Simt:
                     continue
@@ -796,10 +806,11 @@ class SimpleConv:
                        alpha: float = 1.0,
                        beta: float = 0.0,
                        stream: int = 0,
-                       fp32_accum: Optional[bool] = None):
+                       fp32_accum: Optional[bool] = None,
+                        use_tf32: bool = True):
         avail = self.get_all_available(inp, weight, output, layout_i, layout_w,
                                        layout_o, arch, op_type, mask_width,
-                                       fp32_accum)
+                                       fp32_accum, use_tf32)
         inp = inp.clone()
         weight = weight.clone()
         output = output.clone()

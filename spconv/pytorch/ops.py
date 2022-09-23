@@ -26,7 +26,7 @@ from spconv.pytorch.core import ThrustSortAllocator
 from spconv.pytorch.cppcore import TorchAllocator, torch_tensor_to_tv, get_current_stream, get_arch, TorchSpconvMatmul
 from spconv.core_cc.csrc.sparse.all import SpconvOps
 from spconv.core_cc.csrc.sparse.alloc import ExternalAllocator
-from spconv.constants import SPCONV_CPP_INDICE_PAIRS, SPCONV_CPP_INDICE_PAIRS_IGEMM, SPCONV_CPP_GEMM, SPCONV_DIRECT_TABLE_HASH_SIZE_SCALE
+from spconv.constants import SPCONV_CPP_INDICE_PAIRS, SPCONV_CPP_INDICE_PAIRS_IGEMM, SPCONV_CPP_GEMM, SPCONV_DIRECT_TABLE_HASH_SIZE_SCALE, SPCONV_ALLOW_TF32
 import spconv.core_cc as _ext
 from spconv.core_cc.csrc.sparse.convops.spops import ConvGemmOps
 from spconv.core_cc.csrc.sparse.inference import InferenceOps
@@ -831,7 +831,8 @@ def indice_conv(features: torch.Tensor,
                                 FILTER_HWIO, features_tv, filters_tv,
                                 indice_pairs_tv, indice_pair_num_tv, arch,
                                 num_activate_out, inverse, subm, algo.value,
-                                stream, bias_tv, act_alpha, act_beta, act_type)
+                                stream, bias_tv, act_alpha, act_beta, act_type,
+                                use_tf32=SPCONV_ALLOW_TF32)
         out_features = alloc.allocated[AllocKeys.OutFeatures]
         return out_features
     if not features.is_cuda:
@@ -1011,7 +1012,8 @@ def indice_conv(features: torch.Tensor,
             alpha=1.0,
             beta=0.0,
             hint=AlgoHint.Fowrard.value,
-            stream=stream)
+            stream=stream,
+            use_tf32=SPCONV_ALLOW_TF32)
     # CONV.stream_synchronize(stream)
     # t = time.time()
     with timer.record("forward", stream):
@@ -1103,7 +1105,7 @@ def indice_conv_backward(features: torch.Tensor,
                                          features_tv, filters_tv, out_bp_tv,
                                          indice_pairs_tv, indice_pair_num_tv,
                                          arch, inverse, subm, algo.value,
-                                         stream)
+                                         stream, use_tf32=SPCONV_ALLOW_TF32)
         din = alloc.allocated[AllocKeys.DIn]
         df = alloc.allocated[AllocKeys.DFilters]
         return din, df
@@ -1270,7 +1272,8 @@ def indice_conv_backward(features: torch.Tensor,
             alpha=1.0,
             beta=0.0,
             hint=AlgoHint.BackwardInput.value,
-            stream=stream)
+            stream=stream,
+            use_tf32=SPCONV_ALLOW_TF32)
     if is_KC_not_CK:
         a_wgrad = out_bp_tv
         b_wgrad = features_tv
@@ -1317,7 +1320,8 @@ def indice_conv_backward(features: torch.Tensor,
             alpha=1.0,
             beta=0.0,
             hint=AlgoHint.BackwardWeight.value,
-            stream=stream)
+            stream=stream,
+            use_tf32=SPCONV_ALLOW_TF32)
         # print(tuned_res_wgrad.algo_desp, tuned_res_wgrad.splitk, min_time)
     # get workspace size for wgrad
     if is_KC_not_CK:
@@ -1462,7 +1466,8 @@ def implicit_gemm(features: torch.Tensor,
             alloc, CONV_CPP, features_tv, filters_tv, pair_fwd_tv,
             pair_mask_fwd_splits_tv, mask_argsort_fwd_splits_tv,
             num_activate_out, mask_tv, arch, is_train, is_subm, stream,
-            timer_cpp, auto_fp32_accum, fp32_accum, bias_tv, act_alpha, act_beta, act_type)
+            timer_cpp, auto_fp32_accum, fp32_accum, bias_tv, act_alpha, act_beta, act_type,
+            use_tf32=SPCONV_ALLOW_TF32)
         out_features = alloc.allocated[AllocKeys.OutFeatures]
         mask_output_fwd = alloc.allocated.get(AllocKeys.MaskOutputFwd, None)
         if is_train:
@@ -1529,7 +1534,8 @@ def implicit_gemm(features: torch.Tensor,
             reverse_mask=False,
             mask_filter=masks[0].item(),
             stream=stream,
-            fp32_accum=fp32_accum)
+            fp32_accum=fp32_accum,
+            use_tf32=SPCONV_ALLOW_TF32)
     mask_width = tune_res.algo_desp.tile_shape[0]
     if is_train:
         mask_output_fwd = torch.empty(
@@ -1741,7 +1747,8 @@ def implicit_gemm_backward(features: torch.Tensor,
             pair_bwd_tv, pair_mask_fwd_splits_tv, pair_mask_bwd_splits_tv,
             mask_argsort_fwd_splits_tv, mask_argsort_bwd_splits_tv,
             mask_output_fwd_tv, mask_tv, arch, mask_width, is_subm, stream,
-            timer_cpp, auto_fp32_accum, fp32_accum)
+            timer_cpp, auto_fp32_accum, fp32_accum,
+            use_tf32=SPCONV_ALLOW_TF32)
         din = alloc.allocated[AllocKeys.DIn]
         dfilters = alloc.allocated[AllocKeys.DFilters]
         return din, dfilters
@@ -1817,7 +1824,8 @@ def implicit_gemm_backward(features: torch.Tensor,
                                                 reverse_mask=is_subm,
                                                 mask_filter=masks[0].item(),
                                                 stream=stream,
-                                                fp32_accum=fp32_accum)
+                                                fp32_accum=fp32_accum,
+                                                use_tf32=SPCONV_ALLOW_TF32)
     if wgrad_tune_res is None:
         wgrad_tune_res, _ = CONV.tune_and_cache(
             ConvOpType.kBackwardWeight,
@@ -1835,7 +1843,8 @@ def implicit_gemm_backward(features: torch.Tensor,
             mask_filter=masks[0].item(),
             mask_output=tv.Tensor(),
             mask_width=mask_width,
-            stream=stream)
+            stream=stream,
+            use_tf32=SPCONV_ALLOW_TF32)
     workspace_size = CONV.query_workspace_size(wgrad_tune_res.algo_desp,
                                                wgrad_tune_res.splitk,
                                                ConvOpType.kBackwardWeight,

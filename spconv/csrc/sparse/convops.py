@@ -538,6 +538,8 @@ class GemmTunerSimple(pccm.ParameterizedClass):
         code.arg("trans_a, trans_b, trans_c", "bool")
         code.arg("arch", "std::tuple<int, int>")
         code.arg("shuffle_type", "int")
+        code.arg("use_tf32", "bool", "true")
+
         code.raw(f"""
         if (trans_c){{
             trans_a = !trans_a;
@@ -561,6 +563,12 @@ class GemmTunerSimple(pccm.ParameterizedClass):
             }}
             if (arch >= std::make_tuple(7, 5) && desp.algo == {pccm.literal(GemmAlgo.Volta.value)}){{
                 continue;
+            }}
+            if (!use_tf32){{
+                if (desp.tensorop[0] > 0 && a.dtype() == tv::float32 && b.dtype() == tv::float32){{
+                    // tf32 op
+                    continue;
+                }}
             }}
             auto lda = a.stride(0);
             auto ldb = b.stride(0);
@@ -656,6 +664,8 @@ class GemmTunerSimple(pccm.ParameterizedClass):
         code.arg("beta", "float", "0.0")
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
         code.arg("num_run", "int", "5")
+        code.arg("use_tf32", "bool", "true")
+
         if CUMM_CPU_ONLY_BUILD:
             code.raw(f"TV_THROW_RT_ERR(\"not implemented for cpu!!!\")")
             code.raw("return std::make_tuple(GemmTuneResult(), -1.0f);")
@@ -677,8 +687,8 @@ class GemmTunerSimple(pccm.ParameterizedClass):
         auto n = std::get<1>(mnk);
         auto k = std::get<2>(mnk);
 
-        auto avail = get_all_available(a, b, c, trans_a,
-                                    trans_b, trans_c, arch, shuffle_type);
+        auto avail = get_all_available(a, b, c, trans_a, trans_b, 
+            trans_c, arch, shuffle_type, use_tf32);
         auto c_ = c.clone_whole_storage();
         std::vector<GemmTuneResult> all_profile_res;
         std::vector<int> splitk_tests;
@@ -969,6 +979,7 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         code.arg("mask_width", "int")
         code.arg("auto_fp32_accum", "bool")
         code.arg("fp32_accum", "bool")
+        code.arg("use_tf32", "bool", "true")
 
         code.raw(f"""
         tv::gemm::ConvOpType op_type_cpp = static_cast<tv::gemm::ConvOpType>(op_type);
@@ -1009,6 +1020,12 @@ class ConvTunerSimple(pccm.ParameterizedClass):
             }}
             if (arch >= std::make_tuple(7, 5) && desp.algo == {pccm.literal(GemmAlgo.Volta.value)}){{
                 continue;
+            }}
+            if (!use_tf32){{
+                if (desp.tensorop[0] > 0 && inp.dtype() == tv::float32 && weight.dtype() == tv::float32 && out.dtype() == tv::float32){{
+                    // tf32 op
+                    continue;
+                }}
             }}
             if (arch >= std::make_tuple(7, 0) && is_fp16){{
                 // skip simt fp16 kernels if we have tensor core
@@ -1086,6 +1103,8 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         code.arg("auto_fp32_accum", "bool", "true")
         code.arg("fp32_accum", "bool", "false")
         code.arg("num_run", "int", "5")
+        code.arg("use_tf32", "bool", "true")
+
         if CUMM_CPU_ONLY_BUILD:
             code.raw(f"TV_THROW_RT_ERR(\"not implemented for cpu!!!\")")
             return code.ret(
@@ -1099,7 +1118,7 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         auto avail = get_all_available(inp, weight, output, layout_i, layout_w,
                                        layout_o, interleave_i, interleave_w, interleave_o,
                                        arch, op_type, mask_width,
-                                       auto_fp32_accum, fp32_accum);
+                                       auto_fp32_accum, fp32_accum, use_tf32);
         inp = inp.clone();
         weight = weight.clone();
         output = output.clone();
@@ -1408,6 +1427,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
         code.arg("act_alpha", f"float", "0.0")
         code.arg("act_beta", f"float", "0.0")
         code.arg("act_type", f"tv::gemm::Activation", "tv::gemm::Activation::kNone", "cumm.tensorview.gemm.Activation = Activation.None_")
+        code.arg("use_tf32", "bool", "true")
 
         code.raw(f"""
         int kv_dim, out_channel, kv;
@@ -1571,7 +1591,9 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 {AlgoHint.Fowrard.value},
                 1.0,
                 0.0,
-                stream_int);
+                stream_int,
+                5, // num_run
+                use_tf32);
             tune_res = std::get<0>(tune_res_time);
         }}
 
@@ -1640,6 +1662,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
         code.arg("subm", "bool", "false")
         code.arg("algo", "int", f"{ConvAlgo.Native.value}")
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
+        code.arg("use_tf32", "bool", "true")
 
         code.raw(f"""
         int kv_dim, out_channel, kv;
@@ -1794,7 +1817,9 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 {AlgoHint.BackwardInput.value},
                 1.0,
                 0.0,
-                stream_int);
+                stream_int,
+                5, // num_run
+                use_tf32);
             tuned_res_dgrad = std::get<0>(tune_res_time);
         }}
         tv::Tensor a_wgrad, b_wgrad;
@@ -1852,7 +1877,9 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 {AlgoHint.BackwardWeight.value},
                 1.0,
                 0.0,
-                stream_int);
+                stream_int,
+                5, // num_run
+                use_tf32);
             tuned_res_wgrad = std::get<0>(tune_res_time);
         }}
         
@@ -1966,6 +1993,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
         code.arg("act_alpha", f"float", "0.0")
         code.arg("act_beta", f"float", "0.0")
         code.arg("act_type", f"tv::gemm::Activation", "tv::gemm::Activation::kNone", "cumm.tensorview.gemm.Activation = Activation.None_")
+        code.arg("use_tf32", "bool", "true")
 
 
         if CUMM_CPU_ONLY_BUILD:
@@ -2025,7 +2053,9 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 1.0, 0.0,
                 stream_int, 
                 auto_fp32_accum,
-                fp32_accum);
+                fp32_accum,
+                5, // num_run
+                use_tf32);
             tune_res = std::get<0>(tune_res_time);
         }}
 
@@ -2109,6 +2139,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
                  "cumm.tensorview.CUDAKernelTimer = CUDAKernelTimer(False)")
         code.arg("auto_fp32_accum", "bool", "true")
         code.arg("fp32_accum", "bool", "false")
+        code.arg("use_tf32", "bool", "true")
 
         if CUMM_CPU_ONLY_BUILD:
             code.raw(f"TV_THROW_RT_ERR(\"not implemented for cpu!!!\")")
@@ -2192,7 +2223,9 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 1.0, 0.0,
                 stream_int, 
                 auto_fp32_accum,
-                fp32_accum);
+                fp32_accum,
+                5, // num_run
+                use_tf32);
             dgrad_tune_res = std::get<0>(tune_res_time);
         }}
         if (!wgrad_exists){{
@@ -2214,7 +2247,9 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 1.0, 0.0,
                 stream_int, 
                 auto_fp32_accum,
-                fp32_accum);
+                fp32_accum,
+                5, // num_run
+                use_tf32);
             wgrad_tune_res = std::get<0>(tune_res_time);
         }}
         int ws_size = conv_tuner.query_workspace_size(wgrad_tune_res.algo_desp,
