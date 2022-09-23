@@ -7,7 +7,7 @@ set(CUMM_DISABLE_CMAKE_INSTALL ON CACHE BOOL "enable X functionality" FORCE)
 add_subdirectory(cumm)
 add_subdirectory(spconv)
 
-add_executable(main main.cc)
+add_executable(main main.cu)
 # SPCONV2_INCLUDE_PATH come from spconv/CMakeLists.txt
 target_include_directories(main PRIVATE ${SPCONV2_INCLUDE_PATH})
 target_link_libraries(main spconv cumm::cumm)

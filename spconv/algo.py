@@ -55,7 +55,6 @@ from spconv.core_cc.csrc.sparse.convops.convops import ConvTunerSimple as ConvTu
 
 ALL_ALGO_DESPS = GemmMainUnitTest.get_all_algo_desp()
 ALL_CONV_ALGO_DESPS = ConvMainUnitTest.get_all_conv_algo_desp()
-_GEMM_STATIC_KEY = Tuple[bool, bool, bool, int, int, int, int, str]
 
 
 class SimpleGemmAlgoMeta:
@@ -205,6 +204,8 @@ class ConvTunerSimple(ConvTunerSimpleBase):
         self._nvrtc_caches[key] = nvrtc_params
         return nvrtc_params
 
+_GEMM_STATIC_KEY = Tuple[bool, bool, bool, int, int, int, int]
+
 class SimpleGemm:
 
     def __init__(self, prebuilt_desps: List[GemmAlgoDesp]) -> None:
@@ -256,7 +257,7 @@ class SimpleGemm:
     @staticmethod
     def get_static_key(d: GemmAlgoDesp) -> _GEMM_STATIC_KEY:
         return (d.trans_a, d.trans_b, d.trans_c, d.dtype_a, d.dtype_b,
-                d.dtype_c, d.shuffle_type.value, d.algo)
+                d.dtype_c, d.shuffle_type.value)
 
     def device_synchronize(self):
         return GemmMainUnitTest.device_synchronize()
@@ -310,119 +311,34 @@ class SimpleGemm:
         avail_algos = get_available_algo_str_from_arch(arch)
         finally_algos: List[GemmAlgoDesp] = []
         # print(self.static_key_to_desps)
-        for algo in avail_algos:
-            static_key = (trans_a, trans_b, trans_c, a.dtype, b.dtype, c.dtype,
-                          shuffle_type.value, algo)
+        static_key = (trans_a, trans_b, trans_c, a.dtype, b.dtype, c.dtype,
+                        shuffle_type.value)
+        # for algo in avail_algos:
+        #     static_key = (trans_a, trans_b, trans_c, a.dtype, b.dtype, c.dtype,
+        #                   shuffle_type.value)
             # print(static_key)
-            desps = self.static_key_to_desps.get(static_key, None)
-            if desps is None or len(desps) == 0:
+        desps = self.static_key_to_desps.get(static_key, None)
+        if desps is None or len(desps) == 0:
+            return finally_algos
+        # print(desps)
+        for desp in desps:
+            if arch < desp.min_arch:
                 continue
-            # print(desps)
-            for desp in desps:
-                # skip volta tensor op since it is very slow in architectures except volta.
-                if arch >= (7, 5) and desp.algo == GemmAlgo.Volta.value:
-                    continue
-                lda = a.stride[0]
-                ldb = b.stride[0]
-                ldc = c.stride[0]
-                if desp.supported_ldx(lda, ldb, ldc):
-                    if arch not in COMPILED_CUDA_ARCHS:
-                        desp = desp.copy()
-                        desp.is_nvrtc = True
-                    if SPCONV_DEBUG_NVRTC_KERNELS:
-                        desp.is_nvrtc = True
-                    finally_algos.append(desp)
+            # skip volta tensor op since it is very slow in architectures except volta.
+            if arch >= (7, 5) and desp.algo == GemmAlgo.Volta.value:
+                continue
+            lda = a.stride[0]
+            ldb = b.stride[0]
+            ldc = c.stride[0]
+            if desp.supported_ldx(lda, ldb, ldc):
+                if arch not in COMPILED_CUDA_ARCHS:
+                    desp = desp.copy()
+                    desp.is_nvrtc = True
+                if SPCONV_DEBUG_NVRTC_KERNELS:
+                    desp.is_nvrtc = True
+                finally_algos.append(desp)
         return finally_algos
 
-    def select(self,
-               a: tv.Tensor,
-               b: tv.Tensor,
-               c: tv.Tensor,
-               trans_a: bool,
-               trans_b: bool,
-               trans_c: bool,
-               arch: Tuple[int, int],
-               shuffle_type: ShuffleStrideType = ShuffleStrideType.NoShuffle,
-               a_inds: tv.Tensor = tv.Tensor(),
-               b_inds: tv.Tensor = tv.Tensor(),
-               c_inds: tv.Tensor = tv.Tensor(),
-               hint: int = AlgoHint.NoHint.value):
-        m, n, k = GemmMainUnitTest.extract_mnk(a.shape, b.shape, trans_a,
-                                               trans_b, trans_c,
-                                               shuffle_type.value,
-                                               a_inds.shape, b_inds.shape,
-                                               c_inds.shape)
-        if trans_c:
-            trans_a = not trans_a
-            trans_b = not trans_b
-            trans_a, trans_b = trans_b, trans_a
-            a, b = b, a
-            trans_c = False
-        avail_algos = get_available_algo_str_from_arch(arch)
-        finally_algos: List[GemmAlgoDesp] = []
-        for algo in avail_algos:
-            static_key = (trans_a, trans_b, trans_c, a.dtype, b.dtype, c.dtype,
-                          shuffle_type.value, algo)
-            desps = self.static_key_to_desps.get(static_key, None)
-            if desps is None or len(desps) == 0:
-                continue
-            meta = self.static_key_to_meta[static_key]
-            # for shuffle stride algos, we need to make channel tile size as large as possible.
-            # so if ShuffleAC, we need to make k largest.
-            selected_algo_desps = GemmMainUnitTest.simple_select_tile_shape(
-                m,
-                n,
-                k,
-                meta.tile_ms,
-                meta.tile_ns,
-                meta.tile_ks,
-                meta.tile_shape_to_algos,
-                large_k_first=shuffle_type == shuffle_type.ShuffleAC)
-            if not selected_algo_desps:
-                candidate = desps
-            else:
-                candidate = [desps[i] for i in selected_algo_desps]
-            # select by hint
-            if hint == 0:
-                return candidate[0]
-            if hint & (AlgoHint.Fowrard.value | AlgoHint.BackwardInput.value):
-                # m may be huge, n and k are small
-                # don't need mixed precision
-                # don't need splitk
-                finally_algos = []
-                if a.dtype == tv.float16:
-                    dacc = tv.float16
-                    dcomp = tv.float16
-                    for can in candidate:
-                        if can.dacc == dacc and can.dcomp == dcomp:
-                            finally_algos.append(can)
-                else:
-                    finally_algos = candidate
-            elif hint & AlgoHint.BackwardWeight.value:
-                # k is huge
-                # don't support i8
-                # if f16, acc and comp must be f32
-                finally_algos = []
-                candidate_filtered: List[GemmAlgoDesp] = list(
-                    filter(lambda x: x.split_k_serial, candidate))
-                if not candidate_filtered:
-                    candidate_filtered = candidate
-                if a.dtype == tv.int8:
-                    continue
-                elif a.dtype == tv.float16:
-                    dacc = tv.float32
-                    dcomp = tv.float32
-                    for can in candidate_filtered:
-                        if can.dacc == dacc and can.dcomp == dcomp:
-                            finally_algos.append(can)
-                else:
-                    finally_algos = candidate_filtered
-            else:
-                return candidate[0]
-        # print(finally_algos)
-        if finally_algos:
-            return finally_algos[0]
-        return None
 
     def get_tuned_algo(
             self,
@@ -672,7 +588,7 @@ class SimpleGemm:
         return algo_desp
 
 
-_CONV_STATIC_KEY = Tuple[int, int, int, int, int, int, int, int, int, str, int]
+_CONV_STATIC_KEY = Tuple[int, int, int, int, int, int, int, int, int, int]
 
 
 class SimpleConv:
@@ -729,7 +645,7 @@ class SimpleConv:
     def get_static_key(d: ConvAlgoDesp) -> _CONV_STATIC_KEY:
         return (d.layout_i.value, d.layout_w.value, d.layout_o.value,
                 d.interleave_i, d.interleave_w, d.interleave_o, d.dtype_input,
-                d.dtype_weight, d.dtype_output, d.algo, d.op_type.value)
+                d.dtype_weight, d.dtype_output, d.op_type.value)
 
     def device_synchronize(self):
         return GemmMainUnitTest.device_synchronize()
@@ -762,41 +678,42 @@ class SimpleConv:
             else:
                 use_f32_as_accum = fp32_accum
         # use_f32_as_accum = False
-        for algo in avail_algos:
-            static_key = (layout_i.layout_type.value,
-                          layout_w.layout_type.value,
-                          layout_o.layout_type.value, layout_i.interleave,
-                          layout_w.interleave, layout_o.interleave, inp.dtype,
-                          weight.dtype, out.dtype, algo, op_type.value)
-            desps = self.static_key_to_desps.get(static_key, None)
-            if desps is None or len(desps) == 0:
+        static_key = (layout_i.layout_type.value,
+                        layout_w.layout_type.value,
+                        layout_o.layout_type.value, layout_i.interleave,
+                        layout_w.interleave, layout_o.interleave, inp.dtype,
+                        weight.dtype, out.dtype, op_type.value)
+        desps = self.static_key_to_desps.get(static_key, None)
+        if desps is None or len(desps) == 0:
+            return finally_algos
+        for desp in desps:
+            if arch < desp.min_arch:
                 continue
-            for desp in desps:
-                # skip volta tensor op since it is very slow in architectures except volta.
-                if arch >= (7, 5) and desp.algo == GemmAlgo.Volta.value:
+            # skip volta tensor op since it is very slow in architectures except volta.
+            if arch >= (7, 5) and desp.algo == GemmAlgo.Volta.value:
+                continue
+            if arch >= (7, 0) and is_fp16:
+                if desp.algo == GemmAlgo.Simt:
                     continue
-                if arch >= (7, 0) and is_fp16:
-                    if desp.algo == GemmAlgo.Simt:
+                if use_f32_as_accum:
+                    if desp.dacc == tv.float16:
                         continue
-                    if use_f32_as_accum:
-                        if desp.dacc == tv.float16:
-                            continue
 
-                ldi = inp.dim(-1)
-                ldw = weight.dim(-1)
-                ldo = out.dim(-1)
-                mask_width_valid = True
+            ldi = inp.dim(-1)
+            ldw = weight.dim(-1)
+            ldo = out.dim(-1)
+            mask_width_valid = True
 
-                if desp.op_type == ConvOpType.kBackwardWeight.value:
-                    assert mask_width > 0
-                    mask_width_valid = mask_width % desp.tile_shape[2] == 0
-                if desp.supported_ldx_conv(ldi, ldw, ldo) and mask_width_valid:
-                    if arch not in COMPILED_CUDA_ARCHS:
-                        desp = desp.copy()
-                        desp.is_nvrtc = True
-                    if SPCONV_DEBUG_NVRTC_KERNELS:
-                        desp.is_nvrtc = True
-                    finally_algos.append(desp)
+            if desp.op_type == ConvOpType.kBackwardWeight.value:
+                assert mask_width > 0
+                mask_width_valid = mask_width % desp.tile_shape[2] == 0
+            if desp.supported_ldx_conv(ldi, ldw, ldo) and mask_width_valid:
+                if arch not in COMPILED_CUDA_ARCHS:
+                    desp = desp.copy()
+                    desp.is_nvrtc = True
+                if SPCONV_DEBUG_NVRTC_KERNELS:
+                    desp.is_nvrtc = True
+                finally_algos.append(desp)
         return finally_algos
 
     def get_tuned_algo(self,
@@ -1058,5 +975,5 @@ CONV_CPP = ConvTunerSimple([
             for p in ALL_IMPGEMM_PARAMS])
 
 if __name__ == "__main__":
-    print(len(ALL_CONV_ALGO_DESPS))
-    print(ALL_CONV_ALGO_DESPS[0])
+    for desp in ALL_CONV_ALGO_DESPS:
+        print(desp, desp.min_arch)

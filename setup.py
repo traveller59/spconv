@@ -48,11 +48,11 @@ DESCRIPTION = 'spatial sparse convolution'
 URL = 'https://github.com/traveller59/spconv'
 EMAIL = 'yanyan.sub@outlook.com'
 AUTHOR = 'Yan Yan'
-REQUIRES_PYTHON = '>=3.6'
+REQUIRES_PYTHON = '>=3.7'
 VERSION = None
 
 # What packages are required for this module to be executed?
-REQUIRED = ["pccm>=0.3.5", "pybind11>=2.6.0", "fire", "numpy", *deps]
+REQUIRED = ["pccm>=0.4.0", "ccimport>=0.4.0", "pybind11>=2.6.0", "fire", "numpy", *deps]
 
 # What packages are optional?
 EXTRAS = {

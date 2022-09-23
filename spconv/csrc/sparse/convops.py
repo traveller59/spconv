@@ -4,9 +4,7 @@ from cumm.common import GemmBasicHost, NlohmannJson, TensorView
 from cumm.constants import CUMM_CPU_ONLY_BUILD
 from cumm.conv.main import ConvMainUnitTest
 from cumm.gemm.algospec.core import (_GEMM_MIN_ARCH_TO_ALGO, GemmAlgo,
-                                     ShuffleStrideType,
-                                     get_available_algo_str_from_arch,
-                                     get_min_arch_of_algo_str)
+                                     ShuffleStrideType)
 from cumm.gemm.main import GemmMainUnitTest
 from spconv.constants import NDIM_DONT_CARE, SPCONV_BWD_SPLITK, AllocKeys
 from spconv.core import AlgoHint, ConvAlgo
@@ -472,7 +470,7 @@ class GemmTunerSimple(pccm.ParameterizedClass):
 
         self.add_typedef(
             "static_key_t", "std::tuple<bool, bool, bool, int, "
-            "int, int, int, std::string>")
+            "int, int, int>")
         self.add_typedef("algo_cache_key_t", "std::tuple<int, "
                          "int, int, int, int>")
 
@@ -501,7 +499,7 @@ class GemmTunerSimple(pccm.ParameterizedClass):
 
         for (auto& d : desps){{
             static_key_t static_key = std::make_tuple(d.trans_a(), d.trans_b(), d.trans_c(), d.dtype_a, d.dtype_b,
-                d.dtype_c, int(d.shuffle_type), d.algo);
+                d.dtype_c, int(d.shuffle_type));
             auto& vec = static_key_to_desps_[static_key];
             vec.push_back(d);
         }}
@@ -548,31 +546,32 @@ class GemmTunerSimple(pccm.ParameterizedClass):
             std::swap(a, b);
             trans_c = false;
         }}
-        auto avail_algos = get_available_algo_str_from_arch(arch);
+        // auto avail_algos = get_available_algo_str_from_arch(arch);
         std::vector<tv::gemm::GemmAlgoDesp> finally_algos;
         auto is_arch_compiled = CompileInfo::arch_is_compiled_gemm(arch);
-        for (auto algo : avail_algos){{
-            static_key_t static_key = std::make_tuple(trans_a, trans_b, trans_c, int(a.dtype()),
-                int(b.dtype()), int(c.dtype()), shuffle_type, algo);
-            if (static_key_to_desps_.find(static_key) == static_key_to_desps_.end()){{
+        static_key_t static_key = std::make_tuple(trans_a, trans_b, trans_c, int(a.dtype()),
+            int(b.dtype()), int(c.dtype()), shuffle_type);
+        if (static_key_to_desps_.find(static_key) == static_key_to_desps_.end()){{
+            return finally_algos;
+        }}
+        auto& desps = static_key_to_desps_.at(static_key);
+        for (auto& desp : desps){{
+            if (arch < desp.min_arch){{
                 continue;
             }}
-            auto& desps = static_key_to_desps_.at(static_key);
-            for (auto& desp : desps){{
-                if (arch >= std::make_tuple(7, 5) && desp.algo == {pccm.literal(GemmAlgo.Volta.value)}){{
-                    continue;
-                }}
-                auto lda = a.stride(0);
-                auto ldb = b.stride(0);
-                auto ldc = c.stride(0);
-                if (desp.supported_ldx(lda, ldb, ldc)){{
-                    if (!is_arch_compiled){{
-                        auto desp2 = desp;
-                        desp2.is_nvrtc = true;
-                        finally_algos.push_back(desp2);
-                    }}else{{
-                        finally_algos.push_back(desp);
-                    }}
+            if (arch >= std::make_tuple(7, 5) && desp.algo == {pccm.literal(GemmAlgo.Volta.value)}){{
+                continue;
+            }}
+            auto lda = a.stride(0);
+            auto ldb = b.stride(0);
+            auto ldc = c.stride(0);
+            if (desp.supported_ldx(lda, ldb, ldc)){{
+                if (!is_arch_compiled){{
+                    auto desp2 = desp;
+                    desp2.is_nvrtc = true;
+                    finally_algos.push_back(desp2);
+                }}else{{
+                    finally_algos.push_back(desp);
                 }}
             }}
         }}
@@ -895,7 +894,7 @@ class ConvTunerSimple(pccm.ParameterizedClass):
 
         self.add_typedef("static_key_t",
                          ("std::tuple<int, int, int, int, int, "
-                          "int, int, int, int, std::string, int>"))
+                          "int, int, int, int, int>"))
         self.add_typedef(
             "algo_cache_key_t", "std::tuple<int, int, int, int, "
             "int, int, int, int>")
@@ -927,7 +926,7 @@ class ConvTunerSimple(pccm.ParameterizedClass):
             static_key_t static_key = std::make_tuple(
                 int(d.layout_i), int(d.layout_w), int(d.layout_o),
                 d.interleave_i, d.interleave_w, d.interleave_o, d.dtype_input(),
-                d.dtype_weight(), d.dtype_output(), d.algo, int(d.op_type));
+                d.dtype_weight(), d.dtype_output(), int(d.op_type));
             auto& vec = static_key_to_desps_[static_key];
             vec.push_back(d);
         }}
@@ -974,7 +973,6 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         code.raw(f"""
         tv::gemm::ConvOpType op_type_cpp = static_cast<tv::gemm::ConvOpType>(op_type);
 
-        auto avail_algos = get_available_algo_str_from_arch(arch);
         bool is_fp16 = (inp.dtype() == tv::float16 && 
             weight.dtype() == tv::float16 && out.dtype() == tv::float16);
         bool use_f32_as_accum = false;
@@ -997,49 +995,50 @@ class ConvTunerSimple(pccm.ParameterizedClass):
 
         std::vector<tv::gemm::ConvAlgoDesp> finally_algos;
         auto is_arch_compiled = CompileInfo::arch_is_compiled_gemm(arch);
-        for (auto algo : avail_algos){{
-            static_key_t static_key = std::make_tuple(
-                layout_i, layout_w, layout_o,
-                interleave_i, interleave_w, interleave_o, inp.dtype(),
-                weight.dtype(), out.dtype(), algo, op_type);
-            if (static_key_to_desps_.find(static_key) == static_key_to_desps_.end()){{
+        static_key_t static_key = std::make_tuple(
+            layout_i, layout_w, layout_o,
+            interleave_i, interleave_w, interleave_o, inp.dtype(),
+            weight.dtype(), out.dtype(), op_type);
+        if (static_key_to_desps_.find(static_key) == static_key_to_desps_.end()){{
+            return finally_algos;
+        }}
+        auto& desps = static_key_to_desps_.at(static_key);
+        for (auto& desp : desps){{
+            if (arch < desp.min_arch){{
                 continue;
             }}
-            auto& desps = static_key_to_desps_.at(static_key);
-            for (auto& desp : desps){{
-                if (arch >= std::make_tuple(7, 5) && desp.algo == {pccm.literal(GemmAlgo.Volta.value)}){{
+            if (arch >= std::make_tuple(7, 5) && desp.algo == {pccm.literal(GemmAlgo.Volta.value)}){{
+                continue;
+            }}
+            if (arch >= std::make_tuple(7, 0) && is_fp16){{
+                // skip simt fp16 kernels if we have tensor core
+                if (desp.algo == {pccm.literal(GemmAlgo.Simt.value)}){{
                     continue;
                 }}
-                if (arch >= std::make_tuple(7, 0) && is_fp16){{
-                    // skip simt fp16 kernels if we have tensor core
-                    if (desp.algo == {pccm.literal(GemmAlgo.Simt.value)}){{
+                if (use_f32_as_accum){{
+                    if (desp.dacc == tv::float16){{
                         continue;
                     }}
-                    if (use_f32_as_accum){{
-                        if (desp.dacc == tv::float16){{
-                            continue;
-                        }}
-                    }}
                 }}
+            }}
 
-                int ldi = inp.dim(-1);
-                int ldw = weight.dim(-1);
-                int ldo = out.dim(-1);
+            int ldi = inp.dim(-1);
+            int ldw = weight.dim(-1);
+            int ldo = out.dim(-1);
 
-                bool mask_width_valid = true;
+            bool mask_width_valid = true;
 
-                if (desp.op_type == tv::gemm::ConvOpType::kBackwardWeight){{
-                    TV_ASSERT_RT_ERR(mask_width > 0, "eroro");
-                    mask_width_valid = mask_width % desp.tile_shape[2] == 0;
-                }}
-                if (desp.supported_ldx_conv(ldi, ldw, ldo) && mask_width_valid){{
-                    if (!is_arch_compiled){{
-                        auto desp2 = desp;
-                        desp2.is_nvrtc = true;
-                        finally_algos.push_back(desp2);
-                    }}else{{
-                        finally_algos.push_back(desp);
-                    }}
+            if (desp.op_type == tv::gemm::ConvOpType::kBackwardWeight){{
+                TV_ASSERT_RT_ERR(mask_width > 0, "eroro");
+                mask_width_valid = mask_width % desp.tile_shape[2] == 0;
+            }}
+            if (desp.supported_ldx_conv(ldi, ldw, ldo) && mask_width_valid){{
+                if (!is_arch_compiled){{
+                    auto desp2 = desp;
+                    desp2.is_nvrtc = true;
+                    finally_algos.push_back(desp2);
+                }}else{{
+                    finally_algos.push_back(desp);
                 }}
             }}
         }}

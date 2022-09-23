@@ -16,4 +16,4 @@ python -m spconv.gencode --include=$SCRIPT_DIR/spconv/include --src=$SCRIPT_DIR/
 mkdir -p $SCRIPT_DIR/build
 cd $SCRIPT_DIR/build
 cmake ..
-cmake --build $SCRIPT_DIR/build --config Release -j 8
+cmake --build $SCRIPT_DIR/build --config Release -j 8 --verbose
