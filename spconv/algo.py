@@ -40,7 +40,7 @@ from spconv.constants import (NDIM_DONT_CARE, SPCONV_BWD_SPLITK,
 from spconv.core import ALL_IMPGEMM_PARAMS, AlgoHint, ConvAlgo, ALL_NATIVE_PARAMS
 from spconv.core_cc.cumm.conv.main import ConvMainUnitTest
 from spconv.core_cc.cumm.gemm.main import GemmMainUnitTest
-from spconv.cppconstants import COMPILED_CUDA_ARCHS
+from spconv.cppconstants import COMPILED_CUDA_GEMM_ARCHS
 from cumm.tensorview.gemm import NVRTCParams
 from spconv.tools import CUDAKernelTimer
 from cumm.gemm.constants import NVRTCConstants, NVRTCMode
@@ -337,7 +337,7 @@ class SimpleGemm:
             ldb = b.stride[0]
             ldc = c.stride[0]
             if desp.supported_ldx(lda, ldb, ldc):
-                if arch not in COMPILED_CUDA_ARCHS:
+                if arch not in COMPILED_CUDA_GEMM_ARCHS:
                     desp = desp.copy()
                     desp.is_nvrtc = True
                 if SPCONV_DEBUG_NVRTC_KERNELS:
@@ -720,7 +720,7 @@ class SimpleConv:
                 assert mask_width > 0
                 mask_width_valid = mask_width % desp.tile_shape[2] == 0
             if desp.supported_ldx_conv(ldi, ldw, ldo) and mask_width_valid:
-                if arch not in COMPILED_CUDA_ARCHS:
+                if arch not in COMPILED_CUDA_GEMM_ARCHS:
                     desp = desp.copy()
                     desp.is_nvrtc = True
                 if SPCONV_DEBUG_NVRTC_KERNELS:
@@ -822,6 +822,7 @@ class SimpleConv:
 
         times: List[float] = []
         all_profile_res: List[BestConvAlgoByProfile] = []
+        group_by_algo = {}
         for desp in avail:
             # for sparse conv, ndim isn't used, so we just provide a constant value.
             params = ConvParams(NDIM_DONT_CARE, ConvOpTypeCpp(op_type.value))
@@ -865,7 +866,9 @@ class SimpleConv:
                     this_times.append(measure.duration)
                 times.append(np.mean(this_times[1:]))
                 spk_speeds.append(times[-1])
-
+                if desp.algo not in group_by_algo:
+                    group_by_algo[desp.algo] = 10000.0
+                group_by_algo[desp.algo] = min(times[-1], group_by_algo[desp.algo])
                 all_profile_res.append(
                     BestConvAlgoByProfile(desp, arch, splitk=spk))
         if not all_profile_res:

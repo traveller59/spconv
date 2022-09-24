@@ -634,7 +634,8 @@ IMPLGEMM_AMPERE_PARAMS = [
                      TensorOp((16, 8, 32)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
 
     *gen_conv_params(ConvFwdAndBwdInput, (128, 64, 32), (64, 32, 32),
                      NDIM_DONT_CARE,
@@ -648,7 +649,8 @@ IMPLGEMM_AMPERE_PARAMS = [
                      TensorOp((16, 8, 16)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
     
     *gen_conv_params(ConvFwdAndBwdInput, (64, 128, 64), (32, 64, 64),
                      NDIM_DONT_CARE,
@@ -662,7 +664,8 @@ IMPLGEMM_AMPERE_PARAMS = [
                      TensorOp((16, 8, 32)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
 
     *gen_conv_params(ConvFwdAndBwdInput, (64, 128, 32), (32, 64, 32),
                      NDIM_DONT_CARE,
@@ -676,7 +679,8 @@ IMPLGEMM_AMPERE_PARAMS = [
                      TensorOp((16, 8, 16)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
         
     *gen_conv_params(ConvFwdAndBwdInput, (64, 64, 32), (32, 32, 32),
                      NDIM_DONT_CARE,
@@ -690,7 +694,8 @@ IMPLGEMM_AMPERE_PARAMS = [
                      TensorOp((16, 8, 16)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
     
     *gen_conv_params(ConvFwdAndBwdInput, (64, 64, 64), (32, 32, 64),
                      NDIM_DONT_CARE,
@@ -704,7 +709,8 @@ IMPLGEMM_AMPERE_PARAMS = [
                      TensorOp((16, 8, 32)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
     
     *gen_conv_params(ConvFwdAndBwdInput, (128, 128, 64), (64, 64, 64),
                      NDIM_DONT_CARE,
@@ -718,7 +724,8 @@ IMPLGEMM_AMPERE_PARAMS = [
                      TensorOp((16, 8, 32)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
     
     *gen_conv_params(ConvFwdAndBwdInput, (128, 256, 64), (64, 128, 64),
                      NDIM_DONT_CARE,
@@ -732,7 +739,8 @@ IMPLGEMM_AMPERE_PARAMS = [
                      TensorOp((16, 8, 32)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
     
     *gen_conv_params(ConvFwdAndBwdInput, (256, 128, 64), (128, 64, 64),
                      NDIM_DONT_CARE,
@@ -746,7 +754,8 @@ IMPLGEMM_AMPERE_PARAMS = [
                      TensorOp((16, 8, 32)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
     
     *gen_conv_params(ConvFwdAndBwdInput, (128, 128, 128), (64, 64, 128),
                      NDIM_DONT_CARE,
@@ -760,7 +769,8 @@ IMPLGEMM_AMPERE_PARAMS = [
                      TensorOp((16, 8, 32)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
 ]
 
 IMPLGEMM_TURING_PARAMS = [
@@ -777,7 +787,8 @@ IMPLGEMM_TURING_PARAMS = [
                      TensorOp((16, 8, 16)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
     
     *gen_conv_params(ConvFwdAndBwdInput, (64, 64, 64), (32, 32, 64),
                      NDIM_DONT_CARE,
@@ -791,7 +802,8 @@ IMPLGEMM_TURING_PARAMS = [
                      TensorOp((16, 8, 32)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
 
     *gen_conv_params(ConvFwdAndBwdInput, (64, 128, 64), (32, 64, 64),
                      NDIM_DONT_CARE,
@@ -805,7 +817,8 @@ IMPLGEMM_TURING_PARAMS = [
                      TensorOp((16, 8, 32)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
     
     *gen_conv_params(ConvFwdAndBwdInput, (64, 128, 32), (32, 64, 32),
                      NDIM_DONT_CARE,
@@ -819,7 +832,8 @@ IMPLGEMM_TURING_PARAMS = [
                      TensorOp((16, 8, 16)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
 
     *gen_conv_params(ConvFwdAndBwdInput, (128, 64, 64), (64, 32, 64),
                      NDIM_DONT_CARE,
@@ -833,7 +847,8 @@ IMPLGEMM_TURING_PARAMS = [
                      TensorOp((16, 8, 32)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
     
     *gen_conv_params(ConvFwdAndBwdInput, (128, 64, 32), (64, 32, 32),
                      NDIM_DONT_CARE,
@@ -847,7 +862,8 @@ IMPLGEMM_TURING_PARAMS = [
                      TensorOp((16, 8, 16)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
 
     *gen_conv_params(ConvFwdAndBwdInput, (128, 256, 64), (64, 128, 64),
                      NDIM_DONT_CARE,
@@ -861,7 +877,8 @@ IMPLGEMM_TURING_PARAMS = [
                      TensorOp((16, 8, 32)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
     
     *gen_conv_params(ConvFwdAndBwdInput, (256, 128, 64), (128, 64, 64),
                      NDIM_DONT_CARE,
@@ -875,7 +892,8 @@ IMPLGEMM_TURING_PARAMS = [
                      TensorOp((16, 8, 32)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
 
     *gen_conv_params(ConvFwdAndBwdInput, (128, 128, 128), (64, 64, 128),
                      NDIM_DONT_CARE,
@@ -889,7 +907,8 @@ IMPLGEMM_TURING_PARAMS = [
                      TensorOp((16, 8, 32)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
     
     *gen_conv_params(ConvFwdAndBwdInput, (128, 128, 64), (64, 64, 64),
                      NDIM_DONT_CARE,
@@ -903,7 +922,8 @@ IMPLGEMM_TURING_PARAMS = [
                      TensorOp((16, 8, 32)),
                      mask_sparse=True,
                      increment_k_first=True,
-                     access_per_vector=1),
+                     access_per_vector=1,
+                     is_nvrtc=True),
 
 
     *gen_conv_params(ConvFwdAndBwdInput, (32, 16, 16), (16, 16, 16),

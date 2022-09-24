@@ -1,4 +1,4 @@
-from spconv.benchmark.core import get_voxel_data
+from spconv.benchmark.core import get_voxel_data, get_voxel_data_large
 
 
 import time
@@ -12,7 +12,7 @@ from spconv.core import ConvAlgo
 from cumm import dtypes
 import spconv.pytorch as spconv
 from spconv.test_utils import params_grid
-
+import spconv as spconv_core
 class Net(nn.Module):
     def __init__(self, shape, algo):
         super().__init__()
@@ -150,15 +150,23 @@ _DTYPE_TO_TORCH_DTYPE = {
     dtypes.float16: torch.float16,
 }
 
-def bench_basic(dtype_str: str):
+def bench_basic(dtype_str: str, is_large: bool = False):
+    assert dtype_str in ["f16", "f32", "tf32"], "only support f16, f32, tf32"
+    if dtype_str == "tf32":
+        spconv_core.constants.SPCONV_ALLOW_TF32 = True
+        dtype_str = "f32"
+
     dtype = dtypes.get_dtype_by_shortcut(dtype_str)
     if dtype not in _DTYPE_TO_TORCH_DTYPE:
         raise NotImplementedError("only support bench f32 and f16 for now")
     torch_dtype = _DTYPE_TO_TORCH_DTYPE[dtype]
     algos = [spconv.ConvAlgo.Native, spconv.ConvAlgo.MaskImplicitGemm, spconv.ConvAlgo.MaskSplitImplicitGemm]
-    (voxels, coors, spatial_shape) = get_voxel_data()
+    if is_large:
+        (voxels, coors, spatial_shape) = get_voxel_data_large()
+    else:
+        (voxels, coors, spatial_shape) = get_voxel_data()
+    name = "basic-L" if is_large else "basic"
     device = torch.device("cuda:0")
-
     for algo, in params_grid(algos):
         voxels_th = torch.from_numpy(voxels).to(device).to(torch_dtype)
         coors_th = torch.from_numpy(coors).to(device).int()
@@ -172,23 +180,22 @@ def bench_basic(dtype_str: str):
         times = []
         with torch.no_grad():
             for i in range(100):
-                torch.cuda.synchronize()
-                t = time.time()
-                out_nograd = net(voxels_th, coors_th, 1, False)
-                timer = out_nograd._timer
-                torch.cuda.synchronize()
-                times.append(time.time() - t)
-        print(f"basic[{dtype_str}|{algo}|forward]", np.mean(times[50:]))
+                with tv.measure_duration() as measure:
+                    out_nograd = net(voxels_th, coors_th, 1, False)
+                times.append(measure.duration)
+        print(f"{name}[{dtype_str}|{algo}|forward]", np.mean(times[50:]))
         times = []
 
         for i in range(50):
             out = net(voxels_th, coors_th, 1)
-            torch.cuda.synchronize()
-            t = time.time()
-            out.features.backward(dout_t)
-            torch.cuda.synchronize()
-            times.append(time.time() - t)
-        print(f"basic[{dtype_str}|{algo}|backward]", np.mean(times[25:]))
+            with tv.measure_duration() as measure:
+                out.features.backward(dout_t)
+            times.append(measure.duration)
+        print(f"{name}[{dtype_str}|{algo}|backward]", np.mean(times[25:]))
+
+
+def bench_large(dtype_str: str):
+    return bench_basic(dtype_str, True)
 
 if __name__ == "__main__":
     bench_basic("f16")

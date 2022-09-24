@@ -16,6 +16,8 @@
 [pypi-ver-cpu]: https://img.shields.io/pypi/v/spconv
 [pypi-ver-114]: https://img.shields.io/pypi/v/spconv-cu114
 [pypi-ver-111]: https://img.shields.io/pypi/v/spconv-cu111
+[pypi-ver-117]: https://img.shields.io/pypi/v/spconv-cu117
+
 [pypi-ver-113]: https://img.shields.io/pypi/v/spconv-cu113
 [pypi-ver-120]: https://img.shields.io/pypi/v/spconv-cu120
 [pypi-ver-102]: https://img.shields.io/pypi/v/spconv-cu102
@@ -28,6 +30,8 @@
 [pypi-download-113]: https://img.shields.io/pypi/dm/spconv-cu113
 [pypi-url-114]: https://pypi.org/project/spconv-cu114/
 [pypi-download-114]: https://img.shields.io/pypi/dm/spconv-cu114
+[pypi-url-117]: https://pypi.org/project/spconv-cu117/
+[pypi-download-117]: https://img.shields.io/pypi/dm/spconv-cu117
 [pypi-url-120]: https://pypi.org/project/spconv-cu120/
 [pypi-download-120]: https://img.shields.io/pypi/dm/spconv-cu120
 [pypi-url-cpu]: https://pypi.org/project/spconv/
@@ -41,9 +45,9 @@
 | -------------- |:---------------------:| ---------------------:| ---------------------:| 
 | CPU (Linux Only) | [![PyPI Version][pypi-ver-cpu]][pypi-url-cpu] | ```pip install spconv``` | [![pypi monthly download][pypi-download-cpu]][pypi-url-cpu] | 
 | CUDA 10.2 | [![PyPI Version][pypi-ver-102]][pypi-url-102] | ```pip install spconv-cu102```| [![pypi monthly download][pypi-download-102]][pypi-url-102]| 
-| CUDA 11.1 | [![PyPI Version][pypi-ver-111]][pypi-url-111] | ```pip install spconv-cu111```| [![pypi monthly download][pypi-download-111]][pypi-url-111]| 
 | CUDA 11.3 (Linux Only) | [![PyPI Version][pypi-ver-113]][pypi-url-113] | ```pip install spconv-cu113```| [![pypi monthly download][pypi-download-113]][pypi-url-113]| 
 | CUDA 11.4 | [![PyPI Version][pypi-ver-114]][pypi-url-114] | ```pip install spconv-cu114```| [![pypi monthly download][pypi-download-114]][pypi-url-114]|
+| CUDA 11.7 | [![PyPI Version][pypi-ver-117]][pypi-url-117] | ```pip install spconv-cu117```| [![pypi monthly download][pypi-download-117]][pypi-url-117]| 
 <!-- | CUDA 12.0 | [![PyPI Version][pypi-ver-120]][pypi-url-120] | ```pip install spconv-cu120```| [![pypi monthly download][pypi-download-120]][pypi-url-120]| -->
 
 ```spconv``` is a project that provide heavily-optimized sparse convolution implementation with tensor core support. check [benchmark](docs/BENCHMARK.md) to see how fast spconv 2.x runs.
@@ -52,15 +56,19 @@
 
 Check [spconv 2.x algorithm introduction](docs/spconv2_algo.pdf) to understand sparse convolution algorithm in spconv 2.x!
 
+## WARNING
+
+Use spconv >= cu114 if possible. cuda 11.4 can compile greatly faster kernel in some situation.
+
 ## NEWS
 
 * spconv 2.2: ampere feature support (by [EvernightAurora](https://github.com/EvernightAurora)), pure c++ code generation, nvrtc, drop python 3.6
 
 ## Spconv 2.2 vs Spconv 2.1
 
-* faster fp16 kernels (~5-30%) in ampere GPUs (tested in RTX 3090)
-* greatly faster int8 kernels (~1.2x~2.7x) in ampere GPUs (tested in RTX 3090)
-* no python 3.6 support
+* faster fp16 conv kernels (~5-30%) in ampere GPUs (tested in RTX 3090)
+* greatly faster int8 conv kernels (~1.2x~2.7x) in ampere GPUs (tested in RTX 3090)
+* drop python 3.6 support
 * nvrtc support: kernel in old GPUs will be compiled in runtime.
 * [libspconv](docs/PURE_CPP_BUILD.md): pure c++ build of all spconv ops. see [example](example/libspconv/run_build.sh)
 * tf32 kernels, faster fp32 training, disabled by default. set ```import spconv as spconv_core; spconv_core.constants.SPCONV_ALLOW_TF32 = True``` to enable them.
@@ -84,6 +92,10 @@ Then see [this](docs/USAGE.md).
 
 Don't forget to check [performance guide](docs/PERFORMANCE_GUIDE.md).
 
+### Common Solution for Some Bugs
+
+see [common problems](docs/COMMON_PROBLEMS.md).
+
 ## Install
 
 You need to install python >= 3.7 first to use spconv 2.x.
@@ -94,9 +106,9 @@ You need at least CUDA 11.0 to build and run spconv 2.x. We won't offer any supp
 
 ### Prebuilt
 
-We offer python 3.7-3.11 and cuda 10.2/11.1/11.3/11.4/12.0 prebuilt binaries for linux (manylinux).
+We offer python 3.7-3.11 and cuda 10.2/11.3/11.4/11.7/12.0 prebuilt binaries for linux (manylinux).
 
-We offer python 3.7-3.11 and cuda 10.2/11.1/11.4/12.0 prebuilt binaries for windows 10/11.
+We offer python 3.7-3.11 and cuda 10.2/11.4/11.7/12.0 prebuilt binaries for windows 10/11.
 
 For Linux users, you need to install pip >= 20.3 first to install prebuilt.
 
@@ -104,11 +116,11 @@ For Linux users, you need to install pip >= 20.3 first to install prebuilt.
 
 ```pip install spconv-cu102``` for CUDA 10.2
 
-```pip install spconv-cu111``` for CUDA 11.1
-
 ```pip install spconv-cu113``` for CUDA 11.3 (**Linux Only**)
 
 ```pip install spconv-cu114``` for CUDA 11.4
+
+```pip install spconv-cu117``` for CUDA 11.7
 
 ```pip install spconv-cu120``` for CUDA 12.0
 

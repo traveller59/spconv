@@ -395,7 +395,7 @@ def main():
     # voxels, coors, spatial_shape = waymo_data(num_features=3)
     with open(Path(__file__).parent / "data" / "test_spconv.pkl", "rb") as f:
         (voxels, coors, spatial_shape) = pickle.load(f)
-    # voxels, coors, spatial_shape = waymo_data_large_debug()
+    voxels, coors, spatial_shape = waymo_data_large()
     # breakpoint()
 
     print(spatial_shape)

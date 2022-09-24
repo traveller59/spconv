@@ -26,3 +26,4 @@
 * spconv 2.x in Windows 10 is 1.5x~2x slower than Linux. use Linux if possible.
 * If you train with float32 and ampere or later GPUs, you can set ```spconv.constants.SPCONV_ALLOW_TF32``` to enable faster fp32 training.
 See [benchmark](BENCHMARK.md) for more performance details of different algorithms.
+* Different CUDA version of spconv may have different performance. Use newest cuda version if possible. For example, spconv-cu117 is faster than spconv-cu114, spconv-cu114 is faster than spconv-cu111.
