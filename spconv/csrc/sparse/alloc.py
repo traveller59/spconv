@@ -220,7 +220,7 @@ class ThrustAllocator(pccm.Class):
         code.arg("ptr", "char *")
         code.arg("num_bytes", "size_t")
         code.raw(f"""
-        return allocator_.free_noexcept(tv::from_blob(ptr, {{num_bytes}}, tv::uint8, 0));
+        return allocator_.free_noexcept(tv::from_blob(ptr, {{int64_t(num_bytes)}}, tv::uint8, 0));
         """)
         return code
 

@@ -126,6 +126,7 @@ class SpconvOps(pccm.Class):
                 defines.append(f"#define SPCONV_ALLOC_{to_snake_case(name).upper()} {pccm.literal(v)}")
         define_str = "\n".join(defines)
         self.add_global_code(define_str)
+        self.build_meta.add_global_cflags("cl", "/DNOMINMAX")
         # for name in dir(AllocKeys):
         #     if not name.startswith("__"):
         #         v = getattr(AllocKeys, name)
@@ -1580,10 +1581,10 @@ class SpconvOps(pccm.Class):
         }}
         if (!subm){{
             size_t pair_single_size = kv * int64_t(num_act_in);
-            auto ten = tv::from_blob(workspace, {{pair_single_size + 1}}, use_int64_hash_k ? tv::int64 : tv::int32, 0);
+            auto ten = tv::from_blob(workspace, {{int64_t(pair_single_size + 1)}}, use_int64_hash_k ? tv::int64 : tv::int32, 0);
             res.insert({{{pccm.literal(AllocKeys.IndicePairsUniq)}, ten}});
             workspace += ten.nbytes();
-            auto ten2 = tv::from_blob(workspace, {{pair_single_size + 1}}, use_int64_hash_k ? tv::int64 : tv::int32, 0);
+            auto ten2 = tv::from_blob(workspace, {{int64_t(pair_single_size + 1)}}, use_int64_hash_k ? tv::int64 : tv::int32, 0);
             res.insert({{{pccm.literal(AllocKeys.IndicePairsUniqBackup)}, ten2}});
             workspace += ten2.nbytes();
         }}

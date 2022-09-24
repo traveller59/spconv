@@ -164,6 +164,7 @@ class GemmTunerSimple(GemmTunerSimpleBase):
         if key in self._nvrtc_caches:
             return self._nvrtc_caches[key]
         mod, ker = self._compile_nvrtc_module(desp)
+        print(f"Can't find algo {desp} in prebuilt. compile with nvrtc...")
         nvrtc_params = _get_nvrtc_params(mod, ker, "gemm_kernel")
         self._nvrtc_caches[key] = nvrtc_params
         return nvrtc_params
@@ -288,6 +289,7 @@ class SimpleGemm:
         if key in self._nvrtc_caches:
             return self._nvrtc_caches[key]
         mod, ker = self._compile_nvrtc_module(desp)
+        print(f"Can't find algo {desp} in prebuilt. compile with nvrtc...")
         nvrtc_params = _get_nvrtc_params(mod, ker, "gemm_kernel")
         self._nvrtc_caches[key] = nvrtc_params
         return nvrtc_params

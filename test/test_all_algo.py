@@ -640,6 +640,7 @@ def _test_native_conv_cuda(subm: bool):
 
     arch = torch.cuda.get_device_capability()
     stream = get_current_stream()
+    force_nvrtc = False
     for shape, bs, C, K, k, s, p, d, dtype in tqdm.tqdm(params_grid(
             shapes, batchsizes, in_channels, out_channels, ksizes,
             strides, paddings, dilations, dtypes)):
@@ -718,7 +719,8 @@ def _test_native_conv_cuda(subm: bool):
                                 c_inds=out_indices,
                                 hint=AlgoHint.Fowrard.value,
                                 alpha=1.0,
-                                beta=beta)
+                                beta=beta,
+                                force_nvrtc=force_nvrtc)
                         else:
                             GEMM.run_with_tuned_result(
                                 BestAlgoByProfile(desp, tester.arch, 1),
@@ -735,7 +737,8 @@ def _test_native_conv_cuda(subm: bool):
                                 c_inds=out_indices,
                                 hint=AlgoHint.Fowrard.value,
                                 alpha=1.0,
-                                beta=beta)
+                                beta=beta,
+                                force_nvrtc=force_nvrtc)
                         inited = True
                     if bias is not None and tester.check_act:
                         InferenceOps.bias_add_act_inplace(output_tv, bias, tv.gemm.Activation.ReLU, 0, 0)
@@ -801,7 +804,8 @@ def _test_native_conv_cuda(subm: bool):
                                 c_inds=inp_indices,
                                 hint=AlgoHint.Fowrard.value,
                                 alpha=1.0,
-                                beta=beta)
+                                beta=beta,
+                                force_nvrtc=force_nvrtc)
                         else:
                             GEMM.run_with_tuned_result(
                                 BestAlgoByProfile(desp, tester.arch, 1),
@@ -818,7 +822,8 @@ def _test_native_conv_cuda(subm: bool):
                                 c_inds=inp_indices,
                                 hint=AlgoHint.Fowrard.value,
                                 alpha=1.0,
-                                beta=beta)
+                                beta=beta,
+                                force_nvrtc=force_nvrtc)
 
                         inited = True
                     din_my = inp_tv.cpu().numpy()
@@ -879,7 +884,8 @@ def _test_native_conv_cuda(subm: bool):
                                 c_inds=tv.Tensor(),
                                 hint=AlgoHint.BackwardWeight.value,
                                 alpha=1.0,
-                                beta=beta)
+                                beta=beta,
+                                force_nvrtc=force_nvrtc)
 
                         else:
                             GEMM.run_with_tuned_result(BestAlgoByProfile(desp, tester.arch, 32),
@@ -896,7 +902,8 @@ def _test_native_conv_cuda(subm: bool):
                                                     b_inds=b_inds,
                                                     hint=AlgoHint.BackwardWeight.value,
                                                     alpha=1.0,
-                                                    beta=beta)
+                                                    beta=beta,
+                                                    force_nvrtc=force_nvrtc)
 
                     dw_my = weight_tv.cpu().numpy()
                     if dtype != np.float16:
@@ -909,8 +916,8 @@ def _test_native_conv_cuda(subm: bool):
 
 def test_all_algo_unit():
     # for i in range(5):
-    _test_impgemm_conv_cuda(True)
-    _test_impgemm_conv_cuda(False)
+    # _test_impgemm_conv_cuda(True)
+    # _test_impgemm_conv_cuda(False)
     _test_native_conv_cuda(True)
     _test_native_conv_cuda(False)
 

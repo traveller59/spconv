@@ -64,7 +64,6 @@ class PointCloudCompress(pccm.Class):
         auto point_stride = points.stride(0);
         int64_t final_size = sizeof(int64_t) * 5 + sizeof(float) * 3;
         tv::Tensor res;
-        tv::ssprint(1);
         tv::dispatch<float, double>(points.dtype(), [&](auto IP){{
             using TPoint = TV_DECLTYPE(IP);
 
@@ -88,13 +87,13 @@ class PointCloudCompress(pccm.Class):
                         auto pos_int = op::apply(floorf, pos_unit_voxel).cast<int32_t>();
                         auto pos_enc = (point / errors - pos_int.cast<float>() * float(256)).cast<uint8_t>();
                         tv::array<uint8_t, kEncodeDim> enc;
-                        tv::if_constexpr<(kEncodeDim > 3)>([&](auto _){{
+                        enc[0] = pos_enc[0];
+                        enc[1] = pos_enc[1];
+                        enc[2] = pos_enc[2];
+                        if (kEncodeDim > 3){{
                             TInten inten = intensity_data[0];
-                            enc = _(tv::array<uint8_t, kEncodeDim>{{pos_enc[0], pos_enc[1], pos_enc[2], uint8_t(inten)}});
-                            intensity_data += inten_stride;
-                        }}, [&](auto _){{
-                            enc = _(tv::array<uint8_t, kEncodeDim>{{pos_enc[0], pos_enc[1], pos_enc[2]}});
-                        }});
+                            enc[3] = uint8_t(inten);
+                        }}
                         auto pos_uint = pos_int + hash_t::direct_hash_offset();
                         uint64_t scalar = hash_t::encode(pos_int[0], pos_int[1], pos_int[2]);
                         auto iter = hash.find(scalar);
@@ -225,7 +224,7 @@ class PointCloudCompress(pccm.Class):
         error[2] = error_header[2];
         res_ptr += sizeof(float) * 3;
         tv::Tensor points;
-        tv::dispatch_int<static_cast<int>(EncodeType::XYZI_8), static_cast<int>(EncodeType::XYZ_8)>(static_cast<int>(type), [&](auto I){{
+        tv::dispatch_int<static_cast<int>(EncodeType::XYZI_8), static_cast<int>(EncodeType::XYZ_8)>(static_cast<int>(type), [&, error](auto I){{
             constexpr int kTypeInt = TV_DECLTYPE(I)::value;
             constexpr int kEncodeDim = kTypeInt == static_cast<int>(EncodeType::XYZI_8) ? 4 : 3;
             points = tv::empty({{N, kEncodeDim}}, tv::float32);
@@ -241,7 +240,7 @@ class PointCloudCompress(pccm.Class):
                 auto point_cur_ptr = points_ptr;
                 for (int j = 0; j < cluster_size; ++j){{
                     auto& enc = enc_ptr[j];
-                    auto point = op::slice<0, 3>(enc).template cast<float>() * error + offset;
+                    tv::array<float, 3> point = op::slice<0, 3>(enc).template cast<float>() * error + offset;
                     point_cur_ptr[0] = point[0];
                     point_cur_ptr[1] = point[1];
                     point_cur_ptr[2] = point[2];
