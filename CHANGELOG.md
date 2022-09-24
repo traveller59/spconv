@@ -1,4 +1,7 @@
 # Changelog
+## [2.1.25] - 2022-9-25
+### Changed
+- change cumm version range to "< 0.3.0"
 
 ## [2.1.24] - 2022-9-24
 ### Removed
