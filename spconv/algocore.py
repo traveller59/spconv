@@ -64,7 +64,7 @@ def get_gemm_algo_desp_from_param(p: GemmAlgoParams):
     desp.element_per_access_a = ker.input_spec.input_iter_a.element_per_acc
     desp.element_per_access_b = ker.input_spec.input_iter_b.element_per_acc
     desp.element_per_access_c = ker.output_spec.out_iter.element_per_acc
-
+    desp.min_arch = ker.min_arch()
     return desp
 
 
@@ -87,6 +87,7 @@ def get_conv_algo_desp_from_param(p: ConvAlgoParams):
     desp.element_per_access_a = ker.input_spec.input_iter_a.element_per_acc
     desp.element_per_access_b = ker.input_spec.input_iter_b.element_per_acc
     desp.element_per_access_c = ker.output_spec.out_iter.element_per_acc
+    desp.min_arch = ker.min_arch()
     return desp
 
 

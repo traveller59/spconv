@@ -22,7 +22,7 @@ from cumm import tensorview as tv
 from spconv.core import ConvAlgo
 
 import spconv.pytorch as spconv
-from spconv.utils import Point2VoxelCPU3d, Point2VoxelGPU3d
+from spconv.utils import Point2VoxelCPU3d
 
 # torch.backends.cudnn.enabled = False
 def waymo_data(batch_size=1, num_features=-1):
@@ -44,6 +44,8 @@ def waymo_data(batch_size=1, num_features=-1):
     return voxels, coors, gen.grid_size
 
 def waymo_data_large(batch_size=1):
+    from spconv.utils import Point2VoxelGPU3d
+
     gen = Point2VoxelGPU3d([0.1, 0.1, 0.1], [-80, -80, -2, 80, 80, 6], 3,
                            1600000, 1)
     # gen = VoxelGeneratorV2([0.1, 0.1, 0.1], [-80, -80, -2, 80, 80, 6], 1,
@@ -395,7 +397,7 @@ def main():
     # voxels, coors, spatial_shape = waymo_data(num_features=3)
     with open(Path(__file__).parent / "data" / "test_spconv.pkl", "rb") as f:
         (voxels, coors, spatial_shape) = pickle.load(f)
-    voxels, coors, spatial_shape = waymo_data_large()
+    # voxels, coors, spatial_shape = waymo_data_large()
     # breakpoint()
 
     print(spatial_shape)
@@ -478,11 +480,11 @@ def main():
     # for i in range(10):
     #     out = net(voxels_th, coors_th, 1)
     #     print("------------")
-    #     torch.cuda.synchronize()
-    #     t = time.time()
+    #     # torch.cuda.synchronize()
+    #     # t = time.time()
     #     out.features.backward(dout_t)
-    #     torch.cuda.synchronize()
-    #     times.append(time.time() - t)
+    #     # torch.cuda.synchronize()
+    #     # times.append(time.time() - t)
 
     # # # print((net.grid == -1).float().sum(), net.grid.numel())
     # # # print("spconv time", time.time() - t)

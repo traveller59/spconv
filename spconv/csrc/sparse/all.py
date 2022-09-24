@@ -84,6 +84,10 @@ class HashCoreHost(pccm.Class):
         self.add_include("tensorview/hash/hash_core.h")
 
 class SpconvOps(pccm.Class):
+    if CUMM_CPU_ONLY_BUILD:
+        _STATIC_FUNCTION = pccm.static_function
+    else:
+        _STATIC_FUNCTION = pccm.cuda.static_function
     def __init__(self):
         super().__init__()
         self.add_dependency(ThrustCustomAllocatorV2, ExternalAllocator, GemmBasicHost, ThrustAllocator)
@@ -145,6 +149,15 @@ class SpconvOps(pccm.Class):
 
     @pccm.pybind.mark
     @pccm.static_function
+    def is_cpu_only_build(self):
+        code = pccm.FunctionCode()
+        code.raw(f"""
+        return {pccm.literal(CUMM_CPU_ONLY_BUILD)};
+        """)
+        return code.ret("bool")
+
+    @pccm.pybind.mark
+    @pccm.static_function
     def pccm_version(self):
         """get pccm version when build spconv.
         """
@@ -155,7 +168,7 @@ class SpconvOps(pccm.Class):
         return code.ret("std::string")
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def generate_conv_inds_stage1(self):
         code = pccm.FunctionCode()
         code.arg("indices", "tv::Tensor")
@@ -200,7 +213,7 @@ class SpconvOps(pccm.Class):
         return code  # .ret("int")
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def generate_conv_inds_stage1_5(self):
         code = pccm.FunctionCode()
         code.arg("indice_pairs_uniq", "tv::Tensor")
@@ -219,7 +232,7 @@ class SpconvOps(pccm.Class):
         return code.ret("int")
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def generate_conv_inds_stage2(self):
         code = pccm.FunctionCode()
         code.arg("indices, hashdata_k, hashdata_v", "tv::Tensor")
@@ -270,7 +283,7 @@ class SpconvOps(pccm.Class):
         return code.ret("int")
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def generate_conv_inds_mask_stage1(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
@@ -316,7 +329,7 @@ class SpconvOps(pccm.Class):
         return code  # .ret("int")
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def generate_conv_inds_mask_stage1_direct_table(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
@@ -362,7 +375,7 @@ class SpconvOps(pccm.Class):
         return code  # .ret("int")
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def unique_hash(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
@@ -378,7 +391,7 @@ class SpconvOps(pccm.Class):
         return code.ret("int")
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def assign_output_direct_hash(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
@@ -420,7 +433,7 @@ class SpconvOps(pccm.Class):
         return code
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def generate_conv_inds_mask_stage2(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
@@ -470,7 +483,7 @@ class SpconvOps(pccm.Class):
         return code.ret("int")
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def generate_conv_inds_stage2_mask_direct_table(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
@@ -519,7 +532,7 @@ class SpconvOps(pccm.Class):
         return code.ret("int")
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def generate_subm_conv_inds(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
@@ -634,7 +647,7 @@ class SpconvOps(pccm.Class):
         return code.ret("int")
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def maxpool_forward(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
@@ -651,7 +664,7 @@ class SpconvOps(pccm.Class):
         return code
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def maxpool_backward(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
@@ -671,7 +684,7 @@ class SpconvOps(pccm.Class):
 
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def indice_maxpool(self):
         code = pccm.FunctionCode()
         code.arg("out_features, features", "tv::Tensor")
@@ -715,7 +728,7 @@ class SpconvOps(pccm.Class):
 
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def indice_maxpool_backward(self):
         code = pccm.FunctionCode()
         code.arg("din, features, out_features, out_bp", "tv::Tensor")
@@ -757,7 +770,7 @@ class SpconvOps(pccm.Class):
         return code
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def maxpool_implicit_gemm_forward(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
@@ -773,7 +786,7 @@ class SpconvOps(pccm.Class):
         return code
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def maxpool_implicit_gemm_backward(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
@@ -791,7 +804,7 @@ class SpconvOps(pccm.Class):
         return code
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def avgpool_implicit_gemm_forward(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
@@ -808,7 +821,7 @@ class SpconvOps(pccm.Class):
         return code
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def avgpool_implicit_gemm_backward(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
@@ -936,19 +949,19 @@ class SpconvOps(pccm.Class):
 
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def sort_1d_by_key_allocator(self):
         # for python
         return self.sort_1d_by_key_allocator_template(False)
 
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def sort_1d_by_key_allocator_v2(self):
         # for cpp only
         return self.sort_1d_by_key_allocator_template(True)
 
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def sort_1d_by_key_split(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
@@ -1070,17 +1083,17 @@ class SpconvOps(pccm.Class):
 
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def sort_1d_by_key_split_allocator(self):
         return self.sort_1d_by_key_split_allocator_template(False)
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def sort_1d_by_key_split_allocator_v2(self):
         return self.sort_1d_by_key_split_allocator_template(True)
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def count_bits(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
@@ -1140,7 +1153,7 @@ class SpconvOps(pccm.Class):
         return code.ret("tv::Tensor")
 
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def reverse_bits(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
@@ -1202,7 +1215,7 @@ class SpconvOps(pccm.Class):
     # cpu only build can't use pccm.cuda
     __CUDA_DECORATOR = pccm.static_function
     if not CUMM_CPU_ONLY_BUILD:
-        __CUDA_DECORATOR = pccm.cuda.static_function
+        __CUDA_DECORATOR = _STATIC_FUNCTION
 
     @pccm.pybind.mark 
     @__CUDA_DECORATOR
@@ -1243,7 +1256,7 @@ class SpconvOps(pccm.Class):
         return code 
         
     @pccm.pybind.mark
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def sort_1d_by_key(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
@@ -1475,13 +1488,16 @@ class SpconvOps(pccm.Class):
         """)
         return code.ret("std::vector<int>")
 
-    @pccm.cuda.static_function
+    @_STATIC_FUNCTION
     def apply_thrust_unique_to_indice_pairs_uniq(self):
         code = pccm.code()
-        code.add_dependency(CustomThrustLib)
         code.arg("data", "tv::Tensor")
         code.arg("allocator", "ThrustAllocator&")
         code.arg("stream_int", f"std::uintptr_t", "0")
+        if CUMM_CPU_ONLY_BUILD:
+            return code.make_invalid()
+
+        code.add_dependency(CustomThrustLib)
         code.raw(f"""
         int num_out_act = 0;
         int uniq_size = data.dim(0);
@@ -1622,7 +1638,7 @@ class SpconvOps(pccm.Class):
 
         if CUMM_CPU_ONLY_BUILD:
             code.raw(f"""
-            throw std::runtime_error("this function can only be used with CUDA.")
+            TV_THROW_RT_ERR("this function can only be used with CUDA.");
             """)
             return code.ret("std::tuple<tv::Tensor, int>")
         code.raw(f"""

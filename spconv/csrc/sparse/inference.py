@@ -148,7 +148,10 @@ class InferenceOpsKernel(pccm.ParameterizedClass):
 class InferenceOps(pccm.Class):
     def __init__(self):
         super().__init__()
-        self.add_dependency(TensorView, LaunchUtils)
+        self.add_dependency(TensorView)
+        if not CUMM_CPU_ONLY_BUILD:
+            self.add_dependency(LaunchUtils)
+
         self.kernel = InferenceOpsKernel()
         self.add_include("tensorview/gemm/core/constants.h")
         self.add_static_const("kMaxGridYZDim", "int", "65535")

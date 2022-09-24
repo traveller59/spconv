@@ -38,9 +38,9 @@ if cuda_ver:
     cuda_ver = cuda_ver.replace(".", "") # 10.2 to 102
 
     RELEASE_NAME += "-cu{}".format(cuda_ver)
-    deps = ["cumm-cu{}>=0.3.0".format(cuda_ver)]
+    deps = ["cumm-cu{}>=0.3.1".format(cuda_ver)]
 else:
-    deps = ["cumm>=0.3.0"]
+    deps = ["cumm>=0.3.1"]
 
 
 

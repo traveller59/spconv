@@ -30,14 +30,13 @@ from spconv.constants import SPCONV_CPP_INDICE_PAIRS, SPCONV_CPP_INDICE_PAIRS_IG
 import spconv.core_cc as _ext
 from spconv.core_cc.csrc.sparse.convops.spops import ConvGemmOps
 from spconv.core_cc.csrc.sparse.inference import InferenceOps
+from spconv.cppconstants import CPU_ONLY_BUILD
 
 from spconv.utils import nullcontext
 
-if hasattr(_ext, "cumm"):
-    CPU_ONLY_BUILD = False
+if not CPU_ONLY_BUILD:
     from spconv.algo import GEMM, CONV, GEMM_CPP, CONV_CPP
 else:
-    CPU_ONLY_BUILD = True
     GEMM = None
     CONV = None
     GEMM_CPP = None
@@ -1175,7 +1174,6 @@ def indice_conv_backward(features: torch.Tensor,
         return (din, dfilters.reshape(filters_shape))
     maxnhot = max(indice_pair_num_cpu)
 
-    arch = get_arch()
     filters_tv = torch_tensor_to_tv(filters)
 
     dfilters_tv = torch_tensor_to_tv(dfilters)
@@ -1224,7 +1222,7 @@ def indice_conv_backward(features: torch.Tensor,
             torch.mm(out_buffer[:nhot], filters_KC, out=inp_buffer[:nhot])
             SpconvOps.scatter_add_cpu(din_tv, inp_buffer_tv, inp_indices)
         return (din, dfilters.reshape(filters_shape))
-
+    arch = get_arch()
     profile_idx = kv_center
     if subm or indice_pair_num_cpu[profile_idx] == 0:
         profile_idx = kv_center - 1

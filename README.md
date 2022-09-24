@@ -112,6 +112,8 @@ We offer python 3.7-3.11 and cuda 10.2/11.4/11.7/12.0 prebuilt binaries for wind
 
 For Linux users, you need to install pip >= 20.3 first to install prebuilt.
 
+**WARNING**: spconv-cu117 may require CUDA Driver >= 515.
+
 ```pip install spconv``` for CPU only (**Linux Only**). you should only use this for debug usage, the performance isn't optimized due to manylinux limit (no omp support).
 
 ```pip install spconv-cu102``` for CUDA 10.2

@@ -624,6 +624,9 @@ class GemmTunerSimple(pccm.ParameterizedClass):
         code.arg("shuffle_type", "int")
         code.arg("a_inds_shape, b_inds_shape, c_inds_shape",
                  "std::vector<int64_t>")
+        if CUMM_CPU_ONLY_BUILD:
+            code.raw(f"TV_THROW_RT_ERR(\"not implemented for cpu!!!\")")
+            return code.ret("std::tuple<int, int, int>")
         code.raw(f"""
         return GemmMain::extract_mnk(a_shape, b_shape, trans_a,
                                     trans_b, trans_c,
