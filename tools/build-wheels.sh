@@ -41,6 +41,10 @@ do
     if [ "$PYVER2" = "37" ]; then
         PYVER_CP="cp$PYVER2-cp${PYVER2}m"
     fi
+    if [[ $PYVER2 == *"311"* ]]; then
+        PYVER_CP="cp311-cp311"
+    fi
+
     "/opt/python/$PYVER_CP/bin/pip" wheel /io/  -v --no-deps -w /io/wheelhouse_tmp
 done
 

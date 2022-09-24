@@ -13,6 +13,8 @@ class SpconvOps:
         """
         ...
     @staticmethod
+    def is_cpu_only_build() -> bool: ...
+    @staticmethod
     def pccm_version() -> str: 
         """
         get pccm version when build spconv.
