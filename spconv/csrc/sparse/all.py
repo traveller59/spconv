@@ -29,6 +29,7 @@ from .gather import GatherCPU
 from .alloc import ExternalAllocator, ThrustAllocator
 from spconv.constants import SPCONV_DIRECT_TABLE_HASH_SIZE_SCALE, AllocKeys
 import re
+import os 
 
 class CustomThrustLib(pccm.Class):
     def __init__(self):
@@ -131,7 +132,12 @@ class SpconvOps(pccm.Class):
         define_str = "\n".join(defines)
         self.add_global_code(define_str)
         self.build_meta.add_global_cflags("cl", "/DNOMINMAX")
-        # self.build_meta.add_global_cflags("nvcc", "-w")
+        cuda_ver = os.environ.get("CUMM_CUDA_VERSION", "")
+        if cuda_ver:
+            cuda_ver_vec = list(map(int, cuda_ver.split(".")))
+            cuda_ver_tuple = (cuda_ver_vec[0], cuda_ver_vec[1])
+            if cuda_ver_tuple[0] < 11:
+                self.build_meta.add_global_cflags("nvcc", "-w")
 
         # for name in dir(AllocKeys):
         #     if not name.startswith("__"):

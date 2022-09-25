@@ -25,6 +25,7 @@ NAME = 'spconv'
 RELEASE_NAME = NAME
 deps = ["cumm"]
 cuda_ver = os.environ.get("CUMM_CUDA_VERSION", "")
+
 # is_ci_build = cuda_ver != ""
 # if not cuda_ver:
 #     nvcc_version = subprocess.check_output(["nvcc", "--version"
@@ -35,12 +36,12 @@ cuda_ver = os.environ.get("CUMM_CUDA_VERSION", "")
 #     cuda_ver = version_str
 
 if cuda_ver:
-    cuda_ver = cuda_ver.replace(".", "") # 10.2 to 102
+    cuda_ver_str = cuda_ver.replace(".", "") # 10.2 to 102
 
-    RELEASE_NAME += "-cu{}".format(cuda_ver)
-    deps = ["cumm-cu{}>=0.3.2".format(cuda_ver)]
+    RELEASE_NAME += "-cu{}".format(cuda_ver_str)
+    deps = ["cumm-cu{}>=0.3.4".format(cuda_ver_str)]
 else:
-    deps = ["cumm>=0.3.2"]
+    deps = ["cumm>=0.3.4"]
 
 
 
@@ -176,8 +177,9 @@ if disable_jit is not None and disable_jit == "1":
     cu.namespace = "cumm.gemm.main"
     std = "c++17"
     if cuda_ver:
-        cuda_ver_number = int(cuda_ver)
-        if cuda_ver_number < 110:
+        cuda_ver_vec = list(map(int, cuda_ver.split(".")))
+        cuda_ver_tuple = (cuda_ver_vec[0], cuda_ver_vec[1])
+        if cuda_ver_tuple[0] < 11:
             std = "c++14" 
         else:
             std = "c++17"

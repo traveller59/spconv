@@ -1,4 +1,8 @@
 # Changelog
+## [2.2.2] - 2022-9-25
+### Fixed 
+- Fix CI problem: main function too long and cause OOM in CI vm.
+
 ## [2.2.1] - 2022-9-25
 ### Fixed 
 - Fix build problem

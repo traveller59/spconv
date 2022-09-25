@@ -591,6 +591,7 @@ class GemmTunerSimple(pccm.ParameterizedClass):
                 finally_algos.push_back(desp);
             }}
         }}
+        std::sort(finally_algos.begin(), finally_algos.end(), [](auto a, auto b){{return a.min_arch > b.min_arch;}});
         return finally_algos;
         """)
         return code.ret("std::vector<tv::gemm::GemmAlgoDesp>",
@@ -702,9 +703,9 @@ class GemmTunerSimple(pccm.ParameterizedClass):
             trans_c, arch, shuffle_type, use_tf32);
         auto c_ = c.clone_whole_storage();
         std::vector<GemmTuneResult> all_profile_res;
-        std::vector<int> splitk_tests;
+        std::unordered_set<int> splitk_tests;
         std::vector<float> times;
-
+        float min_time = -1;
         for (auto& desp : avail){{
             tv::gemm::GemmParams params;
             if (desp.is_nvrtc || prebuilt_names_.find(desp.__repr__()) == prebuilt_names_.end()){{
@@ -722,12 +723,18 @@ class GemmTunerSimple(pccm.ParameterizedClass):
             params.stream = stream_int;
             if (desp.split_k_serial() && (hint & {AlgoHint.BackwardWeight.value})){{
                 splitk_tests = {{{', '.join(map(str, SPCONV_BWD_SPLITK))}}};
+                splitk_tests.insert(int(a.dim(0)) / std::min(1 << 10, int(a.dim(0))));
+                splitk_tests.insert(int(a.dim(0)) / std::min(1 << 11, int(a.dim(0))));
+                splitk_tests.insert(int(a.dim(0)) / std::min(1 << 12, int(a.dim(0))));
             }} else {{
                 splitk_tests = {{1}};
             }}
-            for (auto spk : splitk_tests){{
+            std::vector<int> splitk_tests_vec(splitk_tests.begin(), splitk_tests.end());
+            std::sort(splitk_tests_vec.begin(), splitk_tests_vec.end(), [](auto a, auto b){{return a > b;}});
+            for (auto spk : splitk_tests_vec){{
                 float total_time = 0.0;
                 params.split_k_slices = spk;
+                int actual_run = 0;
                 for (int j = 0; j < num_run; ++j){{
                     auto ev_start = tv::CUDAEvent();
                     auto ev_end = tv::CUDAEvent();
@@ -736,11 +743,22 @@ class GemmTunerSimple(pccm.ParameterizedClass):
                     ev_end.record(stream_int);
                     if (j > 0){{
                         // skip first run
-                        total_time += tv::CUDAEvent::sync_and_duration(ev_start, ev_end);
+                        auto cur_time = tv::CUDAEvent::sync_and_duration(ev_start, ev_end);
+                        total_time += cur_time;
+                        actual_run++;
+                        if (min_time > 0 && cur_time > min_time * 1.5){{
+                            // early skip for slow kernels
+                            break;
+                        }}
                     }}
                 }}
-                total_time /= (num_run - 1);
+                total_time /= actual_run;
                 times.push_back(total_time);
+                if (min_time < 0){{
+                    min_time = total_time;
+                }}else{{
+                    min_time = std::min(min_time, total_time);
+                }}
                 all_profile_res.push_back(GemmTuneResult(desp, arch, spk));
             }}
         }}
@@ -1078,6 +1096,7 @@ class ConvTunerSimple(pccm.ParameterizedClass):
                 finally_algos.push_back(desp);
             }}
         }}
+        std::sort(finally_algos.begin(), finally_algos.end(), [](auto a, auto b){{return a.min_arch > b.min_arch;}});
         return finally_algos;
         """)
         return code.ret("std::vector<tv::gemm::ConvAlgoDesp>",
@@ -1145,9 +1164,10 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         int channel_c = inp.dim(1);
 
         std::vector<ConvTuneResult> all_profile_res;
-        std::vector<int> splitk_tests;
+        std::unordered_set<int> splitk_tests;
         std::vector<float> times;
         tv::gemm::ConvOpType op_type_cpp = static_cast<tv::gemm::ConvOpType>(op_type);
+        float min_time = -1;
         for (auto& desp : avail){{
             tv::gemm::ConvParams params({NDIM_DONT_CARE}, op_type_cpp, tv::CUDAKernelTimer(false));
             if (desp.is_nvrtc || prebuilt_names_.find(desp.__repr__()) == prebuilt_names_.end()){{
@@ -1176,12 +1196,18 @@ class ConvTunerSimple(pccm.ParameterizedClass):
 
             if (desp.split_k_serial() && (op_type_cpp == tv::gemm::ConvOpType::kBackwardWeight)){{
                 splitk_tests = {{{', '.join(map(str, SPCONV_BWD_SPLITK))}}};
+                splitk_tests.insert(int(inp.dim(0)) / std::min(1 << 10, int(inp.dim(0))));
+                splitk_tests.insert(int(inp.dim(0)) / std::min(1 << 11, int(inp.dim(0))));
+                splitk_tests.insert(int(inp.dim(0)) / std::min(1 << 12, int(inp.dim(0))));
             }} else {{
                 splitk_tests = {{1}};
             }}
-            for (auto spk : splitk_tests){{
+            std::vector<int> splitk_tests_vec(splitk_tests.begin(), splitk_tests.end());
+            std::sort(splitk_tests_vec.begin(), splitk_tests_vec.end(), [](auto a, auto b){{return a > b;}});
+            for (auto spk : splitk_tests_vec){{
                 float total_time = 0.0;
                 params.split_k_slices = spk;
+                int actual_run = 0;
                 for (int j = 0; j < num_run; ++j){{
                     auto ev_start = tv::CUDAEvent();
                     auto ev_end = tv::CUDAEvent();
@@ -1190,11 +1216,22 @@ class ConvTunerSimple(pccm.ParameterizedClass):
                     ev_end.record(stream_int);
                     if (j > 0){{
                         // skip first run
-                        total_time += tv::CUDAEvent::sync_and_duration(ev_start, ev_end);
+                        auto cur_time = tv::CUDAEvent::sync_and_duration(ev_start, ev_end);
+                        total_time += cur_time;
+                        actual_run++;
+                        if (min_time > 0 && cur_time > min_time * 1.5){{
+                            // early skip for slow kernels
+                            break;
+                        }}
                     }}
                 }}
-                total_time /= (num_run - 1);
+                total_time /= actual_run;
                 times.push_back(total_time);
+                if (min_time < 0){{
+                    min_time = total_time;
+                }}else{{
+                    min_time = std::min(min_time, total_time);
+                }}
                 all_profile_res.push_back(ConvTuneResult(desp, arch, spk));
             }}
         }}
