@@ -16,47 +16,30 @@
 
 ## Simple Benchmark
 
-### Network Benchmark without batchnorm (F32/F16) in RTX 3080 Laptop GPU 150W
+### Network Benchmark without batchnorm (TF32/F16) in Different GPUs
 
-Network Code: test/benchmark.py
+Basic: ```python -m spconv.benchmark bench_basic f16``` and ```python -m spconv.benchmark bench_basic tf32```
 
-| F32/F16 | Spconv 1.x F32 (1080Ti) | Native| Implicit Gemm | Implicit Gemm Split Mask  |
+| GPUs | F16-Forward | F16-Backward | TF32-Forward  | TF32-Backward |
 | -------------- |:---------------------:|---------------------:|---------------------:| ---------------------:|
-| Forward | 43ms     | 21.7ms/13.7ms    | 23.5ms/11.2ms      | 22ms/12.2ms      |
-| Backward | 80ms    | 41.9ms/25.2ms    | 51.0ms/13.8ms      | 41.1ms/12.2ms      |
+| T4 | 18.74     | 25.51    | N/A      | N/A      |
+| RTX 3080 Laptop (150W) | 8.2    | 11.51    | 15.04      | 26.90      |
+| A100 | 13.02    | 12.43    | 12.35      | 14.93      |
+| RTX3090 | 11.84    | 11.84    | 13.23      | 15.79      |
+| RTX A6000 | 11.11    | 8.97    | 12.30      | 12.79      |
 
-| F16 Forward | Native| Implicit Gemm | Implicit Gemm Split Mask  |
-| -------------- |:---------------------:|---------------------:| ---------------------:|
-| RTX 3080 Laptop 150W@1755MHz | 13.7ms     | 11.2ms    | 12.2ms      |
-| RTX A6000 | 19.1ms    |  11.7ms   | 14.0ms      |
-| TESLA V100 | 17.9ms    |  11.4ms   | 13.4ms      |
-| A100 | 23.8ms    |  12.4ms   | 15.1ms      |
+Large: ```python -m spconv.benchmark bench_large f16``` and ```python -m spconv.benchmark bench_large tf32```
 
-| F16 Backward | Native| Implicit Gemm | Implicit Gemm Split Mask  |
-| -------------- |:---------------------:|---------------------:| ---------------------:|
-| RTX 3080 Laptop 150W@1755MHz | 25.2ms     | 13.8ms    | 12.2ms      |
-| RTX A6000       | 28.1ms     | 9.2ms     | 8.9ms      |
-| TESLA V100 | 33.9ms    |  12.2ms   | 12.9ms      |
-| A100 | 37.6ms    |  12.2ms   | 13.9ms      |
+| GPUs | F16-Forward | F16-Backward | TF32-Forward  | TF32-Backward |
+| -------------- |:---------------------:|---------------------:|---------------------:| ---------------------:|
+| T4 | 128.7     | 203.3    | N/A      | N/A      |
+| RTX 3080 Laptop (150W) | 43.15    | 74.57    | 84.65      | 165.19      |
+| A100 | 19.85    | 31.24    | 29.58      | 55.63      |
+| RTX3090 | 27.83    | 40.45    | 44.51      | 73.17      |
+| RTX A6000 | 28.62    | 39.86    | 45.43      | 74.11      |
 
-### Network Gemm Kernel Benchmark FP16 in RTX 3080 Laptop GPU
-
-Network Code: test/benchmark.py
-
-The network/input/profile code is same as above table.
-
-This table only profile **fp16 gemm kernels** without output tensor create/clear overhead. this table show the performance upper bound of our algorithm.
-
-| F16 |  Native| Implicit Gemm | Implicit Gemm Split Mask  |
-| -------------- |:---------------------:|---------------------:| ---------------------:|
-| Forward | 8.0ms    | 4.3ms      | 4.0ms      |
-
-We can see that the implicit gemm is very fast, gemm only use 4.3ms/11.2ms in network forward. we can achieve better performance in TensorRT + Pure C++.
 
 **NOTE** 
 When you want to benchmark network in your laptop, don't forget to close all apps except terminals! Other apps will consume GPU resource and make kernels run slower.
 
 
-## Comparsion with [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine) and [torchsparse](https://github.com/mit-han-lab/torchsparse)
-
-TODO
