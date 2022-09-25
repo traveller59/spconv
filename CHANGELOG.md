@@ -1,4 +1,9 @@
 # Changelog
+## [2.2.1] - 2022-9-25
+### Fixed 
+- Fix build problem
+- Fix nvrtc problem
+
 ## [2.2.0] - 2022-9-24
 ### Added 
 - Add Ampere support. faster fp16, faster tf32 and greatly faster int8 kernels in Ampere GPUs.

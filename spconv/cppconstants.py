@@ -14,13 +14,13 @@
 
 import spconv.core_cc as _ext
 from spconv.core_cc.csrc.sparse.all import SpconvOps
+from spconv.core_cc.csrc.utils.boxops import BoxOps
+from spconv.core_cc.cumm.common import CompileInfo
 
 CPU_ONLY_BUILD = SpconvOps.is_cpu_only_build()
 
 BUILD_CUMM_VERSION = SpconvOps.cumm_version()
 BUILD_PCCM_VERSION = SpconvOps.pccm_version()
-from spconv.core_cc.csrc.utils.boxops import BoxOps
-from spconv.core_cc.cumm.common import CompileInfo
 HAS_BOOST = BoxOps.has_boost()
 
 COMPILED_CUDA_ARCHS = set(CompileInfo.get_compiled_cuda_arch())

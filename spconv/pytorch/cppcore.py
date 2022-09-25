@@ -20,6 +20,8 @@ from spconv.cppconstants import COMPILED_CUDA_ARCHS
 import sys
 from spconv.core_cc.csrc.sparse.alloc import ExternalAllocator
 from spconv.core_cc.csrc.sparse.convops import ExternalSpconvMatmul
+from spconv.core_cc.cumm.common import CompileInfo
+import warnings
 
 import numpy as np
 
@@ -93,12 +95,11 @@ def get_current_stream():
 
 def get_arch():
     arch = torch.cuda.get_device_capability()
-    if arch not in COMPILED_CUDA_ARCHS:
-        print(
+    if not CompileInfo.arch_is_compatible(arch) and not CompileInfo.algo_can_use_ptx((0, 0), arch):
+        warnings.warn(
             f"[WARNING]your gpu arch {arch} isn't compiled in prebuilt, "
-            f"may cause invalid device function. "
-            f"available: {COMPILED_CUDA_ARCHS}",
-            file=sys.stderr)
+            f"may cause invalid device function error. "
+            f"available: {COMPILED_CUDA_ARCHS}")
     return arch
 
 

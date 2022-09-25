@@ -131,6 +131,8 @@ class SpconvOps(pccm.Class):
         define_str = "\n".join(defines)
         self.add_global_code(define_str)
         self.build_meta.add_global_cflags("cl", "/DNOMINMAX")
+        # self.build_meta.add_global_cflags("nvcc", "-w")
+
         # for name in dir(AllocKeys):
         #     if not name.startswith("__"):
         #         v = getattr(AllocKeys, name)

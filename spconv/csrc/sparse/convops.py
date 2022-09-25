@@ -550,7 +550,6 @@ class GemmTunerSimple(pccm.ParameterizedClass):
         }}
         // auto avail_algos = get_available_algo_str_from_arch(arch);
         std::vector<tv::gemm::GemmAlgoDesp> finally_algos;
-        auto is_arch_compiled = CompileInfo::arch_is_compiled_gemm(arch);
         static_key_t static_key = std::make_tuple(trans_a, trans_b, trans_c, int(a.dtype()),
             int(b.dtype()), int(c.dtype()), shuffle_type);
         if (static_key_to_desps_.find(static_key) == static_key_to_desps_.end()){{
@@ -574,13 +573,22 @@ class GemmTunerSimple(pccm.ParameterizedClass):
             auto ldb = b.stride(0);
             auto ldc = c.stride(0);
             if (desp.supported_ldx(lda, ldb, ldc)){{
-                if (!is_arch_compiled){{
-                    auto desp2 = desp;
-                    desp2.is_nvrtc = true;
-                    finally_algos.push_back(desp2);
-                }}else{{
-                    finally_algos.push_back(desp);
+                if (desp.is_nvrtc){{
+                    if (!CompileInfo::algo_can_be_nvrtc_compiled(desp.min_arch)){{
+                        continue;
+                    }}
                 }}
+                if (!CompileInfo::arch_is_compiled_gemm(arch)){{
+                    if (!CompileInfo::gemm_algo_can_use_ptx(desp.min_arch, arch)){{
+                        if (CompileInfo::algo_can_be_nvrtc_compiled(desp.min_arch)){{
+                            auto desp2 = desp;
+                            desp2.is_nvrtc = true;
+                        }}else{{
+                            continue;
+                        }}
+                    }}
+                }}
+                finally_algos.push_back(desp);
             }}
         }}
         return finally_algos;
@@ -699,7 +707,7 @@ class GemmTunerSimple(pccm.ParameterizedClass):
 
         for (auto& desp : avail){{
             tv::gemm::GemmParams params;
-            if (desp.is_nvrtc && prebuilt_names_.find(desp.__repr__()) == prebuilt_names_.end()){{
+            if (desp.is_nvrtc || prebuilt_names_.find(desp.__repr__()) == prebuilt_names_.end()){{
                 params.nvrtc_params = cached_get_nvrtc_params(desp, arch, stream_int);
             }}
             params.a = a;
@@ -865,7 +873,7 @@ class GemmTunerSimple(pccm.ParameterizedClass):
 
         tv::gemm::GemmParams params;
         bool desp_is_static = prebuilt_names_.find(desp.__repr__()) == prebuilt_names_.end();
-        if (force_nvrtc || (desp.is_nvrtc && desp_is_static)){{
+        if (force_nvrtc || (desp.is_nvrtc || desp_is_static)){{
             params.nvrtc_params = cached_get_nvrtc_params(desp, profile_res.arch, stream_int);
         }}
         params.a = a;
@@ -1008,7 +1016,6 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         use_f32_as_accum = false;
 
         std::vector<tv::gemm::ConvAlgoDesp> finally_algos;
-        auto is_arch_compiled = CompileInfo::arch_is_compiled_gemm(arch);
         static_key_t static_key = std::make_tuple(
             layout_i, layout_w, layout_o,
             interleave_i, interleave_w, interleave_o, inp.dtype(),
@@ -1053,13 +1060,22 @@ class ConvTunerSimple(pccm.ParameterizedClass):
                 mask_width_valid = mask_width % desp.tile_shape[2] == 0;
             }}
             if (desp.supported_ldx_conv(ldi, ldw, ldo) && mask_width_valid){{
-                if (!is_arch_compiled){{
-                    auto desp2 = desp;
-                    desp2.is_nvrtc = true;
-                    finally_algos.push_back(desp2);
-                }}else{{
-                    finally_algos.push_back(desp);
+                if (desp.is_nvrtc){{
+                    if (!CompileInfo::algo_can_be_nvrtc_compiled(desp.min_arch)){{
+                        continue;
+                    }}
                 }}
+                if (!CompileInfo::arch_is_compiled_gemm(arch)){{
+                    if (!CompileInfo::gemm_algo_can_use_ptx(desp.min_arch, arch)){{
+                        if (CompileInfo::algo_can_be_nvrtc_compiled(desp.min_arch)){{
+                            auto desp2 = desp;
+                            desp2.is_nvrtc = true;
+                        }}else{{
+                            continue;
+                        }}
+                    }}
+                }}
+                finally_algos.push_back(desp);
             }}
         }}
         return finally_algos;
@@ -1134,7 +1150,7 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         tv::gemm::ConvOpType op_type_cpp = static_cast<tv::gemm::ConvOpType>(op_type);
         for (auto& desp : avail){{
             tv::gemm::ConvParams params({NDIM_DONT_CARE}, op_type_cpp, tv::CUDAKernelTimer(false));
-            if (desp.is_nvrtc && prebuilt_names_.find(desp.__repr__()) == prebuilt_names_.end()){{
+            if (desp.is_nvrtc || prebuilt_names_.find(desp.__repr__()) == prebuilt_names_.end()){{
                 params.nvrtc_params = cached_get_nvrtc_params(desp, arch, stream_int);
             }}
             params.conv_algo_desp = desp;
@@ -1311,7 +1327,7 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         auto arch = profile_res.arch;
         tv::gemm::ConvParams params({NDIM_DONT_CARE}, op_type_cpp, timer);
         bool desp_is_static = prebuilt_names_.find(desp.__repr__()) == prebuilt_names_.end();
-        if (force_nvrtc || (desp.is_nvrtc && desp_is_static)){{
+        if (force_nvrtc || (desp.is_nvrtc || desp_is_static)){{
             params.nvrtc_params = cached_get_nvrtc_params(desp, arch, stream_int);
         }}
         params.conv_algo_desp = desp;

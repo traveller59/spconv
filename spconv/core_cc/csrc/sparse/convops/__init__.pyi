@@ -3,7 +3,6 @@ from pccm.stubs import EnumValue, EnumClassValue
 from cumm.tensorview.gemm import GemmAlgoDesp
 from cumm.tensorview.gemm import ConvAlgoDesp
 from cumm.tensorview import Tensor
-from ...csrc.sparse.convops import ExternalSpconvMatmul
 class GemmTuneResult:
     algo_desp: GemmAlgoDesp
     arch: Tuple[int, int]

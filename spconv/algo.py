@@ -17,7 +17,7 @@ import time
 from enum import Enum
 from threading import Lock
 from typing import Dict, List, Optional, Set, Tuple, Union
-
+from spconv.core_cc.cumm.common import CompileInfo
 import numpy as np
 from cumm import tensorview as tv
 from cumm.conv.bases import ConvLayout, ConvLayoutType, ConvOpType
@@ -337,9 +337,20 @@ class SimpleGemm:
             ldb = b.stride[0]
             ldc = c.stride[0]
             if desp.supported_ldx(lda, ldb, ldc):
-                if arch not in COMPILED_CUDA_GEMM_ARCHS:
-                    desp = desp.copy()
-                    desp.is_nvrtc = True
+                if desp.is_nvrtc:
+                    if not CompileInfo.algo_can_be_nvrtc_compiled(desp.min_arch):
+                        continue
+                if not CompileInfo.arch_is_compiled_gemm(arch):
+                    # use PTX of possible
+                    if not CompileInfo.gemm_algo_can_use_ptx(desp.min_arch, arch):
+                        if CompileInfo.algo_can_be_nvrtc_compiled(desp.min_arch):
+                            # compiled kernel can't use PTX, for example, desp need at least sm_80 and only sm_75+PTX is compiled
+                            # all sm_80 code of this desp is invalid, we must use nvrtc.
+                            # only desp <= sm_75 can use virtual PTX code to generate sm_80 code.
+                            desp = desp.copy()
+                            desp.is_nvrtc = True
+                        else:
+                            continue
                 if SPCONV_DEBUG_NVRTC_KERNELS:
                     desp.is_nvrtc = True
                 finally_algos.append(desp)
@@ -455,7 +466,7 @@ class SimpleGemm:
             if desp.split_k_serial and hint & AlgoHint.BackwardWeight.value:
                 split_k_slices = max(min(32, k // 128), 1)
             params = GemmParams()
-            if desp.is_nvrtc and str(desp) not in self.prebuilt_desp_names:
+            if desp.is_nvrtc or str(desp) not in self.prebuilt_desp_names:
                 params.nvrtc_params = self._cached_get_nvrtc_params(desp, arch)
             params.a = a
             params.b = b
@@ -550,7 +561,7 @@ class SimpleGemm:
             split_k_slices = profile_res.splitk
         params = GemmParams()
         is_not_static = str(algo_desp) not in self.prebuilt_desp_names
-        if algo_desp.is_nvrtc and (is_not_static or force_nvrtc):
+        if algo_desp.is_nvrtc or is_not_static or force_nvrtc:
             params.nvrtc_params = self._cached_get_nvrtc_params(
                 algo_desp, profile_res.arch)
 
@@ -720,9 +731,20 @@ class SimpleConv:
                 assert mask_width > 0
                 mask_width_valid = mask_width % desp.tile_shape[2] == 0
             if desp.supported_ldx_conv(ldi, ldw, ldo) and mask_width_valid:
-                if arch not in COMPILED_CUDA_GEMM_ARCHS:
-                    desp = desp.copy()
-                    desp.is_nvrtc = True
+                if desp.is_nvrtc:
+                    if not CompileInfo.algo_can_be_nvrtc_compiled(desp.min_arch):
+                        continue
+                if not CompileInfo.arch_is_compiled_gemm(arch):
+                    # use PTX of possible
+                    if not CompileInfo.gemm_algo_can_use_ptx(desp.min_arch, arch):
+                        if CompileInfo.algo_can_be_nvrtc_compiled(desp.min_arch):
+                            # compiled kernel can't use PTX, for example, desp need at least sm_80 and only sm_75+PTX is compiled
+                            # all sm_80 code of this desp is invalid, we must use nvrtc.
+                            # only desp <= sm_75 can use virtual PTX code to generate sm_80 code.
+                            desp = desp.copy()
+                            desp.is_nvrtc = True
+                        else:
+                            continue
                 if SPCONV_DEBUG_NVRTC_KERNELS:
                     desp.is_nvrtc = True
                 finally_algos.append(desp)
@@ -826,7 +848,7 @@ class SimpleConv:
         for desp in avail:
             # for sparse conv, ndim isn't used, so we just provide a constant value.
             params = ConvParams(NDIM_DONT_CARE, ConvOpTypeCpp(op_type.value))
-            if desp.is_nvrtc and str(desp) not in self.prebuilt_desp_names:
+            if desp.is_nvrtc or str(desp) not in self.prebuilt_desp_names:
                 params.nvrtc_params = self._cached_get_nvrtc_params(desp, arch)
 
             params.conv_algo_desp = desp
@@ -935,7 +957,7 @@ class SimpleConv:
         params = ConvParams(NDIM_DONT_CARE, ConvOpTypeCpp(op_type_value))
         is_not_static = str(
                 algo_desp) not in self.prebuilt_desp_names
-        if force_nvrtc or (algo_desp.is_nvrtc and is_not_static):
+        if force_nvrtc or algo_desp.is_nvrtc or is_not_static:
             params.nvrtc_params = self._cached_get_nvrtc_params(
                 algo_desp, profile_res.arch)
         params.conv_algo_desp = profile_res.algo_desp
