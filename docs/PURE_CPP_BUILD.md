@@ -2,6 +2,8 @@
 
 Spconv provide a way to generate sources to build a C++ library with all op needed for inference and train.
 
+The generated libspconv has been deployed to tensorrt and run in real automatic driving vehicles.
+
 ## Steps
 
 1. Install spconv, Install cumm, Install cumm cmake, or add it as a sub directory

@@ -74,6 +74,7 @@ Update Spconv: you **MUST UNINSTALL** all spconv/cumm/spconv-cuxxx/cumm-cuxxx fi
 * nvrtc support: kernel in old GPUs will be compiled in runtime.
 * [libspconv](docs/PURE_CPP_BUILD.md): pure c++ build of all spconv ops. see [example](example/libspconv/run_build.sh)
 * tf32 kernels, faster fp32 training, disabled by default. set ```import spconv as spconv_core; spconv_core.constants.SPCONV_ALLOW_TF32 = True``` to enable them.
+* all weights are KRSC layout, some old model can't be loaded anymore.
 
 
 ## Spconv 2.1 vs Spconv 1.x
