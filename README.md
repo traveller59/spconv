@@ -60,6 +60,8 @@ Check [spconv 2.x algorithm introduction](docs/spconv2_algo.pdf) to understand s
 
 Use spconv >= cu114 if possible. cuda 11.4 can compile greatly faster kernel in some situation.
 
+Update Spconv: you **MUST UNINSTALL** all spconv/cumm/spconv-cuxxx/cumm-cuxxx first, use ```pip list | grep spconv``` and ```pip list | grep cumm``` to check all installed package. then use pip to install new spconv.
+
 ## NEWS
 
 * spconv 2.2: ampere feature support (by [EvernightAurora](https://github.com/EvernightAurora)), pure c++ code generation, nvrtc, drop python 3.6
@@ -67,7 +69,7 @@ Use spconv >= cu114 if possible. cuda 11.4 can compile greatly faster kernel in 
 ## Spconv 2.2 vs Spconv 2.1
 
 * faster fp16 conv kernels (~5-30%) in ampere GPUs (tested in RTX 3090)
-* greatly faster int8 conv kernels (~1.2x~2.7x) in ampere GPUs (tested in RTX 3090)
+* greatly faster int8 conv kernels (~1.2x-2.7x) in ampere GPUs (tested in RTX 3090)
 * drop python 3.6 support
 * nvrtc support: kernel in old GPUs will be compiled in runtime.
 * [libspconv](docs/PURE_CPP_BUILD.md): pure c++ build of all spconv ops. see [example](example/libspconv/run_build.sh)

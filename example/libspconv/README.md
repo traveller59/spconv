@@ -1,3 +1,7 @@
 ## libspconv Example
 
 run ```run_build.sh``` to get ```libspconv.so```.
+
+## libspconv API
+
+currently not available, but you can check python code to understand how to use C++ apis, spconv python and libspconv use same c++ code.
