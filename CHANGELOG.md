@@ -1,4 +1,9 @@
 # Changelog
+## [2.2.3] - 2022-9-28
+### Fixed 
+- Fix missing .contiguous for input feature
+- Add some debug msg if points vanished.
+
 ## [2.2.2] - 2022-9-25
 ### Fixed 
 - Fix CI problem: main function too long and cause OOM in CI vm.

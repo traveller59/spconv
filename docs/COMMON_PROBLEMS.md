@@ -27,7 +27,7 @@ Your coordinates generate nothing with some conv params. Modify your conv params
 Example:
 
 Conv Params:
-```spatial shape=[8, 200, 200],ksize=[3, 3, 3],stride=[2, 2, 2],padding=[0, 1, 1],dilation=[1, 1, 1]```
+```spatial shape=[8, 200, 200],ksize=3,stride=2,padding=[0, 1, 1],dilation=1```
 Coordinates:
 ```
 [[0, 7, 153, 142]]

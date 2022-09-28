@@ -327,7 +327,9 @@ class SparseConvolution(SparseModule):
             out_tensor.spatial_shape = out_spatial_shape
             return out_tensor
         indice_dict = input.indice_dict.copy()
-
+        # only support contiguous tensor for now
+        if not features.is_contiguous():
+            features = features.contiguous()
         algo = self.algo
         if self.indice_key is not None:
             datas = input.find_indice_pair(self.indice_key)

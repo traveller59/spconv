@@ -51,6 +51,24 @@ DEBUG = False
 DEBUG_INT64_HASH_K = False
 INT32_MAX = SpconvOps.get_int32_max()
 
+_POINT_VANISH_MSG = """Your points vanished here, this usually because you provide 
+conv params that may ignore some input points. Example: 
+    spatial_shape=[8, 200, 200]
+    ksize=3
+    stride=2
+    padding=[0, 1, 1]
+    dilation=1
+    Coordinates=[[0, 7, 153, 142]]
+these params will cause ALL points in z == 7 dropped because of padding_z=0.
+enlarge your spatial shape or change your conv param to make sure 
+every input point has a corresponding output point.
+Your Conv Params: 
+    spatial_shape={}
+    ksize={}
+    stride={}
+    padding={}
+    dilation={}"""
+
 
 def get_conv_output_size(input_size, kernel_size, stride, padding, dilation):
     ndim = len(input_size)
@@ -239,6 +257,9 @@ def get_indice_pairs(indices: torch.Tensor,
                                                 stream_int=stream)
             uniq_res = indice_pairs_uniq.unique()
             num_act_out = uniq_res.shape[0] - 1
+            if (num_act_out == 0):
+                msg = _POINT_VANISH_MSG.format(spatial_shape, ksize, stride, padding, dilation)
+                raise ValueError(msg)
             use_bound_algo = False
             if num_out_act_bound > 0 and num_act_out > num_out_act_bound:
                 num_act_out = num_out_act_bound
@@ -611,6 +632,9 @@ def get_indice_pairs_implicit_gemm(
                 num_act_out = uniq_res.shape[0] - 1
                 uniq_out_indices_offset_tv = torch_tensor_to_tv(uniq_res)
                 raw_out_indices_offset_tv = indice_pairs_uniq_tv
+            if (num_act_out == 0):
+                msg = _POINT_VANISH_MSG.format(spatial_shape, ksize, stride, padding, dilation)
+                raise ValueError(msg)
 
         if num_out_act_bound > 0 and num_act_out > num_out_act_bound:
             num_act_out = num_out_act_bound
@@ -1080,6 +1104,15 @@ def indice_conv_backward(features: torch.Tensor,
                          algo: ConvAlgo = ConvAlgo.Native,
                          timer: CUDAKernelTimer = CUDAKernelTimer(False)):
     # print(out_bp.mean(), out_bp.max(), out_bp.min())
+    filters_shape = filters.shape
+    # TODO handle this in nn.Module to make sure features in backward is contiguous
+    if not features.is_contiguous():
+        features = features.contiguous()
+    if not out_bp.is_contiguous():
+        out_bp = out_bp.contiguous()
+    assert out_bp.is_contiguous()
+    assert filters.is_contiguous()
+    assert features.is_contiguous()
 
     if SPCONV_CPP_GEMM and GEMM_CPP is not None:
         alloc = TorchAllocator(features.device)
@@ -1109,16 +1142,6 @@ def indice_conv_backward(features: torch.Tensor,
         din = alloc.allocated[AllocKeys.DIn]
         df = alloc.allocated[AllocKeys.DFilters]
         return din, df
-
-    filters_shape = filters.shape
-    # TODO handle this in nn.Module to make sure features in backward is contiguous
-    if not features.is_contiguous():
-        features = features.contiguous()
-    if not out_bp.is_contiguous():
-        out_bp = out_bp.contiguous()
-    assert out_bp.is_contiguous()
-    assert filters.is_contiguous()
-    assert features.is_contiguous()
 
     if not ALL_WEIGHT_IS_KRSC:
         kv_dim = 0
@@ -1438,6 +1461,10 @@ def implicit_gemm(features: torch.Tensor,
     if bias is not None:
         bias_tv = torch_tensor_to_tv(bias)
 
+    if not features.is_contiguous():
+        features = features.contiguous()
+    assert features.is_contiguous()
+    assert filters.is_contiguous()
 
     if SPCONV_CPP_GEMM and CONV_CPP is not None:
         alloc = TorchAllocator(features.device)
@@ -1477,10 +1504,6 @@ def implicit_gemm(features: torch.Tensor,
     # CONV.stream_synchronize(stream)
 
     # t = time.time()
-    if not features.is_contiguous():
-        features = features.contiguous()
-    assert features.is_contiguous()
-    assert filters.is_contiguous()
 
     if features.dtype == torch.int8 or features.dtype == torch.qint8:
         raise NotImplementedError("work in progress")

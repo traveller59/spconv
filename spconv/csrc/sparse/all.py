@@ -1856,7 +1856,28 @@ class SpconvOps(pccm.Class):
                 }}
             }}
             // tv::ssprint("HASH SIZE", hash_size, num_act_out);
-
+            if (num_act_out == 0){{
+                std::stringstream ss;
+                ss << R"(Your points vanished here, this usually because you provide 
+conv params that may ignore some input points. Example: 
+    spatial_shape=[8, 200, 200]
+    ksize=3
+    stride=2
+    padding=[0, 1, 1]
+    dilation=1
+    Coordinates=[[0, 7, 153, 142]]
+these params will cause ALL points in z == 7 dropped because of padding_z=0.
+enlarge your spatial shape or change your conv param to make sure 
+every input point has a corresponding output point.
+Your Conv Params: )" << "\\n";
+                tv::sstream_print<'\\0'>(ss, "    spatial_shape=", input_dims, "\\n");
+                tv::sstream_print<'\\0'>(ss, "    ksize=", ksize, "\\n");
+                tv::sstream_print<'\\0'>(ss, "    stride=", stride, "\\n");
+                tv::sstream_print<'\\0'>(ss, "    padding=", padding, "\\n");
+                tv::sstream_print<'\\0'>(ss, "    dilation=", dilation, "\\n");
+                tv::ssprint(ss.str());
+                throw std::runtime_error(ss.str());
+            }}
             if (num_out_act_bound > 0 && num_act_out > num_out_act_bound){{
                 num_act_out = num_out_act_bound;
             }}
@@ -2092,6 +2113,29 @@ class SpconvOps(pccm.Class):
 
                     // TODO pytorch unique may be faster?
                     num_act_out = apply_thrust_unique_to_indice_pairs_uniq(indice_pairs_uniq, thrustalloc, stream_int);
+                    if (num_act_out == 0){{
+                        std::stringstream ss;
+                        ss << R"(Your points vanished here, this usually because you provide 
+conv params that may ignore some input points. Example: 
+    spatial_shape=[8, 200, 200]
+    ksize=3
+    stride=2
+    padding=[0, 1, 1]
+    dilation=1
+    Coordinates=[[0, 7, 153, 142]]
+these params will cause ALL points in z == 7 dropped because of padding_z=0.
+enlarge your spatial shape or change your conv param to make sure 
+every input point has a corresponding output point.
+Your Conv Params: )" << "\\n";
+                        tv::sstream_print<'\\0'>(ss, "    spatial_shape=", input_dims, "\\n");
+                        tv::sstream_print<'\\0'>(ss, "    ksize=", ksize, "\\n");
+                        tv::sstream_print<'\\0'>(ss, "    stride=", stride, "\\n");
+                        tv::sstream_print<'\\0'>(ss, "    padding=", padding, "\\n");
+                        tv::sstream_print<'\\0'>(ss, "    dilation=", dilation, "\\n");
+                        tv::ssprint(ss.str());
+                        throw std::runtime_error(ss.str());
+                    }}
+
                     bool use_bound_algo = false;
                     int64_t num_out_bounded = num_act_out;
                     if (num_out_act_bound > 0 && num_act_out > num_out_act_bound){{
