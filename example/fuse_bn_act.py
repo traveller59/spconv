@@ -75,7 +75,7 @@ def fuse_act_net(conv, act):
     fused_conv = copy.deepcopy(conv)
     if isinstance(act, torch.nn.ReLU):
         fused_conv.act_type = tv.gemm.Activation.ReLU
-    if isinstance(act, torch.nn.Sigmoid):
+    elif isinstance(act, torch.nn.Sigmoid):
         fused_conv.act_type = tv.gemm.Activation.Sigmoid
     elif isinstance(act, torch.nn.LeakyReLU):
         fused_conv.act_type = tv.gemm.Activation.LeakyReLU
@@ -385,7 +385,7 @@ def main():
     torch.manual_seed(50051)
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
-    with open(Path(__file__).parent / "data" / "test_spconv.pkl", "rb") as f:
+    with open(Path(__file__).parent.parent / "test" / "data" / "test_spconv.pkl", "rb") as f:
         (voxels, coors, spatial_shape) = pickle.load(f)
     np.random.seed(50051)
     device = torch.device("cuda:0")

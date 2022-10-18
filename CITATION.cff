@@ -1,0 +1,8 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - name: "Spconv Contributors"
+title: "Spconv: Spatially Sparse Convolution Library"
+date-released: 2022-10-12
+url: "https://github.com/traveller59/spconv"
+license: Apache-2.0

@@ -143,6 +143,38 @@ class ExampleNet(nn.Module):
         return self.net(x)
 ```
 
+#### Common Mistake 
+* issue [#467](https://github.com/traveller59/spconv/issues/467)
+```Python
+class WrongNet(nn.Module):
+    def __init__(self, shape):
+        super().__init__()
+        self.Encoder = spconv.SparseConv3d(channels, channels, kernel_size=3, stride=2, indice_key="cp1",algo=algo)
+        self.Sparse_Conv = spconv.SparseConv3d(channels, channels, kernel_size=3, stride=1,algo=algo)
+        self.Decoder = spconv.SparseInverseConv3d(channels, channels, kernel_size=3, indice_key="cp1",algo=algo)   
+
+    def forward(self, sparse_tensor):
+        encoded = self.Encoder(sparse_tensor)
+        s_conv = self.Sparse_Conv(encoded)
+        return self.Decoder(s_conv).features
+
+class CorrectNet(nn.Module):
+    def __init__(self, shape):
+        super().__init__()
+        self.Encoder = spconv.SparseConv3d(channels, channels, kernel_size=3, stride=2, indice_key="cp1",algo=algo)
+        self.Sparse_Conv = spconv.SparseConv3d(channels, channels, kernel_size=3, stride=1, indice_key="cp2",algo=algo)
+        self.Sparse_Conv_Decoder = spconv.SparseInverseConv3d(channels, channels, kernel_size=3, indice_key="cp2",algo=algo)   
+        self.Decoder = spconv.SparseInverseConv3d(channels, channels, kernel_size=3, indice_key="cp1",algo=algo)   
+
+    def forward(self, sparse_tensor):
+        encoded = self.Encoder(sparse_tensor)
+        s_conv = self.Sparse_Conv(encoded)
+        return self.Decoder(self.Sparse_Conv_Decoder(s_conv)).features
+
+```
+
+The ```Sparse_Conv``` in ```ExampleNet``` Change spatial structure of output of ```Encoder```, so we can't inverse back to input of ```Encoder``` via ```Decoder```, we need to inverse from ```Sparse_Conv.output``` to ```Encoder.output``` via ```Sparse_Conv_Decoder```, then inverse from ```Encoder.output``` to ```Encoder.input``` via ```Decoder```.
+
 ### Sparse Add
 
 In sematic segmentation network, we may use conv1x3, 3x1 and 3x3 in a block, but it's impossible to sum result from these layers because regular add requires same indices.

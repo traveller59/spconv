@@ -726,8 +726,8 @@ class SimpleConv:
             ldw = weight.dim(-1)
             ldo = out.dim(-1)
             mask_width_valid = True
-
-            if desp.op_type == ConvOpType.kBackwardWeight.value:
+            
+            if desp.op_type.value == ConvOpType.kBackwardWeight.value:
                 assert mask_width > 0
                 mask_width_valid = mask_width % desp.tile_shape[2] == 0
             if desp.supported_ldx_conv(ldi, ldw, ldo) and mask_width_valid:
