@@ -573,6 +573,7 @@ class GemmTunerSimple(pccm.ParameterizedClass):
             auto ldb = b.stride(0);
             auto ldc = c.stride(0);
             if (desp.supported_ldx(lda, ldb, ldc)){{
+                auto desp2 = desp;
                 if (desp.is_nvrtc){{
                     if (!CompileInfo::algo_can_be_nvrtc_compiled(desp.min_arch)){{
                         continue;
@@ -581,14 +582,13 @@ class GemmTunerSimple(pccm.ParameterizedClass):
                 if (!CompileInfo::arch_is_compiled_gemm(arch)){{
                     if (!CompileInfo::gemm_algo_can_use_ptx(desp.min_arch, arch)){{
                         if (CompileInfo::algo_can_be_nvrtc_compiled(desp.min_arch)){{
-                            auto desp2 = desp;
                             desp2.is_nvrtc = true;
                         }}else{{
                             continue;
                         }}
                     }}
                 }}
-                finally_algos.push_back(desp);
+                finally_algos.push_back(desp2);
             }}
         }}
         std::sort(finally_algos.begin(), finally_algos.end(), [](auto a, auto b){{return a.min_arch > b.min_arch;}});
@@ -1078,6 +1078,7 @@ class ConvTunerSimple(pccm.ParameterizedClass):
                 mask_width_valid = mask_width % desp.tile_shape[2] == 0;
             }}
             if (desp.supported_ldx_conv(ldi, ldw, ldo) && mask_width_valid){{
+                auto desp2 = desp;
                 if (desp.is_nvrtc){{
                     if (!CompileInfo::algo_can_be_nvrtc_compiled(desp.min_arch)){{
                         continue;
@@ -1086,14 +1087,13 @@ class ConvTunerSimple(pccm.ParameterizedClass):
                 if (!CompileInfo::arch_is_compiled_gemm(arch)){{
                     if (!CompileInfo::gemm_algo_can_use_ptx(desp.min_arch, arch)){{
                         if (CompileInfo::algo_can_be_nvrtc_compiled(desp.min_arch)){{
-                            auto desp2 = desp;
                             desp2.is_nvrtc = true;
                         }}else{{
                             continue;
                         }}
                     }}
                 }}
-                finally_algos.push_back(desp);
+                finally_algos.push_back(desp2);
             }}
         }}
         std::sort(finally_algos.begin(), finally_algos.end(), [](auto a, auto b){{return a.min_arch > b.min_arch;}});
