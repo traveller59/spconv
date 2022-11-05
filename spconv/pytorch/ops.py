@@ -185,7 +185,7 @@ def get_indice_pairs(indices: torch.Tensor,
         )
     assert algo == ConvAlgo.Native, "TODO"
     # indices = indices.cpu()
-    spatial_volume = functools.reduce(lambda x, y: x * y, out_shape, 1)
+    spatial_volume = functools.reduce(lambda x, y: x * y, out_shape, 1) * batch_size
     use_int64_hash_k = spatial_volume >= INT32_MAX or DEBUG_INT64_HASH_K
     indice_dtype = torch.int64 if use_int64_hash_k else indices.dtype
     pair = torch.full((2, kv, indices.shape[0]),
@@ -457,7 +457,7 @@ def get_indice_pairs_implicit_gemm(
         raise ValueError(
             f"your out spatial shape {out_shape} reach zero!!! input shape: {spatial_shape}"
         )
-    spatial_volume = functools.reduce(lambda x, y: x * y, spatial_shape, 1)
+    spatial_volume = functools.reduce(lambda x, y: x * y, spatial_shape, 1) * batch_size
     use_int64_hash_k = spatial_volume >= INT32_MAX or DEBUG_INT64_HASH_K
     indice_dtype = torch.int64 if use_int64_hash_k else indices.dtype
     assert algo == ConvAlgo.MaskImplicitGemm or algo == ConvAlgo.MaskSplitImplicitGemm, "TODO"

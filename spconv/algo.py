@@ -618,7 +618,6 @@ class SimpleConv:
         ]
         self.prebuilt_desps = prebuilt_desps
         self.prebuilt_desp_names = {str(d) for d in prebuilt_desps}
-        self.prebuilt_desp_names.clear()
         self.lock = Lock()
 
         self.static_key_to_desps = group_by(self.get_static_key, all_desps)

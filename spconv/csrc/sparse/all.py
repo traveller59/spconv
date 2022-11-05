@@ -1677,7 +1677,7 @@ class SpconvOps(pccm.Class):
         }}
         std::vector<int64_t> output_dims_i64(out_shape.begin(), out_shape.end());
         int64_t out_spatial_volume = std::accumulate(output_dims_i64.begin(),
-          output_dims_i64.end(), int64_t(1), std::multiplies<int64_t>());
+          output_dims_i64.end(), int64_t(1), std::multiplies<int64_t>()) * batch_size;
         bool use_int64_hash_k = out_spatial_volume >= int64_t(std::numeric_limits<int>::max());
         tv::DType indice_uniq_dtype = use_int64_hash_k ? tv::int64 : tv::int32;
         TV_ASSERT_RT_ERR(conv_algo == tv::gemm::SparseConvAlgo::kMaskImplicitGemm || 
@@ -2022,7 +2022,7 @@ Your Conv Params: )" << "\\n";
         }}
         std::vector<int64_t> output_dims_i64(out_shape.begin(), out_shape.end());
         int64_t out_spatial_volume = std::accumulate(output_dims_i64.begin(),
-          output_dims_i64.end(), int64_t(1), std::multiplies<int64_t>());
+          output_dims_i64.end(), int64_t(1), std::multiplies<int64_t>()) * batch_size;
         bool use_int64_hash_k = out_spatial_volume >= int64_t(std::numeric_limits<int>::max());
         tv::DType indice_uniq_dtype = use_int64_hash_k ? tv::int64 : tv::int32;
 

@@ -145,7 +145,8 @@ def generate_sparse_data(shape,
                          integer=False,
                          data_range=(-1, 1),
                          with_dense=True,
-                         dtype=np.float32):
+                         dtype=np.float32,
+                         shape_scale = 1):
     dense_shape = shape
     ndim = len(dense_shape)
     # num_points = np.random.randint(10, 100, size=[batch_size, ndim])
@@ -153,9 +154,9 @@ def generate_sparse_data(shape,
     # num_points = np.array([3, 2])
     batch_size = len(num_points)
     batch_indices = []
-    coors_total = np.stack(np.meshgrid(*[np.arange(0, s) for s in shape]),
+    coors_total = np.stack(np.meshgrid(*[np.arange(0, s // shape_scale) for s in shape]),
                            axis=-1)
-    coors_total = coors_total.reshape(-1, ndim)
+    coors_total = coors_total.reshape(-1, ndim) * shape_scale
     for i in range(batch_size):
         np.random.shuffle(coors_total)
         inds_total = coors_total[:num_points[i]]
