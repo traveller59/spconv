@@ -1,4 +1,9 @@
 # Changelog
+
+## [2.2.6] - 2022-11-06
+### Fixed 
+- CI fail because of pypi temporary shutdown. assign a new version and run again.
+
 ## [2.2.5] - 2022-11-05
 ### Fixed 
 - Fix overflow when shape is too large
