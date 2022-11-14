@@ -154,7 +154,7 @@ class SparseConvolution(SparseModule):
     def _load_weight_different_layout(self, state_dict, prefix, local_metadata,
                                       strict, missing_keys, unexpected_keys,
                                       error_msgs):
-        if self.record_voxel_count and not self.subm and not self.inverse and _MAX_NUM_VOXELS_DURING_TRAINING not in state_dict:
+        if self.record_voxel_count and not self.subm and not self.inverse and (prefix + _MAX_NUM_VOXELS_DURING_TRAINING) not in state_dict:
             state_dict[prefix + _MAX_NUM_VOXELS_DURING_TRAINING] = torch.zeros(
                 1, dtype=torch.int32)
         if not SAVED_WEIGHT_LAYOUT:
