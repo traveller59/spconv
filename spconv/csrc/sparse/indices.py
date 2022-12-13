@@ -608,10 +608,12 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
 
         code.arg("num_indices_in", "int")
         code.arg("num_indices_out", "int")
+        code.arg("mask_int_count", "int")
 
         code.raw(f"""
         int filter_offset = blockIdx.y;
-        uint32_t filter_mask_fwd = (1u << (filter_offset));
+        int filter_pointer_offset = filter_offset / 32;
+        uint32_t filter_mask_fwd = (1u << (filter_offset % 32));
         // TODO following rule for even kernel size is wrong. 
         // uint32_t filter_mask_bwd = (1u << (gridDim.y - 1 - filter_offset));
 
@@ -628,7 +630,7 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                     auto output_index = table.value_ptr()[table_offset];
                     bool valid = CheckValueValid ? output_index >= 0 : true;
                     if (valid){{
-                        atomicOr(mask_fwd + output_index, filter_mask_fwd);
+                        atomicOr(mask_fwd + output_index * mask_int_count + filter_pointer_offset, filter_mask_fwd);
                         // atomicOr(mask_bwd + input_index, filter_mask_bwd);
                         indice_pairs_fwd_filter[output_index] = input_index;
                         if (indice_pairs_bwd != nullptr){{
@@ -650,15 +652,19 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
 
         code.arg("num_indices_in", "int")
         code.arg("kv", "int")
+        code.arg("mask_int_count", "int")
 
         code.raw(f"""
         for (int input_index : tv::KernelLoopX<int>(num_indices_in)) {{
-            uint32_t mask = 0;
-            for (int filter_offset = 0; filter_offset < kv; ++filter_offset){{
-                auto val = indice_pairs_bwd[filter_offset * num_indices_in + input_index];
-                mask |= (val != -1) << filter_offset;
+            for (int mask_offset = 0; mask_offset < mask_int_count; ++mask_offset){{
+                uint32_t mask = 0;
+                for (int filter_offset = mask_offset * 32; filter_offset < mask_offset * 32 +  32 && filter_offset < kv; ++filter_offset){{
+                    auto val = indice_pairs_bwd[filter_offset * num_indices_in + input_index];
+                    mask |= (val != -1) << (filter_offset % 32);
+                }}
+                mask_bwd[input_index * mask_int_count + mask_offset] = mask;
             }}
-            mask_bwd[input_index] = mask;
+
         }}
         """)
         return code
@@ -680,11 +686,13 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         code.arg("mask_fwd", f"uint32_t*")  # [kernelProd]
         code.arg("num_indices_in", "int")
         code.arg("num_indices_out", "int")
+        code.arg("mask_int_count", "int")
 
         # TODO use block instead of filter_offset?
         code.raw(f"""
         int filter_offset = blockIdx.y;
-        uint32_t filter_mask_fwd = (1u << (filter_offset));
+        int filter_pointer_offset = filter_offset / 32;
+        uint32_t filter_mask_fwd = (1u << (filter_offset % 32));
 
         auto indice_pairs_fwd_filter = indice_pairs_fwd + filter_offset * num_indices_out;
         // auto indice_pairs_bwd_filter = indice_pairs_bwd + filter_offset * num_indices_in;
@@ -697,7 +705,7 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                     auto output_index = table.value_ptr()[table_offset];
                     bool valid = CheckValueValid ? output_index >= 0 : true;
                     if (valid){{
-                        atomicOr(mask_fwd + output_index, filter_mask_fwd);
+                        atomicOr(mask_fwd + output_index * mask_int_count + filter_pointer_offset, filter_mask_fwd);
                         indice_pairs_fwd_filter[output_index] = input_index;
                     }}
                 }}
@@ -803,11 +811,14 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
 
         code.arg("RS", "int")
         code.arg("is_train", "bool")
+        code.arg("mask_int_count", "int", "1")
 
         code.raw(f"""
         int filter_offset = blockIdx.y;
-        uint32_t filter_mask_out = (1u << (filter_offset));
-        uint32_t filter_mask_in = (1u << (RS - 1 - filter_offset));
+        uint32_t filter_mask_out = (1u << (filter_offset % 32));
+        uint32_t filter_mask_out_offset = filter_offset / 32;
+        uint32_t filter_mask_in = (1u << ((RS - 1 - filter_offset) % 32));
+        uint32_t filter_mask_in_offset = (RS - 1 - filter_offset) / 32;
         // uint32_t filter_mask_center = (1u << (RS / 2));
 
         loc_iter.set_filter_offset(filter_offset);
@@ -834,8 +845,8 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                     auto table_offset = table.lookup_offset(offset); // performance bound
                     if (table_offset != -1){{
                         auto input_index = table.value_ptr()[table_offset]; // we find a input indice idx.
-                        atomicOr(mask + output_index, filter_mask_out);
-                        atomicOr(mask + input_index, filter_mask_in);
+                        atomicOr(mask + output_index * mask_int_count + filter_mask_out_offset, filter_mask_out);
+                        atomicOr(mask + input_index * mask_int_count + filter_mask_in_offset, filter_mask_in);
                         // for this output, we set correct input idx.
                         indice_pairs[filter_offset_mul_indices_pair_size + output_index] = input_index;
                         if (is_train){{
@@ -1201,6 +1212,7 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                  f"tv::array<int, {self.ndim}>")
         code.arg("transposed", f"bool", "false")
         code.arg("stream_int", f"std::uintptr_t", "0")
+        code.arg("mask_int_count", "int", "1")
 
         code.raw(f"""
         auto custream = reinterpret_cast<cudaStream_t>(stream_int);
@@ -1267,11 +1279,13 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                     indice_pairs_fwd.data_ptr<int>(), indice_pairs_bwd.data_ptr<int>(), 
                     indice_pairs_uniq_before_sort.data_ptr<K>(),
                     mask_fwd.data_ptr<uint32_t>(), mask_bwd.data_ptr<uint32_t>(),
-                    num_act_in, indice_pairs_fwd.dim(1));
+                    num_act_in, indice_pairs_fwd.dim(1),
+                    mask_int_count);
                 launcher_num_act_in_no_y(calc_conv_indices_stage2_mask_output, 
                     indice_pairs_bwd.data_ptr<int>(), 
                     mask_bwd.data_ptr<uint32_t>(),
-                    num_act_in, kv);
+                    num_act_in, kv,
+                    mask_int_count);
                 if (mask_fwd.dim(0) == 2){{
                     mask_fwd[1].copy_(mask_fwd[0], ctx);
                 }}
@@ -1283,7 +1297,8 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                     indice_pairs_fwd.data_ptr<int>(), indice_pairs_bwd.data_ptr<int>(), 
                     indice_pairs_uniq_before_sort.data_ptr<K>(),
                     mask_fwd.data_ptr<uint32_t>(),
-                    num_act_in, indice_pairs_fwd.dim(1));
+                    num_act_in, indice_pairs_fwd.dim(1),
+                    mask_int_count);
                 if (mask_fwd.dim(0) == 2){{
                     mask_fwd[1].copy_(mask_fwd[0], ctx);
                 }}
@@ -1424,6 +1439,7 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                  "cumm.tensorview.Tensor = Tensor()")
         code.arg("is_train", "bool", "true")
         code.arg("stream_int", f"std::uintptr_t", "0")
+        code.arg("mask_int_count", "int", "1")
 
         code.raw(f"""
         int num_act_in_real = indices.dim(0);
@@ -1431,7 +1447,7 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         auto ctx = tv::Context();
         ctx.set_cuda_stream(custream);
         if (!indice_pair_mask.empty()){{
-            TV_ASSERT_INVALID_ARG(ksize.op<tv::arrayops::prod>() <= 32, "for now only support 32bit mask");
+            // TV_ASSERT_INVALID_ARG(ksize.op<tv::arrayops::prod>() <= 32, "for now only support 32bit mask");
         }}
         // TODO stream
         // TODO handle num input == 0
@@ -1488,11 +1504,15 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                 }}else{{
                     // indice_pair_mask: [1, num_act_in]
                     tv::cuda::Launch lanucher_fill(num_act_in_real, custream);
-                    lanucher_fill(cudakers::fill_kernel<uint32_t>, indice_pair_mask.data_ptr<uint32_t>(), (1 << (kv / 2)), indices.dim(0));
+                    if (mask_int_count == 1)
+                        lanucher_fill(cudakers::fill_kernel<uint32_t>, indice_pair_mask.data_ptr<uint32_t>(), (1 << (kv / 2)), indices.dim(0));
+                    else
+                        lanucher_fill(init_subm_multiple_mask_int_kernel<uint32_t>, 
+                                indice_pair_mask.data_ptr<uint32_t>(), kv / 2, indices.dim(0), mask_int_count);
                     TV_ASSERT_RT_ERR(indice_pair_mask.dim(0) == 1, "error");
                     launcher_num_act_in(calc_subm_conv_indices_mask<table_t>, loc_iter, hash, 
                         indices.data_ptr<const int>(), indice_pairs.data_ptr<int>(), 
-                        indice_pair_mask.data_ptr<uint32_t>(), indices.dim(0), indice_pairs.dim(2), kv, is_train);
+                        indice_pair_mask.data_ptr<uint32_t>(), indices.dim(0), indice_pairs.dim(2), kv, is_train, mask_int_count);
                 }}
             }}else{{
                 TV_ASSERT_RT_ERR(indice_pairs.ndim() == 3, "error");
@@ -1506,6 +1526,25 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         """)
 
         return code.ret("int")
+
+    @pccm.cuda.cuda_global_function
+    def init_subm_multiple_mask_int_kernel(self):
+        code = pccm.FunctionCode()
+        code.targ("T")
+        code.arg("ptr", "T*")
+        code.arg("set_bit", "int")
+        code.arg("length", "int")
+        code.arg("mask_int_count", "int")
+        code.raw(f"""
+            int initial_offset = blockIdx.x * blockDim.x + threadIdx.x;
+            int bit_offset = set_bit / 32;
+            int bit_residue = set_bit % 32;
+            for(int offset : tv::KernelLoopX<int>(length)){{
+                for (int i=0; i < mask_int_count; ++i)
+                    ptr[offset * mask_int_count + i] = (i == bit_offset) * (1 << bit_residue);
+            }}
+        """)
+        return code
 
 
 class SparseConvIndicesCPU(pccm.ParameterizedClass):

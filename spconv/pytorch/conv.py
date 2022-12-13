@@ -111,8 +111,8 @@ class SparseConvolution(SparseModule):
                     algo = ConvAlgo.MaskImplicitGemm
             else:
                 algo = ConvAlgo.Native
-        if kv > 32:
-            assert algo == ConvAlgo.Native, "implicit gemm don't support kv >= 32 for now"
+        # if kv > 32:
+        #     assert algo == ConvAlgo.Native, "implicit gemm don't support kv >= 32 for now"
         if CPU_ONLY_BUILD:
             assert algo == ConvAlgo.Native, "cpu only build only support native algorithm"
         self.algo = algo

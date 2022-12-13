@@ -1138,6 +1138,7 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         code.arg("beta", "float", "0.0")
 
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
+        code.arg("mask_int_count", "int", "1")
         code.arg("auto_fp32_accum", "bool", "true")
         code.arg("fp32_accum", "bool", "false")
         code.arg("num_run", "int", "5")
@@ -1186,6 +1187,8 @@ class ConvTunerSimple(pccm.ParameterizedClass):
             params.indices = indices;
             params.mask = mask;
             params.mask_output = mask_output;
+            params.mask_int_count = mask_int_count;
+
             // if (op_type_cpp == tv::gemm::ConvOpType::kBackwardWeight){{
             //     TV_ASSERT_RT_ERR(!mask_output.empty(), "error");
             // }}
@@ -1347,7 +1350,7 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         code.arg("act_alpha", f"float", "0.0")
         code.arg("act_beta", f"float", "0.0")
         code.arg("act_type", f"tv::gemm::Activation", "tv::gemm::Activation::kNone", "cumm.tensorview.gemm.Activation = Activation.None_")
-
+        code.arg("mask_int_count", "int", "1")
         if CUMM_CPU_ONLY_BUILD:
             code.raw(f"TV_THROW_RT_ERR(\"not implemented for cpu!!!\")")
             return code
@@ -1390,6 +1393,7 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         params.mask_width = mask_width;
         params.mask_output = mask_output;
         params.reverse_mask = reverse_mask;
+        params.mask_int_count = mask_int_count;
 
         if (timer.enable()){{
             params.timer = timer;

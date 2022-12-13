@@ -105,7 +105,7 @@ SPCONV_CPP_INDICE_PAIRS = True
 SPCONV_USE_DIRECT_TABLE = True 
 
 # currently use cpp pair gen is slightly slower than python, I don't know why.
-SPCONV_CPP_INDICE_PAIRS_IGEMM = os.getenv("SPCONV_CPP_INDICE_PAIRS_IGEMM", "0") == "1" 
+SPCONV_CPP_INDICE_PAIRS_IGEMM = False #os.getenv("SPCONV_CPP_INDICE_PAIRS_IGEMM", "0") == "1" 
 
 SPCONV_CPP_GEMM = True
 

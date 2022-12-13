@@ -135,6 +135,7 @@ class SparseConvTester:
             self.mask_argsort_fwd_splits = res[6]
             self.mask_argsort_bwd_splits = res[7]
             self.masks = res[8]
+            self.mask_int_count = res[9]
         
         self.out_inds_scalar = Fsp._indice_to_scalar(self.out_inds.long(), [bs, *out_shape])
 
@@ -293,12 +294,12 @@ def _test_impgemm_conv_cuda(subm: bool):
 
     multiple_base = 16
     if subm:
-        ksizes = [3]
+        ksizes = [3, (3, 3, 5), (3, 5, 5), 5]
         strides = [1]
         paddings = [0]
         dilations = [1]
     else:
-        ksizes = [2, 3]
+        ksizes = [2, 3, 4, 5]
         strides = [1, 2, 3]
         paddings = [0, 1]
         dilations = [1, 2]
@@ -354,8 +355,9 @@ def _test_impgemm_conv_cuda(subm: bool):
                 mask_width = desp.tile_shape[0]
                 # if mask_width != 32:
                 #     continue
+                
                 if mask_width not in mask_width_to_mask_out_fwd:
-                    mask_width_to_mask_out_fwd[mask_width] = torch.zeros([2, div_up(tester.out_inds.shape[0], mask_width)],
+                    mask_width_to_mask_out_fwd[mask_width] = torch.zeros([2, tester.mask_int_count * div_up(tester.out_inds.shape[0], mask_width)],
                                       dtype=torch.int32,
                                       device=tester.device)
                 mask_output_fwd = mask_width_to_mask_out_fwd[mask_width]
@@ -413,6 +415,7 @@ def _test_impgemm_conv_cuda(subm: bool):
                                 force_nvrtc=force_nvrtc,
                                 bias=bias_cur if is_fwd and bias_cur is not None else tv.Tensor(),
                                 act_type=act,
+                                mask_int_count=tester.mask_int_count,
                             )
                         else:
                             CONV.run_with_tuned_result(
@@ -433,6 +436,7 @@ def _test_impgemm_conv_cuda(subm: bool):
                                 force_nvrtc=force_nvrtc,
                                 bias=bias_cur if is_fwd else None,
                                 act_type=act,
+                                mask_int_count=tester.mask_int_count
                             )
 
                 else:
@@ -491,6 +495,7 @@ def _test_impgemm_conv_cuda(subm: bool):
                                 force_nvrtc=force_nvrtc,
                                 bias=bias if is_fwd and bias is not None else tv.Tensor(),
                                 act_type=act,
+                                mask_int_count=tester.mask_int_count,
                             )
                         else:
                             CONV.run_with_tuned_result(
@@ -511,6 +516,7 @@ def _test_impgemm_conv_cuda(subm: bool):
                                 force_nvrtc=force_nvrtc,
                                 bias=bias if is_fwd else None,
                                 act_type=act,
+                                mask_int_count=tester.mask_int_count,
                             )
 
                 out_ref = tester.out_ref
@@ -534,7 +540,7 @@ def _test_impgemm_conv_cuda(subm: bool):
                         error_norm = np.linalg.norm(din_ref.reshape(-1) - din_my.reshape(-1))
                         assert error_norm < 10 * multipler, f"{desp}, {error_norm}, {k}, {s}, {p}, {d}"
         inp_tv, weight_tv, output_tv = tester.get_operands(ConvOpType.kBackwardWeight)
-        for spk in [1, 4, 16, 64]:
+        for spk in []:#1, 4, 16, 64]:
             for mask_width, mask_output in mask_width_to_mask_out_fwd.items():
                 if SPCONV_CPP_GEMM:
                     avail_desps = CONV_CPP.get_all_available(inp_tv, weight_tv, output_tv, 
@@ -916,10 +922,10 @@ def _test_native_conv_cuda(subm: bool):
 
 def test_all_algo_unit():
     # for i in range(5):
-    # _test_impgemm_conv_cuda(True)
-    # _test_impgemm_conv_cuda(False)
-    _test_native_conv_cuda(True)
-    _test_native_conv_cuda(False)
+    _test_impgemm_conv_cuda(True)
+    _test_impgemm_conv_cuda(False)
+    # _test_native_conv_cuda(True)
+    # _test_native_conv_cuda(False)
 
 
 if __name__ == "__main__":

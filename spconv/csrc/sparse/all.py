@@ -462,6 +462,7 @@ class SpconvOps(pccm.Class):
         code.arg("ksize, stride, padding, dilation", f"std::vector<int>")
         code.arg("transposed", f"bool", "false")
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
+        code.arg("mask_int_count", "int", "1")
         code.raw(f"""
         int ndim = indices.dim(1) - 1;
         TV_ASSERT_RT_ERR(output_dims.size() == ndim && input_dims.size() == ndim &&
@@ -488,7 +489,7 @@ class SpconvOps(pccm.Class):
                     indice_pairs_uniq, indice_pairs_uniq_before_sort,
                     out_inds, mask_fwd, mask_bwd,
                     num_out_act, batch_size, output_dims_, input_dims_, 
-                    ksize_, stride_, padding_, dilation_, transposed, stream_int);
+                    ksize_, stride_, padding_, dilation_, transposed, stream_int, mask_int_count);
             }}
             """)
         code.raw(f"""TV_THROW_RT_ERR("unknown ndim", ndim);""")
@@ -512,6 +513,7 @@ class SpconvOps(pccm.Class):
         code.arg("ksize, stride, padding, dilation", f"std::vector<int>")
         code.arg("transposed", f"bool", "false")
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
+        code.arg("mask_int_count", "int", "1")
         code.raw(f"""
         int ndim = indices.dim(1) - 1;
         TV_ASSERT_RT_ERR(output_dims.size() == ndim && input_dims.size() == ndim &&
@@ -538,7 +540,7 @@ class SpconvOps(pccm.Class):
                     indice_pairs_uniq, indice_pairs_uniq_before_sort,
                     out_inds, mask_fwd, mask_bwd,
                     num_out_act, batch_size, output_dims_, input_dims_, 
-                    ksize_, stride_, padding_, dilation_, transposed, stream_int);
+                    ksize_, stride_, padding_, dilation_, transposed, stream_int, mask_int_count);
             }}
             """)
         code.raw(f"""TV_THROW_RT_ERR("unknown ndim", ndim);""")
@@ -559,6 +561,7 @@ class SpconvOps(pccm.Class):
                  "cumm.tensorview.Tensor = Tensor()")
         code.arg("backward", "bool", "false")
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int = 0")
+        code.arg("mask_int_count", "int", "1")
         code.raw(f"""
         int ndim = indices.dim(1) - 1;
         TV_ASSERT_RT_ERR(input_dims.size() == ndim &&
@@ -579,7 +582,7 @@ class SpconvOps(pccm.Class):
                     indice_pairs, out_inds, indice_num_per_loc,
                     batch_size, input_dims_, 
                     ksize_, dilation_, indice_pair_mask, backward,
-                    stream_int);
+                    stream_int, mask_int_count);
             }}
             """)
         code.raw(f"""TV_THROW_RT_ERR("unknown ndim", ndim);""")
@@ -906,7 +909,7 @@ class SpconvOps(pccm.Class):
         """)
         return code
 
-    def sort_1d_by_key_allocator_template(self, use_allocator: bool):
+    def sort_1d_by_key_allocator_template(self, use_allocator: bool, int_count: int = 1):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
             return code.make_invalid()
@@ -942,18 +945,19 @@ class SpconvOps(pccm.Class):
         code.raw(f"""
         cudaStream_t stream_cu = reinterpret_cast<cudaStream_t>(stream);
         if (indices.empty()){{
-            indices = tv::empty({{data.dim(0)}}, tv::int32, 0);
+            indices = tv::empty({{data.dim(0) / {int_count}}}, tv::int32, 0);
         }}
         tv::cuda::Launch launcher(data.dim(0), stream_cu);
         launcher(cudakers::arange_kernel<int32_t>, indices.data_ptr<int32_t>(), indices.dim(0));
         // auto timer = tv::CUDATimer();
         tv::dispatch<int32_t, uint32_t, int64_t, uint64_t>(data.dtype(), [&](auto I){{
-            using T = TV_DECLTYPE(I);
-            thrust::device_ptr<T> ptr_tr(data.data_ptr<T>());
+            using T_ = TV_DECLTYPE(I);
+            using T = {"T_" if int_count == 1 else f"thrust::tuple<{', '.join(['T_'] * int_count) }>"};
+            thrust::device_ptr<T> ptr_tr(reinterpret_cast<T*>(data.data_ptr<T_>()));
             thrust::device_ptr<int32_t> ptr_k(indices.data_ptr<int32_t>());
             auto thrust_ctx = thrust::cuda::par.on(stream_cu);
             auto ctx2 = thrust::cuda::par(allocator).on(stream_cu);
-            thrust::sort_by_key(ctx2, ptr_tr, ptr_tr + data.dim(0), ptr_k);
+            thrust::sort_by_key(ctx2, ptr_tr, ptr_tr + data.dim(0) / {int_count}, ptr_k);
         }});
         // tv::ssprint("SORT BY KEY TIME", data.dim(0), timer.report() / 1000.0);
         return indices;
@@ -963,14 +967,49 @@ class SpconvOps(pccm.Class):
 
     @pccm.pybind.mark
     @_STATIC_FUNCTION
-    def sort_1d_by_key_allocator(self):
+    def sort_1d_by_key_allocator_mask32(self):
         # for python
         return self.sort_1d_by_key_allocator_template(False)
+
+    @pccm.pybind.mark
+    @pccm.static_function
+    def sort_1d_by_key_allocator_mask_auto(self):
+        code = pccm.FunctionCode()
+        if CUMM_CPU_ONLY_BUILD:
+            return code.make_invalid()
+        code.arg("data", "tv::Tensor")
+        code.arg("alloc_func", "std::function<std::uintptr_t(std::size_t)>")
+
+        code.arg("indices",
+                 "tv::Tensor",
+                 "tv::Tensor()",
+                 pyanno="cumm.tensorview.Tensor = Tensor()")
+        code.arg("stream", "std::uintptr_t", "0", pyanno="int")
+        code.arg("mask_int_count", "int", "1")
+        code.raw(f"""
+            switch (mask_int_count){{
+                case 1:
+                    return sort_1d_by_key_allocator_mask32(data, alloc_func, indices, stream);
+                case 4:
+                    return sort_1d_by_key_allocator_mask128(data, alloc_func, indices, stream);
+                default:
+                    TV_ASSERT_RT_ERR(false, "Not implement for other mask_int_count");
+                    return tv::Tensor();
+            }}
+        """)
+        return code.ret("tv::Tensor")
+
 
     @_STATIC_FUNCTION
     def sort_1d_by_key_allocator_v2(self):
         # for cpp only
         return self.sort_1d_by_key_allocator_template(True)
+
+    @pccm.pybind.mark
+    @_STATIC_FUNCTION
+    def sort_1d_by_key_allocator_mask128(self):
+        # for python
+        return self.sort_1d_by_key_allocator_template(False, 4)
 
 
     @pccm.pybind.mark

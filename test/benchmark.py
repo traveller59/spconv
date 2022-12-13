@@ -291,6 +291,30 @@ class Net2(nn.Module):
         return self.net(x)
 
 
+class Net_kv128(nn.Module):
+    def __init__(self, shape, algo):
+        super().__init__()
+        self.net = spconv.SparseSequential(
+            spconv.SubMConv3d(3,
+                              128,
+                              3,
+                              bias=False,
+                              indice_key="c0",
+                              algo=algo),
+        )
+        max_batch_size = 1
+        # grid (dense map) is used for indice generation. use pre-allocated grid can run faster.
+        self.grid = torch.full([max_batch_size, *shape], -1,
+                               dtype=torch.int32).cuda()
+        # self.grid = None
+        self.shape = shape
+
+    def forward(self, features, coors, batch_size, _=None):
+        x = spconv.SparseConvTensor(features, coors, self.shape, batch_size,
+                                    self.grid)
+        return self.net(x)
+
+
 
 class NetSm(nn.Module):
     def __init__(self, shape, algo):
@@ -433,7 +457,7 @@ def main():
     # MaskImpGemm: 51.0ms
     # MaskSplitImpGemm: 41.1ms
     # algo = None
-    net = Net(spatial_shape, algo).to(device).eval().to(dtype)# .train()
+    net = Net_kv128(spatial_shape, algo).to(device).eval().to(dtype)# .train()
     # net.load_state_dict(net.state_dict())
     spconv.assign_name_for_sparse_modules(net)
     print(coors_th.shape)
