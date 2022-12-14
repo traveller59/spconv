@@ -198,6 +198,7 @@ class SparseImplicitGemmFunction(Function):
                 mask_argsort_bwd_splits: List[torch.Tensor],
                 num_activate_out: int,
                 masks: List[np.ndarray],
+                mask_int_count: int,
                 is_train: bool,
                 is_subm: bool,
                 timer: CUDAKernelTimer = CUDAKernelTimer(False),
@@ -209,7 +210,7 @@ class SparseImplicitGemmFunction(Function):
         try:
             out, mask_out, mask_width = ops.implicit_gemm(
                 features, filters, pair_fwd, pair_mask_fwd_splits,
-                mask_argsort_fwd_splits, num_activate_out, masks, is_train,
+                mask_argsort_fwd_splits, num_activate_out, masks, mask_int_count, is_train,
                 is_subm, timer, fp32_accum, bias, act_alpha, act_beta,
                 act_type)
         except Exception as e:

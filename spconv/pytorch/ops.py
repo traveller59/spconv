@@ -365,7 +365,7 @@ def get_indice_pairs_implicit_gemm(
         timer_cpp = tv.CUDAKernelTimer(False)
         if timer._timer is not None:
             timer_cpp = timer._timer
-        mask_tensor, num_act_out = SpconvOps.get_indice_pairs_implicit_gemm(
+        mask_tensor, num_act_out, mask_int_count = SpconvOps.get_indice_pairs_implicit_gemm(
             thalloc,
             torch_tensor_to_tv(indices),
             batch_size,
@@ -408,7 +408,7 @@ def get_indice_pairs_implicit_gemm(
                 assert pair.shape[0] == 2
                 pair_bwd = pair[1]
             return (out_inds, indice_num_per_loc, pair[0], pair_bwd,
-                    pair_mask_in_splits, [], mask_argsort_in_splits, [], masks)
+                    pair_mask_in_splits, [], mask_argsort_in_splits, [], masks, mask_int_count)
         else:
             pair_bwd = thalloc.allocated.get(AllocKeys.PairBwd, torch.Tensor())
             pair_fwd = thalloc.allocated[AllocKeys.PairFwd]
@@ -437,7 +437,7 @@ def get_indice_pairs_implicit_gemm(
             ]
             return (out_inds, indice_num_per_loc, pair_fwd, pair_bwd,
                     pair_mask_fwd_splits, pair_mask_bwd_splits,
-                    mask_argsort_fwd_splits, mask_argsort_bwd_splits, masks)
+                    mask_argsort_fwd_splits, mask_argsort_bwd_splits, masks, mask_int_count)
     assert indices.is_cuda, "implicit gemm only support cuda"
     ndim = indices.shape[1] - 1
     kv: int = functools.reduce(lambda x, y: x * y, ksize, 1)
@@ -1457,6 +1457,7 @@ def implicit_gemm(features: torch.Tensor,
                   mask_argsort_fwd_splits: List[torch.Tensor],
                   num_activate_out: int,
                   masks: List[np.ndarray],
+                  mask_int_count: int,
                   is_train: bool,
                   is_subm: bool,
                   timer: CUDAKernelTimer = CUDAKernelTimer(False),
@@ -1500,7 +1501,7 @@ def implicit_gemm(features: torch.Tensor,
         mask_width, tune_res_cpp = ConvGemmOps.implicit_gemm(
             alloc, CONV_CPP, features_tv, filters_tv, pair_fwd_tv,
             pair_mask_fwd_splits_tv, mask_argsort_fwd_splits_tv,
-            num_activate_out, mask_tv, arch, is_train, is_subm, stream,
+            num_activate_out, mask_tv, mask_int_count, arch, is_train, is_subm, stream,
             timer_cpp, auto_fp32_accum, fp32_accum, bias_tv, act_alpha, act_beta, act_type,
             use_tf32=constants.SPCONV_ALLOW_TF32)
         out_features = alloc.allocated[AllocKeys.OutFeatures]
@@ -1566,13 +1567,14 @@ def implicit_gemm(features: torch.Tensor,
             mask_filter=masks[0].item(),
             stream=stream,
             fp32_accum=fp32_accum,
-            use_tf32=constants.SPCONV_ALLOW_TF32)
+            use_tf32=constants.SPCONV_ALLOW_TF32,
+            mask_int_count=mask_int_count)
 
     mask_width = tune_res.algo_desp.tile_shape[0]
     if is_train:
         mask_output_fwd = torch.empty(
             [num_split,
-             codeops.div_up(num_activate_out, mask_width)],
+             codeops.div_up(num_activate_out, mask_width) * mask_int_count],
             dtype=torch.int32,
             device=features.device)
         # pytorch don't support uint32.
@@ -1620,7 +1622,8 @@ def implicit_gemm(features: torch.Tensor,
                 bias=bias_tv,
                 act_type=act_type,
                 act_alpha=act_alpha,
-                act_beta=act_beta)
+                act_beta=act_beta,
+                mask_int_count=mask_int_count)
     # INT8_TEST = True
     # if INT8_TEST:
     #     if features.shape[1] % 32 != 0:

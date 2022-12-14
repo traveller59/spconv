@@ -419,9 +419,9 @@ def main():
     np.random.seed(50051)
     torch.manual_seed(50051)
     # voxels, coors, spatial_shape = waymo_data(num_features=3)
-    with open(Path(__file__).parent / "data" / "test_spconv.pkl", "rb") as f:
-        (voxels, coors, spatial_shape) = pickle.load(f)
-    # voxels, coors, spatial_shape = waymo_data_large()
+    # with open(Path(__file__).parent / "data" / "test_spconv.pkl", "rb") as f:
+    #     (voxels, coors, spatial_shape) = pickle.load(f)
+    voxels, coors, spatial_shape = waymo_data_large()
     # breakpoint()
 
     print(spatial_shape)
@@ -457,7 +457,7 @@ def main():
     # MaskImpGemm: 51.0ms
     # MaskSplitImpGemm: 41.1ms
     # algo = None
-    net = Net_kv128(spatial_shape, algo).to(device).eval().to(dtype)# .train()
+    net = Net(spatial_shape, algo).to(device).eval().to(dtype)# .train()
     # net.load_state_dict(net.state_dict())
     spconv.assign_name_for_sparse_modules(net)
     print(coors_th.shape)

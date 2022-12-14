@@ -477,6 +477,7 @@ class SparseConvolution(SparseModule):
                         mask_argsort_fwd_splits = datas.mask_argsort_fwd_splits
                         mask_argsort_bwd_splits = datas.mask_argsort_bwd_splits
                         masks = datas.masks
+                        mask_int_count = datas.mask_int_count
                         assert self.subm, "only support reuse subm indices"
                         self._check_subm_reuse_valid(input, spatial_shape,
                                                      datas)
@@ -519,6 +520,7 @@ class SparseConvolution(SparseModule):
                         mask_argsort_fwd_splits = res[6]
                         mask_argsort_bwd_splits = res[7]
                         masks = res[8]
+                        mask_int_count = res[9]
                         if self.indice_key is not None:
                             indice_data = ImplicitGemmIndiceData(
                                 outids,
@@ -537,7 +539,8 @@ class SparseConvolution(SparseModule):
                                 ksize=self.kernel_size,
                                 stride=self.stride,
                                 padding=self.padding,
-                                dilation=self.dilation)
+                                dilation=self.dilation,
+                                mask_int_count=mask_int_count)
                             msg = f"your indice key {self.indice_key} already exists in this sparse tensor."
                             assert self.indice_key not in indice_dict, msg
                             indice_dict[self.indice_key] = indice_data
@@ -549,7 +552,7 @@ class SparseConvolution(SparseModule):
                     features, self.weight, pair_fwd, pair_bwd,
                     pair_mask_fwd_splits, pair_mask_bwd_splits,
                     mask_argsort_fwd_splits, mask_argsort_bwd_splits,
-                    num_activate_out, masks, self.training, self.subm,
+                    num_activate_out, masks, mask_int_count, self.training, self.subm,
                     input._timer, self.fp32_accum,
                     bias_for_infer,
                     self.act_alpha,

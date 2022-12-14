@@ -393,14 +393,13 @@ class SpconvOps:
         """
         ...
     @staticmethod
-    def sort_1d_by_key_allocator_mask_auto(data: Tensor, alloc_func, indices: Tensor =  Tensor(), stream: int = 0, mask_int_count: int = 1) -> Tensor: 
+    def sort_1d_by_key_allocator_mask32_v2(data: Tensor, allocator, indices: Tensor =  Tensor(), stream: int = 0) -> Tensor: 
         """
         Args:
             data: 
-            alloc_func: 
+            allocator: 
             indices: 
             stream: 
-            mask_int_count: 
         """
         ...
     @staticmethod
@@ -411,6 +410,38 @@ class SpconvOps:
             alloc_func: 
             indices: 
             stream: 
+        """
+        ...
+    @staticmethod
+    def sort_1d_by_key_allocator_mask128_v2(data: Tensor, allocator, indices: Tensor =  Tensor(), stream: int = 0) -> Tensor: 
+        """
+        Args:
+            data: 
+            allocator: 
+            indices: 
+            stream: 
+        """
+        ...
+    @staticmethod
+    def sort_1d_by_key_allocator_mask_auto(data: Tensor, alloc_param, indices: Tensor =  Tensor(), stream: int = 0, mask_int_count: int = 1) -> Tensor: 
+        """
+        Args:
+            data: 
+            alloc_param: 
+            indices: 
+            stream: 
+            mask_int_count: 
+        """
+        ...
+    @staticmethod
+    def sort_1d_by_key_allocator_mask_auto_v2(data: Tensor, alloc_param, indices: Tensor =  Tensor(), stream: int = 0, mask_int_count: int = 1) -> Tensor: 
+        """
+        Args:
+            data: 
+            alloc_param: 
+            indices: 
+            stream: 
+            mask_int_count: 
         """
         ...
     @staticmethod
@@ -567,7 +598,7 @@ class SpconvOps:
         """
         ...
     @staticmethod
-    def get_indice_pairs_implicit_gemm(allocator, indices: Tensor, batch_size: int, input_dims: List[int], algo: int, ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], out_padding: List[int], subm: bool, transposed: bool, is_train: bool, stream_int: int = 0, num_out_act_bound: int = -1, timer: CUDAKernelTimer =  CUDAKernelTimer(False), direct_table: bool = False, preallocated: Dict[str, Tensor] =  {}) -> Tuple[Tensor, int]: 
+    def get_indice_pairs_implicit_gemm(allocator, indices: Tensor, batch_size: int, input_dims: List[int], algo: int, ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], out_padding: List[int], subm: bool, transposed: bool, is_train: bool, stream_int: int = 0, num_out_act_bound: int = -1, timer: CUDAKernelTimer =  CUDAKernelTimer(False), direct_table: bool = False, preallocated: Dict[str, Tensor] =  {}) -> Tuple[Tensor, int, int]: 
         """
         Args:
             allocator: 

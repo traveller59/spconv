@@ -299,7 +299,7 @@ def _test_impgemm_conv_cuda(subm: bool):
         paddings = [0]
         dilations = [1]
     else:
-        ksizes = [2, 3, 4, 5]
+        ksizes = [2, 3, (3, 3, 4), 4, (4, 5, 5), 5]
         strides = [1, 2, 3]
         paddings = [0, 1]
         dilations = [1, 2]
@@ -540,7 +540,7 @@ def _test_impgemm_conv_cuda(subm: bool):
                         error_norm = np.linalg.norm(din_ref.reshape(-1) - din_my.reshape(-1))
                         assert error_norm < 10 * multipler, f"{desp}, {error_norm}, {k}, {s}, {p}, {d}"
         inp_tv, weight_tv, output_tv = tester.get_operands(ConvOpType.kBackwardWeight)
-        for spk in []:#1, 4, 16, 64]:
+        for spk in [1, 4, 16, 64]:
             for mask_width, mask_output in mask_width_to_mask_out_fwd.items():
                 if SPCONV_CPP_GEMM:
                     avail_desps = CONV_CPP.get_all_available(inp_tv, weight_tv, output_tv, 
@@ -578,6 +578,7 @@ def _test_impgemm_conv_cuda(subm: bool):
                                 mask_width=mask_width,
                                 beta=beta,
                                 verbose=False,
+                                mask_int_count=tester.mask_int_count,
                             )
                     else:
                         indice_pairs = tester.pair_fwd  # inp -> out
@@ -605,6 +606,7 @@ def _test_impgemm_conv_cuda(subm: bool):
                                 mask_width=mask_width,
                                 beta=beta,
                                 verbose=False,
+                                mask_int_count=tester.mask_int_count,
                             )
                     dw_ref = tester.dw_ref
                     dw_my = weight_tv.cpu().numpy()
