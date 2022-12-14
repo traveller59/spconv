@@ -618,7 +618,7 @@ class SimpleConv:
         ]
         self.prebuilt_desps = prebuilt_desps
         self.prebuilt_desp_names = {str(d) for d in prebuilt_desps}
-        # self.prebuilt_desp_names.clear()
+        
         self.lock = Lock()
 
         self.static_key_to_desps = group_by(self.get_static_key, all_desps)
@@ -726,8 +726,8 @@ class SimpleConv:
             ldw = weight.dim(-1)
             ldo = out.dim(-1)
             mask_width_valid = True
-
-            if desp.op_type == ConvOpType.kBackwardWeight.value:
+            
+            if desp.op_type.value == ConvOpType.kBackwardWeight.value:
                 assert mask_width > 0
                 mask_width_valid = mask_width % desp.tile_shape[2] == 0
             if desp.supported_ldx_conv(ldi, ldw, ldo) and mask_width_valid:

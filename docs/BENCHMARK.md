@@ -29,6 +29,7 @@ Basic (120k voxels): ```python -m spconv.benchmark bench_basic f16``` and ```pyt
 | RTX A6000 | 11.11    | 8.97    | 12.30      | 12.79      |
 | TESLA V100-32G | 15.55    | 14.90    | N/A       | N/A      |
 | TESLA V100-16G | 10.61    | 13.91    | N/A       | N/A      |
+| RTX 4090 | 7.37    | 6.87    | 8.76      | 9.16      |
 
 Large (900k voxels): ```python -m spconv.benchmark bench_large f16``` and ```python -m spconv.benchmark bench_large tf32```
 
@@ -41,6 +42,7 @@ Large (900k voxels): ```python -m spconv.benchmark bench_large f16``` and ```pyt
 | RTX A6000 | 28.62    | 39.86    | 45.43      | 74.11      |
 | TESLA V100-32G | 50.37    | 72.99   | N/A      | N/A      |
 | TESLA V100-16G | 38.65    | 61.47    | N/A       | N/A      |
+| RTX 4090 | 13.93  | 22.92    | 22.58      | 41.49      |
 
 
 **NOTE** 

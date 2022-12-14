@@ -15,8 +15,8 @@ jobs:
     runs-on: windows-2019
     strategy:
       matrix:
-        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11.0-rc.2'] 
-        cuda-version: ['10.2', '11.3', '11.4', '11.7']
+        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11'] 
+        cuda-version: ['10.2', '11.3', '11.4', '11.6', '11.7', '11.8']
     steps:
       - uses: actions/checkout@master
       - uses: dorny/paths-filter@v2
@@ -115,8 +115,8 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11.0-rc.2'] # this version is only used for upload.
-        cuda-version: ['102', '113', '114', '117', '']
+        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11'] # this version is only used for upload.
+        cuda-version: ['102', '113', '114', '116', '117', '118', '']
 
     steps:
       - uses: actions/checkout@master

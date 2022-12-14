@@ -39,9 +39,9 @@ if cuda_ver:
     cuda_ver_str = cuda_ver.replace(".", "") # 10.2 to 102
 
     RELEASE_NAME += "-cu{}".format(cuda_ver_str)
-    deps = ["cumm-cu{}>=0.3.4".format(cuda_ver_str)]
+    deps = ["cumm-cu{}>=0.3.7".format(cuda_ver_str)]
 else:
-    deps = ["cumm>=0.3.4"]
+    deps = ["cumm>=0.3.7"]
 
 
 
@@ -249,6 +249,11 @@ setup(
         'License :: OSI Approved :: Apache Software License',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: Implementation :: CPython',
     ],
     # $ setup.py publish support.

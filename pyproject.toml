@@ -1,3 +1,4 @@
 [build-system]
-requires = ["setuptools>=41.0", "wheel", "pccm>=0.4.0", "cumm>=0.3.4"]
+requires = ["setuptools>=41.0", "wheel", "pccm>=0.4.0", "cumm>=0.3.7"]
+# requires = ["setuptools>=41.0", "wheel", "pccm>=0.4.0", "cumm @ file:///io/dist/cumm_cu118-0.3.4-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"]
 build-backend = "setuptools.build_meta"

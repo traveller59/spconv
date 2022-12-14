@@ -17,6 +17,8 @@
 [pypi-ver-114]: https://img.shields.io/pypi/v/spconv-cu114
 [pypi-ver-111]: https://img.shields.io/pypi/v/spconv-cu111
 [pypi-ver-117]: https://img.shields.io/pypi/v/spconv-cu117
+[pypi-ver-116]: https://img.shields.io/pypi/v/spconv-cu116
+[pypi-ver-118]: https://img.shields.io/pypi/v/spconv-cu118
 
 [pypi-ver-113]: https://img.shields.io/pypi/v/spconv-cu113
 [pypi-ver-120]: https://img.shields.io/pypi/v/spconv-cu120
@@ -36,9 +38,15 @@
 [pypi-download-120]: https://img.shields.io/pypi/dm/spconv-cu120
 [pypi-url-cpu]: https://pypi.org/project/spconv/
 [pypi-download-cpu]: https://img.shields.io/pypi/dm/spconv
+[pypi-url-118]: https://pypi.org/project/spconv-cu118/
+[pypi-download-118]: https://img.shields.io/pypi/dm/spconv-cu118
+
+[pypi-url-116]: https://pypi.org/project/spconv-cu116/
+[pypi-download-116]: https://img.shields.io/pypi/dm/spconv-cu116
 
 # SpConv: Spatially Sparse Convolution Library
 [![Build Status](https://github.com/traveller59/spconv/workflows/build/badge.svg)](https://github.com/traveller59/spconv/actions?query=workflow%3Abuild) 
+![pypi versions](https://img.shields.io/pypi/pyversions/spconv-cu117)
 
 
 |                | PyPI   | Install  |Downloads  |
@@ -47,7 +55,12 @@
 | CUDA 10.2 | [![PyPI Version][pypi-ver-102]][pypi-url-102] | ```pip install spconv-cu102```| [![pypi monthly download][pypi-download-102]][pypi-url-102]| 
 | CUDA 11.3 | [![PyPI Version][pypi-ver-113]][pypi-url-113] | ```pip install spconv-cu113```| [![pypi monthly download][pypi-download-113]][pypi-url-113]| 
 | CUDA 11.4 | [![PyPI Version][pypi-ver-114]][pypi-url-114] | ```pip install spconv-cu114```| [![pypi monthly download][pypi-download-114]][pypi-url-114]|
+| CUDA 11.6 | [![PyPI Version][pypi-ver-116]][pypi-url-116] | ```pip install spconv-cu116```| [![pypi monthly download][pypi-download-116]][pypi-url-116]|
 | CUDA 11.7 | [![PyPI Version][pypi-ver-117]][pypi-url-117] | ```pip install spconv-cu117```| [![pypi monthly download][pypi-download-117]][pypi-url-117]| 
+| CUDA 11.8* | [![PyPI Version][pypi-ver-118]][pypi-url-118] | ```pip install spconv-cu118```| [![pypi monthly download][pypi-download-118]][pypi-url-118]| 
+
+*: sm_89 and sm_90 is added in CUDA 11.8. If you use RTX 4090 or H100, you should use this version.
+
 <!-- | CUDA 12.0 | [![PyPI Version][pypi-ver-120]][pypi-url-120] | ```pip install spconv-cu120```| [![pypi monthly download][pypi-download-120]][pypi-url-120]| -->
 
 ```spconv``` is a project that provide heavily-optimized sparse convolution implementation with tensor core support. check [benchmark](docs/BENCHMARK.md) to see how fast spconv 2.x runs.
@@ -131,7 +144,7 @@ For Linux users, you need to install pip >= 20.3 first to install prebuilt.
 
 **NOTE** It's safe to have different **minor** cuda version between system and conda (pytorch) in **CUDA >= 11.0** because of [CUDA Minor Version Compatibility](https://docs.nvidia.com/deploy/cuda-compatibility/#minor-version-compatibility). For example, you can use spconv-cu114 with anaconda version of pytorch cuda 11.1 in a OS with CUDA 11.2 installed.
 
-**NOTE** In Linux, you can install spconv-cuxxx without install CUDA to system! only suitable NVIDIA driver is required. for CUDA 11, we need driver >= 450.82.
+**NOTE** In Linux, you can install spconv-cuxxx without install CUDA to system! only suitable NVIDIA driver is required. for CUDA 11, we need driver >= 450.82. You may need newer driver if you use newer CUDA. for cuda 11.8, you need to have driver >= 520 installed.
 
 #### Prebuilt GPU Support Matrix
 
@@ -141,8 +154,8 @@ If you use a GPU architecture that isn't compiled in prebuilt, spconv will use N
 
 | CUDA version | GPU Arch List  |
 | -------------- |:---------------------:|
-| 11.x       | 52,60,61,70,75,80,86     | 
-| 12.x       | 70,75,80,86,90     | 
+| 11.1~11.7       | 52,60,61,70,75,80,86     | 
+| 11.8+       | 60,70,75,80,86,89,90     | 
 
 ### Build from source for development (JIT, recommend)
 
@@ -191,6 +204,18 @@ You need to rebuild ```cumm``` first if you are build along a CUDA version that 
 5. run ```pip install pccm cumm wheel```
 6. run ```python setup.py bdist_wheel```+```pip install dists/xxx.whl```
 
+## Citation
+
+If you find this project useful in your research, please consider cite:
+
+```latex
+@misc{spconv2022,
+    title={Spconv: Spatially Sparse Convolution Library},
+    author={Spconv Contributors},
+    howpublished = {\url{https://github.com/traveller59/spconv}},
+    year={2022}
+}
+```
 ## Contributers
 
 * [EvernightAurora](https://github.com/EvernightAurora): add ampere feature.

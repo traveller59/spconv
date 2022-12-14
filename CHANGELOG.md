@@ -1,4 +1,19 @@
 # Changelog
+
+## [2.2.6] - 2022-11-06
+### Fixed 
+- CI fail because of pypi temporary shutdown. assign a new version and run again.
+
+## [2.2.5] - 2022-11-05
+### Fixed 
+- Fix overflow when shape is too large
+
+## [2.2.4] - 2022-10-13
+### Added 
+- Add prebuilt for CUDA 11.8 (RTX 4090 and H100) and CUDA 11.6.
+### Fixed 
+- Fix small bugs
+
 ## [2.2.3] - 2022-9-28
 ### Fixed 
 - Fix missing .contiguous for input feature

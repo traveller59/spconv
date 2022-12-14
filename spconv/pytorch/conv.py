@@ -353,7 +353,8 @@ class SparseConvolution(SparseModule):
                     indice_pairs = datas.indice_pairs
                     indice_pair_num = datas.indice_pair_num
                     out_spatial_shape = datas.spatial_shape
-                    assert datas.ksize == self.kernel_size, "inverse conv must have same kernel size as its couple conv"
+                    self._check_inverse_reuse_valid(input, spatial_shape,
+                                                     datas)
                 else:
                     if self.indice_key is not None and datas is not None:
                         outids = datas.out_indices
@@ -466,7 +467,10 @@ class SparseConvolution(SparseModule):
                     mask_argsort_bwd_splits = datas.mask_argsort_fwd_splits
                     masks = datas.masks
                     out_spatial_shape = datas.spatial_shape
-                    assert datas.ksize == self.kernel_size, "inverse conv must have same kernel size as its couple conv"
+                    # assert datas.ksize == self.kernel_size, "inverse conv must have same kernel size as its couple conv"
+
+                    self._check_inverse_reuse_valid(input, spatial_shape,
+                                                     datas)
                 else:
                     if self.indice_key is not None and datas is not None:
                         outids = datas.out_indices
@@ -605,6 +609,26 @@ class SparseConvolution(SparseModule):
                 f", expect {datas.indices.shape[0]}, input {inp.indices.shape[0]}"
             )
 
+    def _check_inverse_reuse_valid(self, inp: SparseConvTensor,
+                                spatial_shape: List[int],
+                                datas: Union[ImplicitGemmIndiceData,
+                                             IndiceData]):
+        if self.kernel_size != datas.ksize:
+            raise ValueError(
+                f"Inverse with same indice_key must have same kernel"
+                f" size, expect {datas.ksize}, this layer {self.kernel_size}, "
+                "please check Inverse Convolution in docs/USAGE.md.")
+        if inp.spatial_shape != datas.out_spatial_shape:
+            raise ValueError(
+                f"Inverse with same indice_key must have same spatial structure (spatial shape)"
+                f", expect {datas.spatial_shape}, input {spatial_shape}, "
+                "please check Inverse Convolution in docs/USAGE.md.")
+        if inp.indices.shape[0] != datas.out_indices.shape[0]:
+            raise ValueError(
+                f"Inverse with same indice_key must have same num of indices"
+                f", expect {datas.indices.shape[0]}, input {inp.indices.shape[0]}, "
+                "please check Inverse Convolution in ."
+            )
 
 class SparseConv1d(SparseConvolution):
     def __init__(self,
