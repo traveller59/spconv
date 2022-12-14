@@ -236,6 +236,7 @@ class SparseImplicitGemmFunction(Function):
         ctx.masks = masks
         ctx.is_subm = is_subm
         ctx.fp32_accum = fp32_accum
+        ctx.mask_int_count = mask_int_count
         return out
 
     @staticmethod
@@ -254,6 +255,7 @@ class SparseImplicitGemmFunction(Function):
         is_subm = ctx.is_subm
         timer = ctx.timer
         fp32_accum = ctx.fp32_accum
+        mask_int_count = ctx.mask_int_count
 
         try:
             input_bp, filters_bp = ops.implicit_gemm_backward(
@@ -268,6 +270,7 @@ class SparseImplicitGemmFunction(Function):
                 mask_argsort_bwd_splits,
                 mask_output_fwd=mask_out,
                 masks=masks,
+                mask_int_count=mask_int_count,
                 mask_width=mask_width,
                 is_subm=is_subm,
                 timer=timer,
@@ -283,7 +286,7 @@ class SparseImplicitGemmFunction(Function):
                  mask_argsort_bwd_splits, masks))
             raise e
 
-        None_9 = [None] * 16
+        None_9 = [None] * 17
         return (input_bp, filters_bp, *None_9)
 
 

@@ -501,7 +501,7 @@ def get_indice_pairs_implicit_gemm(
         second = ((mask_np_1 << (kv_div_2)) - 1) << remain
         masks = [first.astype(np.uint32), second.astype(np.uint32)]
     else:
-        masks = [np.array([0xffffffff], dtype=np.uint32)] * mask_int_count
+        masks = [np.array([0xffffffff], dtype=np.uint32)]
 
     if subm:
         out_inds = indices
@@ -1722,6 +1722,7 @@ def implicit_gemm_backward(features: torch.Tensor,
                            mask_argsort_bwd_splits: List[torch.Tensor],
                            mask_output_fwd: Optional[torch.Tensor],
                            masks: List[np.ndarray],
+                           mask_int_count: int,
                            mask_width: int,
                            is_subm: bool,
                            timer: CUDAKernelTimer = CUDAKernelTimer(False),
@@ -1781,7 +1782,7 @@ def implicit_gemm_backward(features: torch.Tensor,
             alloc, CONV_CPP, features_tv, filters_tv, out_bp_tv, pair_fwd_tv,
             pair_bwd_tv, pair_mask_fwd_splits_tv, pair_mask_bwd_splits_tv,
             mask_argsort_fwd_splits_tv, mask_argsort_bwd_splits_tv,
-            mask_output_fwd_tv, mask_tv, arch, mask_width, is_subm, stream,
+            mask_output_fwd_tv, mask_tv, mask_int_count, arch, mask_width, is_subm, stream,
             timer_cpp, auto_fp32_accum, fp32_accum,
             use_tf32=constants.SPCONV_ALLOW_TF32)
         din = alloc.allocated[AllocKeys.DIn]
@@ -1860,7 +1861,8 @@ def implicit_gemm_backward(features: torch.Tensor,
                                                 mask_filter=masks[0].item(),
                                                 stream=stream,
                                                 fp32_accum=fp32_accum,
-                                                use_tf32=constants.SPCONV_ALLOW_TF32)
+                                                use_tf32=constants.SPCONV_ALLOW_TF32,
+                                                mask_int_count=mask_int_count)
     if wgrad_tune_res is None:
         wgrad_tune_res, _ = CONV.tune_and_cache(
             ConvOpType.kBackwardWeight,
@@ -1879,7 +1881,8 @@ def implicit_gemm_backward(features: torch.Tensor,
             mask_output=tv.Tensor(),
             mask_width=mask_width,
             stream=stream,
-            use_tf32=constants.SPCONV_ALLOW_TF32)
+            use_tf32=constants.SPCONV_ALLOW_TF32,
+            mask_int_count=mask_int_count)
     workspace_size = CONV.query_workspace_size(wgrad_tune_res.algo_desp,
                                                wgrad_tune_res.splitk,
                                                ConvOpType.kBackwardWeight,
@@ -1916,7 +1919,8 @@ def implicit_gemm_backward(features: torch.Tensor,
                                        mask_filter=masks[j].item(),
                                        mask_width=-1,
                                        beta=beta,
-                                       stream=stream)
+                                       stream=stream,
+                                       mask_int_count=mask_int_count)
             # for backward weight, beta = 0 because each split
             # handle different kernel locations.
             # TODO remove D iterator in backward weight kernel
@@ -1935,7 +1939,8 @@ def implicit_gemm_backward(features: torch.Tensor,
                 mask_width=mask_width,
                 beta=0,
                 workspace=workspace_tv,
-                stream=stream)
+                stream=stream,
+                mask_int_count=mask_int_count)
 
     return (din, dfilters.reshape(filters_shape))
 
