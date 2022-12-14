@@ -1573,18 +1573,22 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                     }}else{{
                         // indice_pair_mask: [1, num_act_in]
                         tv::cuda::Launch lanucher_fill(num_act_in_real, custream);
+                    if (mask_int_count == 1)
                         lanucher_fill(cudakers::fill_kernel<uint32_t>, indice_pair_mask.data_ptr<uint32_t>(), (1 << (kv / 2)), indices.dim(0));
+                    else
+                        lanucher_fill(init_subm_multiple_mask_int_kernel<uint32_t>, 
+                                indice_pair_mask.data_ptr<uint32_t>(), kv / 2, indices.dim(0), mask_int_count);
                         TV_ASSERT_RT_ERR(indice_pair_mask.dim(0) == 1, "error");
                         launcher_num_act_in(calc_subm_conv_indices_mask<table_t, {loc_type}>, loc_iter, hash, 
                             indices.data_ptr<const int>(), indice_pairs.data_ptr<int>(), 
-                            indice_pair_mask.data_ptr<uint32_t>(), indices.dim(0), indice_pairs.dim(2), kv, is_train);
+                            indice_pair_mask.data_ptr<uint32_t>(), indices.dim(0), indice_pairs.dim(2), kv, is_train, mask_int_count);
                     }}
                 }}else{{
                     TV_ASSERT_RT_ERR(indice_pairs.ndim() == 3, "error");
                     TV_ASSERT_RT_ERR(indice_pairs.dim(0) == 2, "error");
                     launcher_num_act_in(calc_subm_conv_indices<table_t, {loc_type}>, loc_iter, hash, indices.data_ptr<const int>(), 
                         indice_pairs.data_ptr<int>(), 
-                        indice_num_per_loc.data_ptr<int>(), indices.dim(0), indice_pairs.dim(2), kv, is_train, mask_int_count);
+                        indice_num_per_loc.data_ptr<int>(), indices.dim(0), indice_pairs.dim(2), kv);
                 }}
             }});
         return indices.dim(0);
