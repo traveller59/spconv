@@ -456,7 +456,7 @@ class Net_kv75(nn.Module):
         return self.net(x)
 
 
-class Net_kv128(nn.Module):
+class Net_kv125(nn.Module):
     def __init__(self, shape, algo):
         super().__init__()
         pool_algo = algo
@@ -762,7 +762,7 @@ def main():
     # MaskImpGemm: 51.0ms
     # MaskSplitImpGemm: 41.1ms
     # algo = None
-    net = Net_kv75(spatial_shape, algo).to(device).eval().to(dtype)# .train()
+    net = Net(spatial_shape, algo).to(device).eval().to(dtype)# .train()
     # net.load_state_dict(net.state_dict())
     spconv.assign_name_for_sparse_modules(net)
     print(coors_th.shape)
@@ -803,22 +803,22 @@ def main():
     # state.pop("net.2.max_num_voxels_during_training")
     # net.load_state_dict(state)
     # breakpoint()
-    net = net.train()
+    # net = net.train()
     print("spconv time", np.mean(times[10:]))
-    times = []
+    # times = []
 
-    for i in range(10):
-        out = net(voxels_th, coors_th, 1)
-        print("------------")
-        torch.cuda.synchronize()
-        t = time.time()
-        out.features.backward(dout_t)
-        torch.cuda.synchronize()
-        times.append(time.time() - t)
+    # for i in range(10):
+    #     out = net(voxels_th, coors_th, 1)
+    #     print("------------")
+    #     torch.cuda.synchronize()
+    #     t = time.time()
+    #     out.features.backward(dout_t)
+    #     torch.cuda.synchronize()
+    #     times.append(time.time() - t)
 
-    # # print((net.grid == -1).float().sum(), net.grid.numel())
-    # # print("spconv time", time.time() - t)
-    print("spconv bw time", np.mean(times[5:]))
+    # # # print((net.grid == -1).float().sum(), net.grid.numel())
+    # # # print("spconv time", time.time() - t)
+    # print("spconv bw time", np.mean(times[5:]))
 
 
 if __name__ == "__main__":
