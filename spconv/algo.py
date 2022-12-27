@@ -618,6 +618,7 @@ class SimpleConv:
         ]
         self.prebuilt_desps = prebuilt_desps
         self.prebuilt_desp_names = {str(d) for d in prebuilt_desps}
+        
         self.lock = Lock()
 
         self.static_key_to_desps = group_by(self.get_static_key, all_desps)
@@ -823,6 +824,7 @@ class SimpleConv:
                        mask_argsort: tv.Tensor,
                        indices: tv.Tensor,
                        reverse_mask: bool,
+                       mask_int_count: int = 1,
                        mask_filter: int = 0xffffffff,
                        mask_width: int = -1,
                        mask_output: tv.Tensor = tv.Tensor(),
@@ -863,6 +865,8 @@ class SimpleConv:
             params.indices = indices
             params.mask = mask
             params.mask_output = mask_output
+            params.mask_int_count = mask_int_count
+            
             # if op_type == ConvOpType.kBackwardWeight:
             #     assert not mask_output.empty()
             if op_type == ConvOpType.kBackwardInput:
@@ -940,7 +944,8 @@ class SimpleConv:
                               bias: Optional[tv.Tensor] = None,
                               act_alpha: float = 0.0,
                               act_beta: float = 0.0,
-                              act_type: tv.gemm.Activation = tv.gemm.Activation.None_):
+                              act_type: tv.gemm.Activation = tv.gemm.Activation.None_,
+                              mask_int_count: Union[int, None] = None):
         channel_k = output.dim(1)
         channel_c = inp.dim(1)
         # GemmMainUnitTest.stream_synchronize(stream)
@@ -981,6 +986,7 @@ class SimpleConv:
         params.mask_filter = mask_filter
         params.mask_output = mask_output
         params.reverse_mask = reverse_mask
+        params.mask_int_count = mask_int_count
         if bias is not None:
             params.bias = bias
         if timer.enable:

@@ -89,7 +89,8 @@ class ImplicitGemmIndiceData(object):
                  out_spatial_shape, is_subm: bool, algo: ConvAlgo,
                  ksize: List[int], stride: List[int], dilation: List[int], padding: List[int],
                  in_voxel_num: Optional[Any] = None,
-                 out_voxel_num: Optional[Any] = None):
+                 out_voxel_num: Optional[Any] = None,
+                 mask_int_count: int=1):
         self.out_indices = out_indices
         self.indices = indices
         self.pair_fwd = pair_fwd
@@ -110,6 +111,7 @@ class ImplicitGemmIndiceData(object):
         # in/out voxel_num is only used in tensorrt conversion.
         self.in_voxel_num = in_voxel_num
         self.out_voxel_num = out_voxel_num
+        self.mask_int_count = mask_int_count
 
 
 def scatter_nd(indices, updates, shape):

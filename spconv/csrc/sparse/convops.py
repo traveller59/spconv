@@ -1138,6 +1138,7 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         code.arg("beta", "float", "0.0")
 
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
+        code.arg("mask_int_count", "int", "1")
         code.arg("auto_fp32_accum", "bool", "true")
         code.arg("fp32_accum", "bool", "false")
         code.arg("num_run", "int", "5")
@@ -1186,6 +1187,8 @@ class ConvTunerSimple(pccm.ParameterizedClass):
             params.indices = indices;
             params.mask = mask;
             params.mask_output = mask_output;
+            params.mask_int_count = mask_int_count;
+
             // if (op_type_cpp == tv::gemm::ConvOpType::kBackwardWeight){{
             //     TV_ASSERT_RT_ERR(!mask_output.empty(), "error");
             // }}
@@ -1335,7 +1338,7 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         code.arg("beta", "float", "0.0")
 
         code.arg("stream_int", f"std::uintptr_t", "0")
-
+        code.arg("mask_int_count", "int", "1")
         code.arg("workspace", "tv::Tensor", "tv::Tensor()",
                  "cumm.tensorview.Tensor = Tensor()")
         code.arg("verbose", f"bool", "false")
@@ -1347,7 +1350,7 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         code.arg("act_alpha", f"float", "0.0")
         code.arg("act_beta", f"float", "0.0")
         code.arg("act_type", f"tv::gemm::Activation", "tv::gemm::Activation::kNone", "cumm.tensorview.gemm.Activation = Activation.None_")
-
+        
         if CUMM_CPU_ONLY_BUILD:
             code.raw(f"TV_THROW_RT_ERR(\"not implemented for cpu!!!\")")
             return code
@@ -1390,6 +1393,7 @@ class ConvTunerSimple(pccm.ParameterizedClass):
         params.mask_width = mask_width;
         params.mask_output = mask_output;
         params.reverse_mask = reverse_mask;
+        params.mask_int_count = mask_int_count;
 
         if (timer.enable()){{
             params.timer = timer;
@@ -2035,6 +2039,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
                  "std::vector<tv::Tensor>")
         code.arg("num_activate_out", "int")
         code.arg("masks", "tv::Tensor")
+        code.arg("mask_int_count", "int")
         code.arg("arch", "std::tuple<int, int>")
 
         code.arg("is_train, is_subm", "bool", "false")
@@ -2108,6 +2113,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 tv::Tensor(), // mask_output
                 1.0, 0.0,
                 stream_int, 
+                mask_int_count, // mask_int_count is after stream_int
                 auto_fp32_accum,
                 fp32_accum,
                 5, // num_run
@@ -2120,7 +2126,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
         std::vector<tv::Tensor> mask_output_fwd_splits;
         if (is_train){{
             mask_output_fwd = allocator.empty({pccm.literal(AllocKeys.MaskOutputFwd)}, 
-                {{num_split, tv::div_up(num_activate_out, mask_width)}}, 
+                {{num_split, tv::div_up(num_activate_out, mask_width) * mask_int_count}}, 
                 tv::uint32, features.device(), stream_int);
             for (int i = 0; i < num_split; ++i){{
                 mask_output_fwd_splits.push_back(mask_output_fwd[i]);
@@ -2154,6 +2160,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 -1, // mask_width
                 1.0, beta,
                 stream_int,
+                mask_int_count, // mask_int_count is after stream_int
                 tv::Tensor(), // workspace
                 false, // verbose
                 timer, 
@@ -2186,6 +2193,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
         code.arg("mask_output_fwd", "tv::Tensor")
 
         code.arg("masks", "tv::Tensor")
+        code.arg("mask_int_count", "int")
         code.arg("arch", "std::tuple<int, int>")
 
         code.arg("mask_width", "int")
@@ -2278,6 +2286,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 tv::Tensor(), // mask_output
                 1.0, 0.0,
                 stream_int, 
+                mask_int_count,
                 auto_fp32_accum,
                 fp32_accum,
                 5, // num_run
@@ -2302,6 +2311,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 tv::Tensor(), // mask_output
                 1.0, 0.0,
                 stream_int, 
+                mask_int_count,
                 auto_fp32_accum,
                 fp32_accum,
                 5, // num_run
@@ -2344,6 +2354,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 -1, // mask_width
                 1.0, beta,
                 stream_int,
+                mask_int_count,
                 tv::Tensor(), // workspace
                 false, // verbose
                 timer);
@@ -2361,6 +2372,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
                 mask_width,
                 1.0, 0.0,
                 stream_int, 
+                mask_int_count,
                 workspace, // workspace
                 false, // verbose
                 timer);
