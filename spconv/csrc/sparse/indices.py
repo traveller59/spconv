@@ -829,7 +829,6 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
         uint32_t filter_mask_in = (1u << ((RS - 1 - filter_offset) % 32));
         uint32_t filter_mask_in_offset = (RS - 1 - filter_offset) / 32;
         // uint32_t filter_mask_center = (1u << (RS / 2));
-
         loc_iter.set_filter_offset(filter_offset);
         int indices_pair_size_mul_RS = indices_pair_size * RS;
         int filter_offset_mul_indices_pair_size = filter_offset * indices_pair_size;
@@ -1255,13 +1254,13 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                  f"tv::array<int, {self.ndim}>")
         code.arg("transposed", f"bool", "false")
         code.arg("stream_int", f"std::uintptr_t", "0")
-        code.arg("mask_int_count", "int", "1")
 
         code.raw(f"""
         auto custream = reinterpret_cast<cudaStream_t>(stream_int);
         // TODO stream
         // TODO handle num input == 0
         int kv = ksize.op<tv::arrayops::prod>();
+        int mask_int_count = tv::div_up(kv, 32);
         // indice_pairs_bwd: [kv, num_act_in]  or empty
         // indice_pairs_fwd: [kv, num_act_out]
         auto ctx = tv::Context();
@@ -1504,7 +1503,6 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                  "cumm.tensorview.Tensor = Tensor()")
         code.arg("is_train", "bool", "true")
         code.arg("stream_int", f"std::uintptr_t", "0")
-        code.arg("mask_int_count", "int", "1")
 
         code.raw(f"""
         int num_act_in_real = indices.dim(0);
@@ -1523,6 +1521,7 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
             padding[i] = (ksize[i] / 2) * dilation[i];
         }}
         int kv = ksize.op<tv::arrayops::prod>();
+        int mask_int_count = tv::div_up(kv, 32);
         TV_ASSERT_RT_ERR(kv == indice_pairs.dim(1), "error");
         // indice_pairs: [1 or 2, kv, num_act_in] if mask else [2, kv, num_act_in]
         // out_inds: [MaxSize, {self.ndim + 1}]
@@ -1556,8 +1555,8 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                 if (!indice_pair_mask.empty()){{
                     TV_ASSERT_RT_ERR(indice_pairs.ndim() == 3, "error");
                     TV_ASSERT_RT_ERR(indice_pairs.dim(0) == (is_train ? 2 : 1), "error");
-                    TV_ASSERT_INVALID_ARG(indice_pair_mask.ndim() == 2, "error");
-                    // indice_pair_mask: [mask_split_count, num_act_in]
+                    TV_ASSERT_INVALID_ARG(indice_pair_mask.ndim() == 3, "error");
+                    // indice_pair_mask: [mask_split_count, num_act_in, num_mask_per_point]
                     if (indice_pair_mask.dim(0) == 2){{
                         auto mask_0 = indice_pair_mask[0].slice_first_axis(0, num_act_in_real);
                         auto mask_1 = indice_pair_mask[1].slice_first_axis(0, num_act_in_real);
@@ -1571,13 +1570,15 @@ class SparseConvIndicesKernel(pccm.ParameterizedClass):
                             indices.dim(0), indice_pairs.dim(2), kv, is_train);
 
                     }}else{{
-                        // indice_pair_mask: [1, num_act_in]
+                        // indice_pair_mask: [1, num_act_in, num_mask_per_point]
                         tv::cuda::Launch lanucher_fill(num_act_in_real, custream);
-                    if (mask_int_count == 1)
-                        lanucher_fill(cudakers::fill_kernel<uint32_t>, indice_pair_mask.data_ptr<uint32_t>(), (1 << (kv / 2)), indices.dim(0));
-                    else
-                        lanucher_fill(init_subm_multiple_mask_int_kernel<uint32_t>, 
-                                indice_pair_mask.data_ptr<uint32_t>(), kv / 2, indices.dim(0), mask_int_count);
+                        if (mask_int_count == 1){{
+                            lanucher_fill(cudakers::fill_kernel<uint32_t>, indice_pair_mask.data_ptr<uint32_t>(), (1 << (kv / 2)), indices.dim(0));
+                        }}
+                        else{{
+                            lanucher_fill(init_subm_multiple_mask_int_kernel<uint32_t>, 
+                                    indice_pair_mask.data_ptr<uint32_t>(), kv / 2, indices.dim(0), mask_int_count);
+                        }}
                         TV_ASSERT_RT_ERR(indice_pair_mask.dim(0) == 1, "error");
                         launcher_num_act_in(calc_subm_conv_indices_mask<table_t, {loc_type}>, loc_iter, hash, 
                             indices.data_ptr<const int>(), indice_pairs.data_ptr<int>(), 

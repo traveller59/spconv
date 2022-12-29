@@ -20,7 +20,7 @@ class ConvTunerSimple:
             arch: 
         """
         ...
-    def get_all_available(self, inp: Tensor, weight: Tensor, out: Tensor, layout_i: int, layout_w: int, layout_o: int, interleave_i: int, interleave_w: int, interleave_o: int, arch: Tuple[int, int], op_type: int, mask_width: int, auto_fp32_accum: bool, fp32_accum: bool, use_tf32: bool = True) -> List[ConvAlgoDesp]: 
+    def get_all_available(self, inp: Tensor, weight: Tensor, out: Tensor, layout_i: int, layout_w: int, layout_o: int, interleave_i: int, interleave_w: int, interleave_o: int, arch: Tuple[int, int], op_type: int, mask_width: int, auto_fp32_accum: bool, fp32_accum: bool, use_tf32: bool = True, bias: Tensor =  Tensor(), scale: Tensor =  Tensor()) -> List[ConvAlgoDesp]: 
         """
         Args:
             inp: 
@@ -38,6 +38,8 @@ class ConvTunerSimple:
             auto_fp32_accum: 
             fp32_accum: 
             use_tf32: 
+            bias: 
+            scale: 
         """
         ...
     def cached_get_nvrtc_params(self, desp: ConvAlgoDesp, arch: Tuple[int, int], stream_int: int) -> NVRTCParams: 
@@ -48,7 +50,7 @@ class ConvTunerSimple:
             stream_int: 
         """
         ...
-    def tune_and_cache(self, op_type: int, inp: Tensor, weight: Tensor, output: Tensor, layout_i: int, layout_w: int, layout_o: int, interleave_i: int, interleave_w: int, interleave_o: int, arch: Tuple[int, int], mask: Tensor, mask_argsort: Tensor, indices: Tensor, reverse_mask: bool, mask_filter: int = 0xffffffff, mask_width: int = -1, mask_output: Tensor =  Tensor(), alpha: float = 1.0, beta: float = 0.0, stream_int: int = 0, mask_int_count: int = 1, auto_fp32_accum: bool = True, fp32_accum: bool = False, num_run: int = 5, use_tf32: bool = True) -> Tuple[ConvTuneResult, float]: 
+    def tune_and_cache(self, op_type: int, inp: Tensor, weight: Tensor, output: Tensor, layout_i: int, layout_w: int, layout_o: int, interleave_i: int, interleave_w: int, interleave_o: int, arch: Tuple[int, int], mask: Tensor, mask_argsort: Tensor, indices: Tensor, reverse_mask: bool, mask_filter: int = 0xffffffff, mask_width: int = -1, mask_output: Tensor =  Tensor(), alpha: float = 1.0, beta: float = 0.0, stream_int: int = 0, auto_fp32_accum: bool = True, fp32_accum: bool = False, num_run: int = 5, use_tf32: bool = True, bias: Tensor =  Tensor(), scale: Tensor =  Tensor()) -> Tuple[ConvTuneResult, float]: 
         """
         Args:
             op_type: 
@@ -72,14 +74,15 @@ class ConvTunerSimple:
             alpha: 
             beta: 
             stream_int: 
-            mask_int_count: 
             auto_fp32_accum: 
             fp32_accum: 
             num_run: 
             use_tf32: 
+            bias: 
+            scale: 
         """
         ...
-    def get_tuned_algo(self, op_type: int, i_dtype: int, w_dtype: int, o_dtype: int, k: int, c: int, arch: Tuple[int, int], mask_width: int = -1) -> Tuple[Any, bool]: 
+    def get_tuned_algo(self, op_type: int, i_dtype: int, w_dtype: int, o_dtype: int, k: int, c: int, arch: Tuple[int, int], mask_width: int = -1, need_dynamic_mask: bool = False) -> Tuple[Any, bool]: 
         """
         Args:
             op_type: 
@@ -90,9 +93,10 @@ class ConvTunerSimple:
             c: 
             arch: 
             mask_width: 
+            need_dynamic_mask: 
         """
         ...
-    def run_with_tuned_result(self, profile_res, op_type: int, inp: Tensor, weight: Tensor, output: Tensor, mask: Tensor, mask_argsort: Tensor, mask_output: Tensor, indices: Tensor, reverse_mask: bool, mask_filter: int = 0xffffffff, mask_width: int = -1, alpha: float = 1.0, beta: float = 0.0, stream_int: int = 0, mask_int_count: int = 1, workspace: Tensor =  Tensor(), verbose: bool = False, timer: CUDAKernelTimer =  CUDAKernelTimer(false), force_nvrtc: bool = False, bias: Tensor =  Tensor(), act_alpha: float = 0.0, act_beta: float = 0.0, act_type: Activation =  Activation.None_) -> None: 
+    def run_with_tuned_result(self, profile_res, op_type: int, inp: Tensor, weight: Tensor, output: Tensor, mask: Tensor, mask_argsort: Tensor, mask_output: Tensor, indices: Tensor, reverse_mask: bool, mask_filter: int = 0xffffffff, mask_width: int = -1, alpha: float = 1.0, beta: float = 0.0, stream_int: int = 0, workspace: Tensor =  Tensor(), verbose: bool = False, timer: CUDAKernelTimer =  CUDAKernelTimer(false), force_nvrtc: bool = False, bias: Tensor =  Tensor(), act_alpha: float = 0.0, act_beta: float = 0.0, act_type: Activation =  Activation.None_, scale: Tensor =  Tensor(), output_add: Tensor =  Tensor()) -> None: 
         """
         Args:
             profile_res: 
@@ -110,7 +114,6 @@ class ConvTunerSimple:
             alpha: 
             beta: 
             stream_int: 
-            mask_int_count: 
             workspace: 
             verbose: 
             timer: 
@@ -119,6 +122,8 @@ class ConvTunerSimple:
             act_alpha: 
             act_beta: 
             act_type: 
+            scale: 
+            output_add: 
         """
         ...
     def query_workspace_size(self, desp: ConvAlgoDesp, splitk: int, op_type: int, N: int, C: int, K: int, kv: int) -> int: 

@@ -30,7 +30,7 @@ from .alloc import ExternalAllocator, ThrustAllocator
 from spconv.constants import SPCONV_DIRECT_TABLE_HASH_SIZE_SCALE, AllocKeys
 import re
 import os 
-
+from cumm.gemm.codeops import dispatch
 class CustomThrustLib(pccm.Class):
     def __init__(self):
         super().__init__()
@@ -462,7 +462,6 @@ class SpconvOps(pccm.Class):
         code.arg("ksize, stride, padding, dilation", f"std::vector<int>")
         code.arg("transposed", f"bool", "false")
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
-        code.arg("mask_int_count", "int", "1")
         code.raw(f"""
         int ndim = indices.dim(1) - 1;
         TV_ASSERT_RT_ERR(output_dims.size() == ndim && input_dims.size() == ndim &&
@@ -489,7 +488,7 @@ class SpconvOps(pccm.Class):
                     indice_pairs_uniq, indice_pairs_uniq_before_sort,
                     out_inds, mask_fwd, mask_bwd,
                     num_out_act, batch_size, output_dims_, input_dims_, 
-                    ksize_, stride_, padding_, dilation_, transposed, stream_int, mask_int_count);
+                    ksize_, stride_, padding_, dilation_, transposed, stream_int);
             }}
             """)
         code.raw(f"""TV_THROW_RT_ERR("unknown ndim", ndim);""")
@@ -513,7 +512,6 @@ class SpconvOps(pccm.Class):
         code.arg("ksize, stride, padding, dilation", f"std::vector<int>")
         code.arg("transposed", f"bool", "false")
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int")
-        code.arg("mask_int_count", "int", "1")
         code.raw(f"""
         int ndim = indices.dim(1) - 1;
         TV_ASSERT_RT_ERR(output_dims.size() == ndim && input_dims.size() == ndim &&
@@ -540,7 +538,7 @@ class SpconvOps(pccm.Class):
                     indice_pairs_uniq, indice_pairs_uniq_before_sort,
                     out_inds, mask_fwd, mask_bwd,
                     num_out_act, batch_size, output_dims_, input_dims_, 
-                    ksize_, stride_, padding_, dilation_, transposed, stream_int, mask_int_count);
+                    ksize_, stride_, padding_, dilation_, transposed, stream_int);
             }}
             """)
         code.raw(f"""TV_THROW_RT_ERR("unknown ndim", ndim);""")
@@ -561,7 +559,6 @@ class SpconvOps(pccm.Class):
                  "cumm.tensorview.Tensor = Tensor()")
         code.arg("backward", "bool", "false")
         code.arg("stream_int", f"std::uintptr_t", "0", pyanno="int = 0")
-        code.arg("mask_int_count", "int", "1")
         code.raw(f"""
         int ndim = indices.dim(1) - 1;
         TV_ASSERT_RT_ERR(input_dims.size() == ndim &&
@@ -582,7 +579,7 @@ class SpconvOps(pccm.Class):
                     indice_pairs, out_inds, indice_num_per_loc,
                     batch_size, input_dims_, 
                     ksize_, dilation_, indice_pair_mask, backward,
-                    stream_int, mask_int_count);
+                    stream_int);
             }}
             """)
         code.raw(f"""TV_THROW_RT_ERR("unknown ndim", ndim);""")
@@ -909,7 +906,7 @@ class SpconvOps(pccm.Class):
         """)
         return code
 
-    def sort_1d_by_key_allocator_template(self, use_allocator: bool, int_count: int = 1):
+    def sort_1d_by_key_allocator_template(self, use_allocator: bool):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:
             return code.make_invalid()
@@ -924,18 +921,7 @@ class SpconvOps(pccm.Class):
                  "tv::Tensor()",
                  pyanno="cumm.tensorview.Tensor = Tensor()")
         code.arg("stream", "std::uintptr_t", "0", pyanno="int")
-        code.code_after_include = f"""
-        template <typename T> struct SmallOrEqualTo {{
-            TV_HOST_DEVICE_INLINE T operator()(const T &x, const T &y) const {{
-                return x < y;
-            }}
-        }};
-        template <typename T> __global__ void mask_input(T* inp, T mask, int size){{
-            for (int i : tv::KernelLoopX<int>(size)){{
-                inp[i] &= mask;
-            }}
-        }}
-        """
+        code.arg("mask_count", "int", "1", pyanno="int")
         code.add_dependency(CustomThrustLib, TensorViewKernel)
         code.add_param_class("cudakers", self.cuda_common_kernel)
         if not use_allocator:
@@ -945,20 +931,29 @@ class SpconvOps(pccm.Class):
         code.raw(f"""
         cudaStream_t stream_cu = reinterpret_cast<cudaStream_t>(stream);
         if (indices.empty()){{
-            indices = tv::empty({{data.dim(0) / {int_count}}}, tv::int32, 0);
+            indices = tv::empty({{data.dim(0)}}, tv::int32, 0);
         }}
         tv::cuda::Launch launcher(data.dim(0), stream_cu);
         launcher(cudakers::arange_kernel<int32_t>, indices.data_ptr<int32_t>(), indices.dim(0));
         // auto timer = tv::CUDATimer();
-        tv::dispatch<int32_t, uint32_t, int64_t, uint64_t>(data.dtype(), [&](auto I){{
-            using T_ = TV_DECLTYPE(I);
-            using T = {"T_" if int_count == 1 else f"thrust::tuple<{', '.join(['T_'] * int_count) }>"};
-            thrust::device_ptr<T> ptr_tr(reinterpret_cast<T*>(data.data_ptr<T_>()));
-            thrust::device_ptr<int32_t> ptr_k(indices.data_ptr<int32_t>());
-            auto thrust_ctx = thrust::cuda::par.on(stream_cu);
-            auto ctx2 = thrust::cuda::par(allocator).on(stream_cu);
-            thrust::sort_by_key(ctx2, ptr_tr, ptr_tr + data.dim(0) / {int_count}, ptr_k);
-        }});
+        """)
+        # nested tv::dispatch may cause compiler bug in msvc.
+        for dtype in dispatch(code, [dtypes.int32, dtypes.int64, dtypes.uint32, dtypes.uint64], "data.dtype()"):
+            code.raw(f"""
+            using T_ = {dtype};
+            tv::dispatch_int<1, 2, 3, 4>(mask_count, [&](auto IV){{
+                constexpr int I = TV_DECLTYPE(IV)::value;
+                // we can't use thrust::tuple in mp_repeat_c directly because
+                // thrust tuple actually has fixed size template arguments.
+                using T = tv::mp_rename<tv::mp_repeat_c<tv::mp_list<T_>, I>, thrust::tuple>;
+                thrust::device_ptr<T> ptr_tr(reinterpret_cast<T*>(data.data_ptr<T_>()));
+                thrust::device_ptr<int32_t> ptr_k(indices.data_ptr<int32_t>());
+                auto thrust_ctx = thrust::cuda::par.on(stream_cu);
+                auto ctx2 = thrust::cuda::par(allocator).on(stream_cu);
+                thrust::sort_by_key(ctx2, ptr_tr, ptr_tr + data.dim(0), ptr_k);
+            }});
+            """)
+        code.raw(f"""
         // tv::ssprint("SORT BY KEY TIME", data.dim(0), timer.report() / 1000.0);
         return indices;
         """)
@@ -967,71 +962,12 @@ class SpconvOps(pccm.Class):
 
     @pccm.pybind.mark
     @_STATIC_FUNCTION
-    def sort_1d_by_key_allocator_mask32(self):
-        # for python
+    def sort_1d_by_key_allocator(self):
         return self.sort_1d_by_key_allocator_template(False)
 
     @pccm.pybind.mark
     @_STATIC_FUNCTION
-    def sort_1d_by_key_allocator_mask32_v2(self):
-        # for python
-        return self.sort_1d_by_key_allocator_template(True)
-
-    @pccm.pybind.mark
-    @_STATIC_FUNCTION
-    def sort_1d_by_key_allocator_mask128(self):
-        # for python
-        return self.sort_1d_by_key_allocator_template(False, 4)
-    
-    @pccm.pybind.mark
-    @_STATIC_FUNCTION
-    def sort_1d_by_key_allocator_mask128_v2(self):
-        # for python
-        return self.sort_1d_by_key_allocator_template(True, 4)
-
-    def sort_1d_by_key_allocator_mask_auto_template(self, use_allocator: bool):
-        code = pccm.FunctionCode()
-        if CUMM_CPU_ONLY_BUILD:
-            return code.make_invalid()
-        code.arg("data", "tv::Tensor")
-        if not use_allocator:
-            code.arg("alloc_param", "std::function<std::uintptr_t(std::size_t)>")
-        else:
-            code.arg("alloc_param", "ThrustAllocator&")
-
-        code.arg("indices",
-                 "tv::Tensor",
-                 "tv::Tensor()",
-                 pyanno="cumm.tensorview.Tensor = Tensor()")
-        code.arg("stream", "std::uintptr_t", "0", pyanno="int")
-        code.arg("mask_int_count", "int", "1")
-        code.raw(f"""
-            switch (mask_int_count){{
-                case 1:
-                    return sort_1d_by_key_allocator_mask32{"_v2" if use_allocator else ""}(data, alloc_param, indices, stream);
-                case 4:
-                    return sort_1d_by_key_allocator_mask128{"_v2" if use_allocator else ""}(data, alloc_param, indices, stream);
-                default:
-                    TV_ASSERT_RT_ERR(false, "Not implement for other mask_int_count");
-                    return tv::Tensor();
-            }}
-        """)
-        return code.ret("tv::Tensor")
-
-    
-    @pccm.pybind.mark
-    @pccm.static_function
-    def sort_1d_by_key_allocator_mask_auto(self):
-        return self.sort_1d_by_key_allocator_mask_auto_template(False)
-    
-    @pccm.pybind.mark
-    @pccm.static_function
-    def sort_1d_by_key_allocator_mask_auto_v2(self):
-        return self.sort_1d_by_key_allocator_mask_auto_template(True)
-    
-    @_STATIC_FUNCTION
     def sort_1d_by_key_allocator_v2(self):
-        # for cpp only
         return self.sort_1d_by_key_allocator_template(True)
 
     @pccm.pybind.mark
@@ -1622,7 +1558,7 @@ class SpconvOps(pccm.Class):
         code.raw(f"""
         int hash_size = 2 * num_act_out_bound;
         if (direct_table){{
-            hash_size = int({SPCONV_DIRECT_TABLE_HASH_SIZE_SCALE} * max_act_out_in_theory);
+            hash_size = tv::align_up(int({SPCONV_DIRECT_TABLE_HASH_SIZE_SCALE} * max_act_out_in_theory), 2);
         }}
         size_t res = 0;
         if (subm){{
@@ -1655,7 +1591,7 @@ class SpconvOps(pccm.Class):
             max_act_out_in_theory, subm, use_int64_hash_k, direct_table);
         int hash_size = 2 * num_act_out_bound;
         if (direct_table){{
-            hash_size = int({SPCONV_DIRECT_TABLE_HASH_SIZE_SCALE} * max_act_out_in_theory);
+            hash_size = tv::align_up(int({SPCONV_DIRECT_TABLE_HASH_SIZE_SCALE} * max_act_out_in_theory), 2);
         }}
         if (use_int64_hash_k){{
             auto ten = tv::from_blob(workspace, {{int64_t(hash_size)}}, tv::int64, 0);
@@ -1720,10 +1656,10 @@ class SpconvOps(pccm.Class):
         tvctx.set_cuda_stream(reinterpret_cast<cudaStream_t>(stream_int));
         auto conv_algo = static_cast<tv::gemm::SparseConvAlgo>(algo);
         int kv = std::accumulate(ksize.begin(), ksize.end(), 1, std::multiplies<int>());
-        int mask_int_count = (kv + 31) / 32;
-        if (mask_int_count > 1 && mask_int_count < 4)
-            mask_int_count = 4;
-        TV_ASSERT_RT_ERR(mask_int_count == 1 || mask_int_count == 4, "Not Implement too large kernel");
+        int mask_int_count = tv::div_up(kv, 32);
+        // if (mask_int_count > 1 && mask_int_count < 4)
+        //     mask_int_count = 4;
+        // TV_ASSERT_RT_ERR(mask_int_count == 1 || mask_int_count == 4, "Not Implement too large kernel");
         // TV_ASSERT_RT_ERR(kv <= 32, "currently only support ksize < 32");
         std::vector<int> out_shape;
         if (!subm){{
@@ -1845,14 +1781,14 @@ class SpconvOps(pccm.Class):
                 pair_mask = preallocated.at({pccm.literal(AllocKeys.PairMask)});
             }}else{{
                 pair_mask = allocator.empty({pccm.literal(AllocKeys.PairMask)}, 
-                    {{mask_split_count, num_act_in * mask_int_count}}, tv::uint32, 0, stream_int);
+                    {{mask_split_count, num_act_in, mask_int_count}}, tv::uint32, 0, stream_int);
             }}
             generate_subm_conv_inds(indices, hash_k, hash_v, pair, out_inds, indice_num_per_loc,
-                batch_size, input_dims, ksize, dilation, pair_mask, is_train, stream_int, mask_int_count);
+                batch_size, input_dims, ksize, dilation, pair_mask, is_train, stream_int);
             auto mask_argsort = allocator.empty({pccm.literal(AllocKeys.MaskArgSort)}, 
                 {{mask_split_count, num_act_in}}, tv::int32, 0, stream_int);
             for (int j = 0; j < mask_split_count; ++j){{
-                sort_1d_by_key_allocator_mask_auto_v2(pair_mask[j], thrustalloc, mask_argsort[j], stream_int, mask_int_count);
+                sort_1d_by_key_allocator_v2(pair_mask[j], thrustalloc, mask_argsort[j], stream_int, mask_int_count);
             }}
         """)
         with code.else_():
@@ -1958,11 +1894,11 @@ Your Conv Params: )" << "\\n";
                 pair_fwd = allocator.full_int({pccm.literal(AllocKeys.PairFwd)}, 
                     {{kv, num_act_out}}, -1, indices.dtype(), indices.device(), stream_int);
                 pair_mask_fwd = allocator.zeros({pccm.literal(AllocKeys.PairMask)}, 
-                    {{mask_split_count, num_act_out * mask_int_count}}, tv::uint32, 0, stream_int);
+                    {{mask_split_count, num_act_out, mask_int_count}}, tv::uint32, 0, stream_int);
                 pair_mask_bwd = tv::Tensor();
                 if (is_train){{
                     pair_mask_bwd = allocator.zeros({pccm.literal(AllocKeys.PairMaskBwd)}, 
-                        {{mask_split_count, indices.dim(0) * mask_int_count}}, tv::uint32, 0, stream_int);
+                        {{mask_split_count, indices.dim(0), mask_int_count}}, tv::uint32, 0, stream_int);
                 }}
             }}
             if (!direct_table){{
@@ -1994,13 +1930,13 @@ Your Conv Params: )" << "\\n";
                         indice_pairs_uniq, indice_pairs_uniq_bkp, 
                         out_inds, pair_mask_fwd, pair_mask_bwd, num_act_out,
                         batch_size, out_shape, input_dims, ksize, stride, padding, dilation,
-                        transposed, stream_int, mask_int_count);
+                        transposed, stream_int);
                 }}else{{
                     generate_conv_inds_mask_stage2(indices, hash_k, hash_v, pair_fwd, pair_bwd,
                         indice_pairs_uniq, indice_pairs_uniq_bkp, 
                         out_inds, pair_mask_fwd, pair_mask_bwd, num_act_out,
                         batch_size, out_shape, input_dims, ksize, stride, padding, dilation,
-                        transposed, stream_int, mask_int_count);
+                        transposed, stream_int);
                 }}
             }}
             """)
@@ -2030,21 +1966,21 @@ Your Conv Params: )" << "\\n";
                     }}
                 }}else{{
                     if (!is_train){{
-                        sort_1d_by_key_allocator_mask_auto_v2(pair_mask_fwd[0], thrustalloc, 
+                        sort_1d_by_key_allocator_v2(pair_mask_fwd[0], thrustalloc, 
                             mask_argsort_fwd[0], stream_int, mask_int_count);
                     }}else{{
-                        sort_1d_by_key_allocator_mask_auto_v2(pair_mask_fwd[0], thrustalloc, 
+                        sort_1d_by_key_allocator_v2(pair_mask_fwd[0], thrustalloc, 
                             mask_argsort_fwd[0], stream_int, mask_int_count);
-                        sort_1d_by_key_allocator_mask_auto_v2(pair_mask_bwd[0], thrustalloc, 
+                        sort_1d_by_key_allocator_v2(pair_mask_bwd[0], thrustalloc, 
                             mask_argsort_bwd[0], stream_int, mask_int_count);
                     }}
                 }}
             }}
             """)
         code.raw(f"""
-        return std::make_tuple(mask_tensor, num_act_out, mask_int_count);
+        return std::make_tuple(mask_tensor, num_act_out);
         """)
-        return code.ret("std::tuple<tv::Tensor, int, int>")
+        return code.ret("std::tuple<tv::Tensor, int>")
 
     @pccm.pybind.mark 
     @pccm.static_function

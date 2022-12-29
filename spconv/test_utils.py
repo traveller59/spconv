@@ -53,7 +53,7 @@ class TestCase(unittest.TestCase):
             print("not equal rhs = ", y)
             np.testing.assert_array_equal(a, b)
 
-    def assertAllClose(self, a, b, rtol=1e-6, atol=1e-6):
+    def assertAllClose(self, a, b, rtol=1e-6, atol=1e-6, msg: str = ""):
         """Asserts that two numpy arrays, or dicts of same, have near values.
         This does not support nested dicts.
         Args:
@@ -68,22 +68,22 @@ class TestCase(unittest.TestCase):
         """
         is_a_dict = isinstance(a, dict)
         if is_a_dict != isinstance(b, dict):
-            raise ValueError("Can't compare dict to non-dict, %s vs %s." %
+            raise ValueError(f"Can't compare dict to non-dict, %s vs %s. {msg}" %
                              (a, b))
         if is_a_dict:
             self.assertCountEqual(a.keys(),
                                   b.keys(),
-                                  msg="mismatched keys, expected %s, got %s" %
+                                  msg=f"mismatched keys, expected %s, got %s. {msg}" % 
                                   (a.keys(), b.keys()))
             for k in a:
                 self._assertArrayLikeAllClose(a[k],
                                               b[k],
                                               rtol=rtol,
                                               atol=atol,
-                                              msg="%s: expected %s, got %s." %
+                                              msg=f"%s: expected %s, got %s. {msg}" %
                                               (k, a, b))
         else:
-            self._assertArrayLikeAllClose(a, b, rtol=rtol, atol=atol)
+            self._assertArrayLikeAllClose(a, b, rtol=rtol, atol=atol, msg=msg)
 
     def _assertArrayLikeAllClose(self, a, b, rtol=1e-6, atol=1e-6, msg=None):
         a = self._GetNdArray(a)

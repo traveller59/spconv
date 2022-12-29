@@ -89,8 +89,7 @@ class ImplicitGemmIndiceData(object):
                  out_spatial_shape, is_subm: bool, algo: ConvAlgo,
                  ksize: List[int], stride: List[int], dilation: List[int], padding: List[int],
                  in_voxel_num: Optional[Any] = None,
-                 out_voxel_num: Optional[Any] = None,
-                 mask_int_count: int=1):
+                 out_voxel_num: Optional[Any] = None):
         self.out_indices = out_indices
         self.indices = indices
         self.pair_fwd = pair_fwd
@@ -111,7 +110,6 @@ class ImplicitGemmIndiceData(object):
         # in/out voxel_num is only used in tensorrt conversion.
         self.in_voxel_num = in_voxel_num
         self.out_voxel_num = out_voxel_num
-        self.mask_int_count = mask_int_count
 
 
 def scatter_nd(indices, updates, shape):
@@ -183,6 +181,8 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
             self.thrust_allocator = ThrustSortAllocator(features.device)
         self._timer = CUDAKernelTimer(enable_timer)
         self.force_algo = force_algo
+        # for simple int8 torch inference
+        self.int8_scale: Optional[float] = None 
 
     def replace_feature(self, feature: torch.Tensor):
         """we need to replace x.features = F.relu(x.features) with x = x.replace_feature(F.relu(x.features))

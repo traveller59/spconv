@@ -36,8 +36,8 @@ from cumm.gemm.algospec import TensorOp
 def _assign_gemm_desp_props(desp: Union[ConvAlgoDesp, GemmAlgoDesp],
                             p: Union[GemmAlgoParams, ConvAlgoParams]):
     desp.dtype_a = p.dtype_a.tv_dtype
-    desp.dtype_b = p.dtype_a.tv_dtype
-    desp.dtype_c = p.dtype_a.tv_dtype
+    desp.dtype_b = p.dtype_b.tv_dtype
+    desp.dtype_c = p.dtype_c.tv_dtype
     desp.dacc = p.dtype_acc.tv_dtype
     desp.dcomp = p.dtype_comp.tv_dtype
     desp.trans_a = p.trans_a
@@ -87,6 +87,9 @@ def get_conv_algo_desp_from_param(p: ConvAlgoParams):
     desp.element_per_access_a = ker.input_spec.input_iter_a.element_per_acc
     desp.element_per_access_b = ker.input_spec.input_iter_b.element_per_acc
     desp.element_per_access_c = ker.output_spec.out_iter.element_per_acc
+    desp.is_int8_inference = ker.int8_inference
+    desp.dynamic_mask = ker.dynamic_mask
+
     desp.min_arch = ker.min_arch()
     return desp
 
@@ -141,4 +144,6 @@ def get_conv_param_from_desp(desp: ConvAlgoDesp):
                                       desp.interleave_o)
     p.mask_sparse = desp.mask_sparse
     p.increment_k_first = desp.increment_k_first
+    p.int8_inference = desp.is_int8_inference
+    p.dynamic_mask = desp.dynamic_mask
     return p

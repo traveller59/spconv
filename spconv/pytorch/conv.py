@@ -37,10 +37,23 @@ from spconv.utils import nullcontext
 from torch.nn.init import calculate_gain
 from cumm import tensorview as tv
 
+from torch.nn import functional as F
+
 FILTER_HWIO = False
 
 _MAX_NUM_VOXELS_DURING_TRAINING = "max_num_voxels_during_training"
 
+def _apply_act(x: torch.Tensor, act_type: tv.gemm.Activation, act_alpha: float, act_beta: float):
+    if act_type == tv.gemm.Activation.None_:
+        return x
+    elif act_type == tv.gemm.Activation.ReLU:
+        return F.relu(x)
+    elif act_type == tv.gemm.Activation.Sigmoid:
+        return F.sigmoid(x)
+    elif act_type == tv.gemm.Activation.LeakyReLU:
+        return F.leaky_relu(x, act_alpha)
+    else:
+        raise NotImplementedError
 
 class SparseConvolution(SparseModule):
     __constants__ = [
@@ -104,7 +117,7 @@ class SparseConvolution(SparseModule):
                                  torch.zeros(1, dtype=torch.int32))
         self.record_voxel_count = record_voxel_count
         if algo is None:
-            if kv <= 32 and not CPU_ONLY_BUILD:
+            if kv <= 128 and not CPU_ONLY_BUILD:
                 if kv < 8:
                     algo = ConvAlgo.MaskImplicitGemm
                 else:
@@ -139,6 +152,19 @@ class SparseConvolution(SparseModule):
         self.act_type = act_type
         self.act_alpha = act_alpha
         self.act_beta = act_beta
+
+        self.enable_int8_test_mode: bool = False
+
+        self._int8_weight = torch.Tensor()
+        # calculated by max(abs(weight)) for each channel
+        self._int8_weight_scale = torch.Tensor()
+        # calculated by scale self.bias with _int8_input_scale
+        self._int8_bias = torch.Tensor()
+        # int8 inference must set _int8_input_scale
+        self._int8_input_scale: Optional[float] = None
+        # if _int8_output_scale unset, will execute s8 @ s8 => f16/f32 (weight dtype), i.e. dequantization
+        self._int8_output_scale: Optional[float] = None
+
         if self.conv1x1:
             assert act_type == tv.gemm.Activation.None_, "conv1x1 don't support fused act"
         self.reset_parameters()
@@ -151,11 +177,19 @@ class SparseConvolution(SparseModule):
             return getattr(self, _MAX_NUM_VOXELS_DURING_TRAINING)
         return None
 
+    def set_int8_test(self, enable: bool, input_scale: float, output_scale: Optional[float] = None, weight_scale: Optional[torch.Tensor] = None):
+        self._int8_input_scale = input_scale
+        self._int8_output_scale = output_scale
+        if weight_scale is not None:
+            self._int8_weight_scale = weight_scale
+        self.enable_int8_test_mode = enable
+
     def _load_weight_different_layout(self, state_dict, prefix, local_metadata,
                                       strict, missing_keys, unexpected_keys,
                                       error_msgs):
-        if self.record_voxel_count and not self.subm and not self.inverse and _MAX_NUM_VOXELS_DURING_TRAINING not in state_dict:
-            state_dict[prefix + _MAX_NUM_VOXELS_DURING_TRAINING] = torch.zeros(
+        name = prefix + _MAX_NUM_VOXELS_DURING_TRAINING
+        if self.record_voxel_count and not self.subm and not self.inverse and name not in state_dict:
+            state_dict[name] = torch.zeros(
                 1, dtype=torch.int32)
         if not SAVED_WEIGHT_LAYOUT:
             return
@@ -255,7 +289,10 @@ class SparseConvolution(SparseModule):
     def is_inverseable(self):
         return self.indice_key is not None and not self.subm
 
-    def forward(self, input: SparseConvTensor):
+    def forward(self, input: SparseConvTensor, add_input: Optional[SparseConvTensor] = None):
+        return self._conv_forward(input, self.weight, self.bias, add_input)
+
+    def _conv_forward(self, input: SparseConvTensor, weight: torch.Tensor, bias: Optional[torch.Tensor], add_input: Optional[SparseConvTensor] = None):
         assert isinstance(input, SparseConvTensor)
         assert input.features.shape[
             1] == self.in_channels, "channel size mismatch"
@@ -264,9 +301,34 @@ class SparseConvolution(SparseModule):
         indices = input.indices
         spatial_shape = input.spatial_shape
         batch_size = input.batch_size
-        bias_for_training = self.bias if self.training else None
-        bias_for_infer = self.bias if not self.training else None
-
+        bias_for_training = bias if self.training else None
+        bias_for_infer = bias if not self.training else None
+        output_scale = None
+        output_add_scale = 1.0
+        if self.enable_int8_test_mode:
+            assert not self.training, "must in eval mode"
+            assert self.algo == ConvAlgo.MaskImplicitGemm, "int8 inference only support MaskImplicitGemm"
+            assert bias_for_infer is not None, "conv-bn-relu must be fused"
+            assert self._int8_input_scale is not None 
+            if features.dtype != torch.int8:
+                # quantize
+                features = torch.clamp(torch.round(features / self._int8_input_scale), -128, 127).to(torch.int8)
+            output_scale = self._int8_output_scale
+            int8_out_scale = output_scale
+            if int8_out_scale is None:
+                int8_out_scale = 1
+            if add_input is not None:
+                assert add_input.int8_scale is not None, "only support int8 add"
+                output_add_scale = add_input.int8_scale
+            if self._int8_weight.numel() == 0:
+                with torch.no_grad():
+                    assert ALL_WEIGHT_IS_KRSC
+                    weight_scales = torch.abs(weight).view(self.out_channels, -1).max(1)[0]
+                    num_1s = [1] * (self.ndim + 1)
+                    self._int8_weight = (weight / weight_scales.view(self.out_channels, *num_1s) * 127).to(torch.int8)
+                    if self._int8_weight_scale.numel() == 0:
+                        self._int8_weight_scale = int8_out_scale / (self._int8_input_scale *  weight_scales)
+                    self._int8_bias = bias_for_infer * int8_out_scale
         if self.training:
             msg =  "act don't support backward, only used in inference"
             assert self.act_type == tv.gemm.Activation.None_, msg
@@ -310,18 +372,19 @@ class SparseConvolution(SparseModule):
                         "out_channels": self.out_channels,
                     }
                 }
-        if self.conv1x1:
+        if self.conv1x1 and not self.enable_int8_test_mode:
+            # in int8 test mode, we don't implement conv1x1 via mm.
             if FILTER_HWIO:
                 features = torch.mm(
                     input.features,
-                    self.weight.view(self.out_channels, self.in_channels).T)
+                    weight.view(self.out_channels, self.in_channels).T)
             else:
                 features = torch.mm(
                     input.features,
-                    self.weight.view(self.in_channels, self.out_channels))
+                    weight.view(self.in_channels, self.out_channels))
 
-            if self.bias is not None:
-                features += self.bias
+            if bias is not None:
+                features += bias
             out_tensor = out_tensor.replace_feature(features)
             # padding may change spatial shape of conv 1x1.
             out_tensor.spatial_shape = out_spatial_shape
@@ -413,7 +476,7 @@ class SparseConvolution(SparseModule):
                 if self.subm:
                     out_features = Fsp.indice_subm_conv(
                         features,
-                        self.weight,
+                        weight,
                         indice_pairs_calc,
                         indice_pair_num,
                         outids.shape[0],
@@ -427,7 +490,7 @@ class SparseConvolution(SparseModule):
                     if self.inverse:
                         out_features = Fsp.indice_inverse_conv(
                             features,
-                            self.weight,
+                            weight,
                             indice_pairs_calc,
                             indice_pair_num,
                             outids.shape[0],
@@ -440,7 +503,7 @@ class SparseConvolution(SparseModule):
                     else:
                         out_features = Fsp.indice_conv(
                             features,
-                            self.weight,
+                            weight,
                             indice_pairs_calc,
                             indice_pair_num,
                             outids.shape[0],
@@ -481,11 +544,13 @@ class SparseConvolution(SparseModule):
                         mask_argsort_fwd_splits = datas.mask_argsort_fwd_splits
                         mask_argsort_bwd_splits = datas.mask_argsort_bwd_splits
                         masks = datas.masks
-                        mask_int_count = datas.mask_int_count
                         assert self.subm, "only support reuse subm indices"
                         self._check_subm_reuse_valid(input, spatial_shape,
                                                      datas)
                     else:
+                        if input.benchmark:
+                            torch.cuda.synchronize()
+                            t = time.time()
                         with input._timer.namespace("gen_pairs"):
                             # we need to gen bwd indices for regular conv
                             # because it may be inversed.
@@ -514,7 +579,11 @@ class SparseConvolution(SparseModule):
                                 print(msg, file=sys.stderr)
                                 spconv_save_debug_data(indices)
                                 raise e
-
+                        if input.benchmark:
+                            torch.cuda.synchronize()
+                            interval = time.time() - t
+                            out_tensor.benchmark_record[
+                                self.name]["indice_gen_time"].append(interval)
                         outids = res[0]
                         num_inds_per_loc = res[1]
                         pair_fwd = res[2]
@@ -524,7 +593,6 @@ class SparseConvolution(SparseModule):
                         mask_argsort_fwd_splits = res[6]
                         mask_argsort_bwd_splits = res[7]
                         masks = res[8]
-                        mask_int_count = res[9]
                         if self.indice_key is not None:
                             indice_data = ImplicitGemmIndiceData(
                                 outids,
@@ -543,8 +611,7 @@ class SparseConvolution(SparseModule):
                                 ksize=self.kernel_size,
                                 stride=self.stride,
                                 padding=self.padding,
-                                dilation=self.dilation,
-                                mask_int_count=mask_int_count)
+                                dilation=self.dilation)
                             msg = f"your indice key {self.indice_key} already exists in this sparse tensor."
                             assert self.indice_key not in indice_dict, msg
                             indice_dict[self.indice_key] = indice_data
@@ -552,16 +619,43 @@ class SparseConvolution(SparseModule):
                     torch.cuda.synchronize()
                     t = time.time()
                 num_activate_out = outids.shape[0]
-                out_features = Fsp.implicit_gemm(
-                    features, self.weight, pair_fwd, pair_bwd,
-                    pair_mask_fwd_splits, pair_mask_bwd_splits,
-                    mask_argsort_fwd_splits, mask_argsort_bwd_splits,
-                    num_activate_out, masks, mask_int_count, self.training, self.subm,
-                    input._timer, self.fp32_accum,
-                    bias_for_infer,
-                    self.act_alpha,
-                    self.act_beta,
-                    self.act_type)
+                weight_cur = weight
+                bias_cur = bias_for_infer
+                if self.enable_int8_test_mode:
+                    assert features.dtype == torch.int8, "in int8 test mode, feature must be int8"
+                    weight_cur = self._int8_weight
+                    bias_cur = self._int8_bias
+                if self.training:
+                    out_features = Fsp.implicit_gemm(
+                        features, weight_cur, pair_fwd, pair_bwd,
+                        pair_mask_fwd_splits, pair_mask_bwd_splits,
+                        mask_argsort_fwd_splits, mask_argsort_bwd_splits,
+                        num_activate_out, masks, self.training, self.subm,
+                        input._timer, self.fp32_accum,
+                        bias_cur,
+                        self.act_alpha,
+                        self.act_beta,
+                        self.act_type)
+                else:
+                    output_dtype = None 
+                    if self._int8_output_scale is None:
+                        output_dtype = weight.dtype
+                    out_features, _, _ = ops.implicit_gemm(
+                        features, weight_cur, pair_fwd, pair_mask_fwd_splits, 
+                        mask_argsort_fwd_splits, 
+                        num_activate_out, masks, self.training, self.subm,
+                        input._timer, self.fp32_accum,
+                        bias_cur,
+                        self.act_alpha,
+                        self.act_beta,
+                        self.act_type,
+                        # TODO do we really need output scale to scale bias in kernel?
+                        1.0, # output_scale
+                        self._int8_weight_scale, # scale
+                        output_add=add_input.features if add_input is not None else None,
+                        output_add_scale=output_add_scale,
+                        output_dtype=output_dtype)
+
         if bias_for_training is not None:
             out_features += bias_for_training
         if input.benchmark:
@@ -581,9 +675,10 @@ class SparseConvolution(SparseModule):
         out_tensor.indices = outids
         out_tensor.indice_dict = indice_dict
         out_tensor.spatial_shape = out_spatial_shape
-        # print(outids.shape, spatial_shape, self.kernel_size, self.stride, self.padding,
-        #             self.dilation, self.output_padding, out_spatial_shape)
-
+        if add_input is not None and not self.enable_int8_test_mode:
+            out_tensor = out_tensor.replace_feature(_apply_act(out_tensor.features + add_input.features, self.act_type, self.act_alpha, self.act_beta))
+        out_tensor.int8_scale = output_scale
+            
         return out_tensor
 
     def _check_subm_reuse_valid(self, inp: SparseConvTensor,

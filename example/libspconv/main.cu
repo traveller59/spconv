@@ -426,7 +426,7 @@ int main(int argc, char **argv) {
             {SPCONV_ALLOC_OUT_FEATURES, out_features}};
         StaticAllocator alloc2(tensor_dict);
         ConvTunerSimple tuner(ConvMain::get_all_conv_algo_desp());
-        auto conv_res = ConvGemmOps::implicit_gemm(
+        auto conv_run_status = ConvGemmOps::implicit_gemm(
             alloc2, tuner, input_features_real, weights, pair_fwd_real,
             pair_mask_splits, mask_argsort_splits, num_act_out_real,
             mask_tensor, arch, false, is_subm,
@@ -435,7 +435,7 @@ int main(int argc, char **argv) {
             1.0 /*bias alpha, only used for leaky relu*/,
             0.0 /*unused for now*/, tv::gemm::Activation::kReLU);
         tv::ssprint("selected conv algo",
-                    std::get<1>(conv_res).algo_desp.__repr__());
+                    std::get<1>(conv_run_status).algo_desp.__repr__());
         // FINISH!!!
       }
       // calc maximum number of output points.

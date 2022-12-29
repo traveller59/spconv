@@ -616,6 +616,7 @@ class SimpleConv:
             algocore.get_conv_algo_desp_from_param(p)
             for p in ALL_IMPGEMM_PARAMS
         ]
+        self.all_desps = all_desps
         self.prebuilt_desps = prebuilt_desps
         self.prebuilt_desp_names = {str(d) for d in prebuilt_desps}
         
@@ -648,13 +649,13 @@ class SimpleConv:
                 tile_ms_list, tile_ns_list, tile_ks_list, tile_shape_to_algos)
 
         self.kc_forward_cache: Dict[Tuple[int, int, int, int, int, int, int,
-                                          int],
+                                          int, bool],
                                     BestConvAlgoByProfile] = {}  # for forward
         self.kc_dgrad_cache: Dict[Tuple[int, int, int, int, int, int, int,
-                                        int], BestConvAlgoByProfile] = {
+                                        int, bool], BestConvAlgoByProfile] = {
                                         }  # for backward weight
         self.kc_wgrad_cache: Dict[Tuple[int, int, int, int, int, int, int,
-                                        int], BestConvAlgoByProfile] = {
+                                        int, bool], BestConvAlgoByProfile] = {
                                         }  # for backward weight
 
         self._nvrtc_caches: Dict[Tuple[str, Tuple[int, int]], NVRTCParams] = {}
@@ -679,11 +680,12 @@ class SimpleConv:
                           op_type: ConvOpType,
                           mask_width: int,
                           fp32_accum: Optional[bool] = None,
-                          use_tf32: bool = True):
-
+                          use_tf32: bool = True,
+                          bias: tv.Tensor = tv.Tensor(),
+                          scale: tv.Tensor = tv.Tensor()):
         avail_algos = get_available_algo_str_from_arch(arch)
         finally_algos: List[ConvAlgoDesp] = []
-        is_fp16 = inp.dtype == tv.float16 and weight.dtype == tv.float16 and out.dtype == tv.float16
+        is_fp16 = inp.dtype == tv.float16 and weight.dtype == tv.float16 # and out.dtype == tv.float16
         use_f32_as_accum = False
         kv = int(np.prod(weight.shape[1:-1]))
         # for 3d conv, if reduce axis is too large, may cause nan during
@@ -703,6 +705,10 @@ class SimpleConv:
                         layout_w.interleave, layout_o.interleave, inp.dtype,
                         weight.dtype, out.dtype, op_type.value)
         desps = self.static_key_to_desps.get(static_key, None)
+        # for d in self.all_desps:
+        #     print(d)
+        # print(len(desps))
+        # breakpoint()
         if desps is None or len(desps) == 0:
             return finally_algos
         for desp in desps:
@@ -726,11 +732,21 @@ class SimpleConv:
             ldw = weight.dim(-1)
             ldo = out.dim(-1)
             mask_width_valid = True
-            
             if desp.op_type.value == ConvOpType.kBackwardWeight.value:
                 assert mask_width > 0
                 mask_width_valid = mask_width % desp.tile_shape[2] == 0
+            require_dynamic_mask = kv > 32
             if desp.supported_ldx_conv(ldi, ldw, ldo) and mask_width_valid:
+                if not bias.empty() and not scale.empty():
+                    # int8 inference, bias/scale dtype must equal to compute dtype in gemm
+                    assert bias.dtype == scale.dtype
+                    if desp.dcomp != bias.dtype:
+                        continue
+                    if not desp.is_int8_inference:
+                        continue 
+                else:
+                    if desp.is_int8_inference:
+                        continue
                 if desp.is_nvrtc:
                     if not CompileInfo.algo_can_be_nvrtc_compiled(desp.min_arch):
                         continue
@@ -747,6 +763,12 @@ class SimpleConv:
                             continue
                 if SPCONV_DEBUG_NVRTC_KERNELS:
                     desp.is_nvrtc = True
+                if require_dynamic_mask:
+                    if not desp.dynamic_mask:
+                        continue 
+                else:
+                    if desp.dynamic_mask:
+                        continue 
                 finally_algos.append(desp)
         return finally_algos
 
@@ -758,11 +780,12 @@ class SimpleConv:
                        k: int,
                        c: int,
                        arch: Tuple[int, int],
-                       mask_width: int = -1):
+                       mask_width: int = -1,
+                       need_dynamic_mask: bool = False):
         if not op_type == ConvOpType.kBackwardWeight:
             # fwd and dgrad don't need
             mask_width = -1
-        key = (i_dtype, w_dtype, o_dtype, k, c, arch[0], arch[1], mask_width)
+        key = (i_dtype, w_dtype, o_dtype, k, c, arch[0], arch[1], mask_width, need_dynamic_mask)
         if op_type == ConvOpType.kForward:
             return self.kc_forward_cache.get(key, None)
         elif op_type == ConvOpType.kBackwardInput:
@@ -795,8 +818,9 @@ class SimpleConv:
             cudadevrt = str(cudadevrt_p)
         mod = CummNVRTCModule([kernel],
                               cudadevrt_path=cudadevrt,
-                              verbose=False,
-                              custom_names=custom_names)
+                              verbose=True,
+                              custom_names=custom_names,
+                              verbose_path="/home/yy/Projects/spconv-release/spconv/build/dev_nvrtc_int8")
         mod.load()
         return mod, kernel
 
@@ -824,7 +848,6 @@ class SimpleConv:
                        mask_argsort: tv.Tensor,
                        indices: tv.Tensor,
                        reverse_mask: bool,
-                       mask_int_count: int = 1,
                        mask_filter: int = 0xffffffff,
                        mask_width: int = -1,
                        mask_output: tv.Tensor = tv.Tensor(),
@@ -832,17 +855,20 @@ class SimpleConv:
                        beta: float = 0.0,
                        stream: int = 0,
                        fp32_accum: Optional[bool] = None,
-                        use_tf32: bool = True):
+                       use_tf32: bool = True,
+                       bias: tv.Tensor = tv.Tensor(),
+                       scale: tv.Tensor = tv.Tensor()):
         avail = self.get_all_available(inp, weight, output, layout_i, layout_w,
                                        layout_o, arch, op_type, mask_width,
-                                       fp32_accum, use_tf32)
+                                       fp32_accum, use_tf32, bias, scale)
         inp = inp.clone()
         weight = weight.clone()
         output = output.clone()
-
+        print(len(avail), inp.dtype, weight.dtype, output.dtype, bias.dtype, scale.dtype, bias.empty(), scale.empty())
         channel_k = output.dim(1)
         channel_c = inp.dim(1)
-
+        weight = weight.view([channel_k, -1, channel_c])
+        need_dynamic_mask = weight.dim(1) > 32
         times: List[float] = []
         all_profile_res: List[BestConvAlgoByProfile] = []
         group_by_algo = {}
@@ -865,8 +891,9 @@ class SimpleConv:
             params.indices = indices
             params.mask = mask
             params.mask_output = mask_output
-            params.mask_int_count = mask_int_count
-            
+            if desp.is_int8_inference:
+                params.bias = bias 
+                params.scale = scale
             # if op_type == ConvOpType.kBackwardWeight:
             #     assert not mask_output.empty()
             if op_type == ConvOpType.kBackwardInput:
@@ -909,7 +936,7 @@ class SimpleConv:
             # fwd and dgrad don't need
             mask_width = -1
         key = (inp.dtype, weight.dtype, output.dtype, channel_k, channel_c,
-               arch[0], arch[1], mask_width)
+               arch[0], arch[1], mask_width, need_dynamic_mask)
         with self.lock:
             if op_type == ConvOpType.kForward:
                 self.kc_forward_cache[key] = res
@@ -945,7 +972,9 @@ class SimpleConv:
                               act_alpha: float = 0.0,
                               act_beta: float = 0.0,
                               act_type: tv.gemm.Activation = tv.gemm.Activation.None_,
-                              mask_int_count: Union[int, None] = None):
+                              scale: Optional[tv.Tensor] = None,
+                              output_add: Optional[tv.Tensor] = None):
+        
         channel_k = output.dim(1)
         channel_c = inp.dim(1)
         # GemmMainUnitTest.stream_synchronize(stream)
@@ -986,9 +1015,12 @@ class SimpleConv:
         params.mask_filter = mask_filter
         params.mask_output = mask_output
         params.reverse_mask = reverse_mask
-        params.mask_int_count = mask_int_count
         if bias is not None:
             params.bias = bias
+        if output_add is not None and algo_desp.is_int8_inference:
+            params.output_add = output_add
+        if scale is not None and algo_desp.is_int8_inference:
+            params.scale = scale
         if timer.enable:
             assert timer._timer is not None
             params.timer = timer._timer

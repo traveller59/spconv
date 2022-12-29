@@ -39,12 +39,12 @@ if project_is_installed(PACKAGE_NAME) and project_is_editable(
     from spconv.csrc.sparse.inference import InferenceOps
 
     all_shuffle = SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS + SHUFFLE_AMPERE_PARAMS
-    all_shuffle = list(filter(lambda x: not x.is_nvrtc, all_shuffle))
+    # all_shuffle = list(filter(lambda x: not x.is_nvrtc, all_shuffle))
     cu = GemmMainUnitTest(all_shuffle)
     cu.namespace = "cumm.gemm.main"
     all_imp = (IMPLGEMM_SIMT_PARAMS + IMPLGEMM_VOLTA_PARAMS +
                IMPLGEMM_TURING_PARAMS + IMPLGEMM_AMPERE_PARAMS)
-    all_imp = list(filter(lambda x: not x.is_nvrtc, all_imp))
+    # all_imp = list(filter(lambda x: not x.is_nvrtc, all_imp))
     convcu = ConvMainUnitTest(all_imp)
     convcu.namespace = "cumm.conv.main"
     gemmtuner = GemmTunerSimple(cu)

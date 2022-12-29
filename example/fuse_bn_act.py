@@ -207,7 +207,7 @@ class Net(nn.Module):
         pool_algo = algo
         # pool_algo = ConvAlgo.Native
         self.net = spconv.SparseSequential(
-            spconv.SubMConv3d(3, 64, 3, bias=False, indice_key="c0",
+            spconv.SubMConv3d(16, 64, 3, bias=False, indice_key="c0",
                               algo=algo),
             nn.BatchNorm1d(64),
             nn.ReLU(),
@@ -373,6 +373,11 @@ class Net(nn.Module):
         x = spconv.SparseConvTensor(features, coors, self.shape, batch_size, voxel_num=vx_num)
         return self.net(x)
 
+def _set_enable_int8_test_inplace(simple_module: torch.fx.GraphModule, enable: bool):
+    for m in simple_module.modules():
+        if isinstance(m, SparseConvolution):
+            if m.in_channels % 32 == 0 and m.out_channels % 32 == 0:
+                m.enable_int8_test_mode = enable
 
 
 class MyTracer(torch.fx.Tracer):
@@ -387,6 +392,7 @@ def main():
     torch.backends.cudnn.allow_tf32 = False
     with open(Path(__file__).parent.parent / "test" / "data" / "test_spconv.pkl", "rb") as f:
         (voxels, coors, spatial_shape) = pickle.load(f)
+    voxels = np.random.uniform(-1, 1, size=[voxels.shape[0], 16]).astype(np.float32)
     np.random.seed(50051)
     device = torch.device("cuda:0")
     device_cpu = torch.device("cpu:0")
@@ -408,6 +414,10 @@ def main():
     out_fused = net_fused(voxels_th_cuda, coors_th_cuda, 1)
     res = Fsp.sparse_add_hash_based(out_ref, out_fused.minus())
     print(torch.linalg.norm(res.features))
+    _set_enable_int8_test_inplace(net_fused, True)
+    qvoxels_cuda = voxels_th_cuda.to(torch.int8)
+    
+    out_int8 = net_fused(qvoxels_cuda, coors_th_cuda, 1)
 
 if __name__ == "__main__":
     main()
