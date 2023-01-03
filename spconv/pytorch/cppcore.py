@@ -34,6 +34,7 @@ _TORCH_DTYPE_TO_TV = {
     torch.int8: tv.int8,
     torch.int16: tv.int16,
     torch.uint8: tv.uint8,
+    torch.qint8: tv.int8,
 }
 
 _TORCH_UINT_WORKAROUNDS = {
@@ -42,6 +43,8 @@ _TORCH_UINT_WORKAROUNDS = {
     tv.uint64: tv.int64
 }
 
+_TH_QTYPES = {torch.qint8}
+
 _TV_DTYPE_TO_TORCH = {v: k for k, v in _TORCH_DTYPE_TO_TV.items()}
 _TV_DTYPE_TO_TORCH.update({
     tv.uint32: torch.int32,
@@ -49,6 +52,9 @@ _TV_DTYPE_TO_TORCH.update({
     tv.uint64: torch.int64
 
 })
+
+_TV_DTYPE_TO_TORCHQ = _TV_DTYPE_TO_TORCH.copy()
+_TV_DTYPE_TO_TORCHQ[tv.int8] = torch.qint8
 
 _ALL_INTS = {
     tv.int32, tv.int16, tv.int8, tv.int64, tv.uint64, tv.uint8, tv.uint32,
@@ -105,23 +111,31 @@ def get_arch():
 
 class TorchAllocator(ExternalAllocator):
 
-    def __init__(self, gpudevice: torch.device) -> None:
+    def __init__(self, gpudevice: torch.device, is_quantized: bool = False) -> None:
         super().__init__()
         self.gpudevice = gpudevice
         self.cpudevice = torch.device("cpu")
         self.allocated: Dict[Union[str, int], torch.Tensor] = {}
+        self.is_quantized = is_quantized
+        self._tv_dtype_to_torch = _TV_DTYPE_TO_TORCH
+        if is_quantized:
+            self._tv_dtype_to_torch = _TV_DTYPE_TO_TORCHQ
+
 
     def zeros(self, name: str, shape: List[int], dtype: int,
-              device: int, stream: int = 0, is_temp_memory: bool = False) -> tv.Tensor:
+              device: int, stream: int = 0, is_temp_memory: bool = False, scale: float = 1.0) -> tv.Tensor:
         # TODO free memory by name if its already free by pointer.
         # provide a name if you want to access it after c++ function exit.
         dtype_bkp = dtype
-        th_dtype = _TV_DTYPE_TO_TORCH[dtype]
+        th_dtype = self._tv_dtype_to_torch[dtype]
         if device == -1:
             dev = self.cpudevice
         else:
             dev = self.gpudevice
-        ten = torch.zeros(shape, dtype=th_dtype, device=dev)
+        if self.is_quantized:
+            ten = torch._empty_affine_quantized(shape, scale=scale, zero_point=0, dtype=th_dtype, device=dev)
+        else:
+            ten = torch.empty(shape, dtype=th_dtype, device=dev).zero_()
         ten_tv = torch_tensor_to_tv(ten, dtype_bkp)
         self.allocated[ten_tv.byte_pointer()] = ten
         if name and not is_temp_memory:
@@ -129,14 +143,17 @@ class TorchAllocator(ExternalAllocator):
         return ten_tv
 
     def empty(self, name: str, shape: List[int], dtype: int,
-              device: int, stream: int = 0, is_temp_memory: bool = False) -> tv.Tensor:
+              device: int, stream: int = 0, is_temp_memory: bool = False, scale: float = 1.0) -> tv.Tensor:
         dtype_bkp = dtype
-        th_dtype = _TV_DTYPE_TO_TORCH[dtype]
+        th_dtype = self._tv_dtype_to_torch[dtype]
         if device == -1:
             dev = self.cpudevice
         else:
             dev = self.gpudevice
-        ten = torch.empty(shape, dtype=th_dtype, device=dev)
+        if self.is_quantized:
+            ten = torch._empty_affine_quantized(shape, scale=scale, zero_point=0, dtype=th_dtype, device=dev)
+        else:
+            ten = torch.empty(shape, dtype=th_dtype, device=dev)
         ten_tv = torch_tensor_to_tv(ten, dtype_bkp)
         self.allocated[ten_tv.byte_pointer()] = ten
         if name and not is_temp_memory:
@@ -148,11 +165,13 @@ class TorchAllocator(ExternalAllocator):
         if dtype in _TORCH_UINT_WORKAROUNDS and value < 0:
             raise NotImplementedError("you can't use full for unsigned dtypes")
         dtype_bkp = dtype
-        th_dtype = _TV_DTYPE_TO_TORCH[dtype]
+        th_dtype = self._tv_dtype_to_torch[dtype]
         if device == -1:
             dev = self.cpudevice
         else:
             dev = self.gpudevice
+        if self.is_quantized:
+            assert th_dtype not in _TH_QTYPES
         ten = torch.full(shape, value, dtype=th_dtype, device=dev)
         ten_tv = torch_tensor_to_tv(ten, dtype_bkp)
         self.allocated[ten_tv.byte_pointer()] = ten
@@ -165,11 +184,13 @@ class TorchAllocator(ExternalAllocator):
         if dtype in _TORCH_UINT_WORKAROUNDS and value < 0:
             raise NotImplementedError("you can't use full for unsigned dtypes")
         dtype_bkp = dtype
-        th_dtype = _TV_DTYPE_TO_TORCH[dtype]
+        th_dtype = self._tv_dtype_to_torch[dtype]
         if device == -1:
             dev = self.cpudevice
         else:
             dev = self.gpudevice
+        if self.is_quantized:
+            assert th_dtype not in _TH_QTYPES
         ten = torch.full(shape, value, dtype=th_dtype, device=dev)
         ten_tv = torch_tensor_to_tv(ten, dtype_bkp)
         self.allocated[ten_tv.byte_pointer()] = ten

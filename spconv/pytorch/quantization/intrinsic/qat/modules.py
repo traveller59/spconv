@@ -6,8 +6,6 @@ import torch.ao.nn.intrinsic as nni
 import torch.ao.nn.qat as nnqat
 import torch.nn.functional as F
 from torch.nn import init
-from torch.nn.utils import fuse_conv_bn_weights
-from torch.nn.modules.utils import _single, _pair, _triple
 from torch.nn.parameter import Parameter
 from typing import TypeVar
 from spconv.pytorch.conv import SparseConvolution
@@ -16,8 +14,188 @@ from spconv.core import ConvAlgo
 from cumm import tensorview as tv
 from spconv.pytorch.core import SparseConvTensor
 import spconv.pytorch.quantization.intrinsic as snni
-
+from spconv.pytorch.quantization.utils import fuse_spconv_bn_weights
 MOD = TypeVar('MOD', bound=SparseConvolution)
+
+class _SparseConv(SparseConvolution, nni._FusedModule):
+
+    _FLOAT_MODULE = MOD
+    _FLOAT_CONV_MODULE = SparseConvolution
+
+    def __init__(self,
+                 ndim: int,
+                 in_channels: int,
+                 out_channels: int,
+                 kernel_size: Union[int, List[int], Tuple[int, ...]] = 3,
+                 stride: Union[int, List[int], Tuple[int, ...]] = 1,
+                 padding: Union[int, List[int], Tuple[int, ...]] = 0,
+                 dilation: Union[int, List[int], Tuple[int, ...]] = 1,
+                 groups: int = 1,
+                 bias: bool = True,
+                 subm: bool = False,
+                 output_padding: Union[int, List[int], Tuple[int, ...]] = 0,
+                 transposed: bool = False,
+                 inverse: bool = False,
+                 indice_key: Optional[str] = None,
+                 algo: Optional[ConvAlgo] = None,
+                 fp32_accum: Optional[bool] = None,
+                 record_voxel_count: bool = False,
+                 act_type: tv.gemm.Activation = tv.gemm.Activation.None_,
+                 act_alpha: float = 0,
+                 act_beta: float = 0,
+                 name=None,
+                 qconfig=None,
+                 device=None,
+                 dtype=None) -> None:
+        factory_kwargs = {"device": device, "dtype": dtype}
+        SparseConvolution.__init__(self, ndim, in_channels, out_channels, kernel_size, stride, padding, dilation, groups, 
+            bias=False,
+            subm=subm,
+            output_padding=output_padding,
+            transposed=transposed,
+            inverse=inverse,
+            indice_key=indice_key,
+            algo=algo,
+            fp32_accum=fp32_accum,
+            record_voxel_count=record_voxel_count,
+            act_type=act_type,
+            act_alpha=act_alpha,
+            act_beta=act_beta,
+            name=name, **factory_kwargs)
+        assert qconfig, 'qconfig must be provided for QAT module'
+        self.qconfig = qconfig
+        self.weight_fake_quant = qconfig.weight(factory_kwargs=factory_kwargs)
+
+    def forward(self, input):
+        return self._conv_forward(False, input, self.weight_fake_quant(self.weight), self.bias)
+
+    @staticmethod
+    def from_float(cls, mod):
+        r"""Create a qat module from a float module
+
+            Args:
+               `mod`: a float module, either produced by torch.ao.quantization utilities
+               or directly from user
+        """
+        assert type(mod) == cls._FLOAT_MODULE, (
+            "qat."
+            + cls.__name__
+            + ".from_float only works for "
+            + cls._FLOAT_MODULE.__name__  # type: ignore[attr-defined]
+        )
+        assert hasattr(mod, 'qconfig'), 'Input float module must have qconfig defined'
+        assert mod.qconfig, 'Input float module must have a valid qconfig'
+        if issubclass(type(mod), nni._FusedModule):
+            mod = mod[0]  # type: ignore[index]
+        conv: SparseConvolution = mod
+        qconfig = mod.qconfig
+        qat_conv = cls(conv.ndim, conv.in_channels, conv.out_channels, conv.kernel_size,
+                         conv.stride, conv.padding, conv.dilation,
+                         conv.groups, 
+                         conv.bias is not None,
+                         subm=conv.subm,
+                         output_padding=conv.output_padding,
+                         transposed=conv.transposed,
+                         inverse=conv.inverse,
+                         indice_key=conv.indice_key,
+                         algo=conv.algo,
+                         fp32_accum=conv.fp32_accum,
+                         record_voxel_count=conv.record_voxel_count,
+                         act_type=conv.act_type,
+                         act_alpha=conv.act_alpha,
+                         act_beta=conv.act_beta,
+                         name=conv.name,
+                         qconfig=qconfig)
+        qat_conv.weight = mod.weight
+        qat_conv.bias = mod.bias
+        return qat_conv
+
+    def to_float(self):
+        """ This works for both single qat conv, and the qat conv - relu modules
+        to convert the qat module to a floating point module
+        """
+        cls = type(self)
+        conv = cls._FLOAT_CONV_MODULE(  # type: ignore[attr-defined]
+            self.ndim,
+            self.in_channels,
+            self.out_channels,
+            self.kernel_size,
+            self.stride,
+            self.padding,
+            self.dilation,
+            self.groups,
+            self.bias is not None,
+            subm=self.subm,
+            output_padding=self.output_padding,
+            transposed=self.transposed,
+            inverse=self.inverse,
+            indice_key=self.indice_key,
+            algo=self.algo,
+            fp32_accum=self.fp32_accum,
+            record_voxel_count=self.record_voxel_count,
+            act_type=self.act_type,
+            act_alpha=self.act_alpha,
+            act_beta=self.act_beta,
+            name=self.name)
+        conv.weight = torch.nn.Parameter(self.weight.detach())
+        if self.bias is not None:
+            conv.bias = torch.nn.Parameter(self.bias.detach())
+        # conv relu
+        if issubclass(cls, nni._FusedModule):
+            modules = [conv]
+            assert hasattr(cls, "_FLOAT_RELU_MODULE")
+            relu = cls._FLOAT_RELU_MODULE()  # type: ignore[attr-defined]
+            modules.append(relu)
+            fused = cls._FLOAT_MODULE(*modules)  # type: ignore[arg-type, attr-defined, operator]
+            fused.train(self.training)
+            return fused
+        else:
+            return conv
+
+class SparseConv(_SparseConv, SparseConvolution):
+    r"""
+    A Conv1d module attached with FakeQuantize modules for weight,
+    used for quantization aware training.
+
+    We adopt the same interface as :class:`~torch.nn.Conv1d`
+
+    Similar to :class:`~torch.nn.Conv2d`, with FakeQuantize modules initialized to
+    default.
+
+    Attributes:
+        weight_fake_quant: fake quant module for weight
+    """
+    _FLOAT_MODULE = SparseConvolution
+    _FLOAT_CONV_MODULE = SparseConvolution
+
+    @classmethod
+    def from_float(cls, mod):
+        return super().from_float(cls, mod)
+
+class SparseConvReLU(SparseConv, nni._FusedModule):
+    r"""A ConvReLU2d module is a fused module of Conv2d and ReLU, attached with
+    FakeQuantize modules for weight for
+    quantization aware training.
+
+    We combined the interface of :class:`~torch.nn.Conv2d` and
+    :class:`~torch.nn.BatchNorm2d`.
+
+    Attributes:
+        weight_fake_quant: fake quant module for weight
+
+    """
+    _FLOAT_MODULE = snni.SpconvReLUNd
+    _FLOAT_CONV_MODULE = SparseConvolution
+    _FLOAT_BN_MODULE = None
+    _FLOAT_RELU_MODULE = nn.ReLU
+
+    def forward(self, input):
+        x = self._conv_forward(self.training, input, self.weight_fake_quant(self.weight), self.bias)
+        return x.replace_feature(F.relu(x.features))
+
+    @classmethod
+    def from_float(cls, mod):
+        return super(SparseConvReLU, cls).from_float(mod)
 
 class _SparseConvBn(SparseConvolution, nni._FusedModule):
 
@@ -34,7 +212,7 @@ class _SparseConvBn(SparseConvolution, nni._FusedModule):
                  stride: Union[int, List[int], Tuple[int, ...]] = 1,
                  padding: Union[int, List[int], Tuple[int, ...]] = 0,
                  dilation: Union[int, List[int], Tuple[int, ...]] = 1,
-                 groups: Union[int, List[int], Tuple[int, ...]] = 1,
+                 groups: int = 1,
                  bias: bool = True,
                  subm: bool = False,
                  output_padding: Union[int, List[int], Tuple[int, ...]] = 0,
@@ -143,7 +321,7 @@ class _SparseConvBn(SparseConvolution, nni._FusedModule):
             zero_bias = torch.zeros_like(self.bias, dtype=input.features.dtype)
         else:
             zero_bias = torch.zeros(self.out_channels, device=scaled_weight.device, dtype=input.features.dtype)
-        conv_spt = self._conv_forward(input, scaled_weight, zero_bias)
+        conv_spt = self._conv_forward(self.training, input, scaled_weight, zero_bias)
         conv = conv_spt.features
         conv_orig = conv / scale_factor.reshape(bias_shape)
         if self.bias is not None:
@@ -396,7 +574,7 @@ class _SparseConvBn(SparseConvolution, nni._FusedModule):
 
         if cls._FLOAT_BN_MODULE:  # type: ignore[attr-defined]
             # fuse bn into conv
-            conv.weight, conv.bias = fuse_conv_bn_weights(
+            conv.weight, conv.bias = fuse_spconv_bn_weights(
                 conv.weight,
                 conv.bias,
                 self.bn.running_mean,
@@ -473,3 +651,35 @@ class SparseConvBnReLU(_SparseConvBn):
     @classmethod
     def from_float(cls, mod):
         return super(SparseConvBnReLU, cls).from_float(mod)
+
+class SparseConvBnAddReLU(_SparseConvBn):
+    r"""
+    A ConvBnReLU1d module is a module fused from Conv1d, BatchNorm1d and ReLU,
+    attached with FakeQuantize modules for weight,
+    used in quantization aware training.
+
+    We combined the interface of :class:`torch.nn.Conv1d` and
+    :class:`torch.nn.BatchNorm1d` and :class:`torch.nn.ReLU`.
+
+    Similar to `torch.nn.Conv1d`, with FakeQuantize modules initialized to
+    default.
+
+    Attributes:
+        weight_fake_quant: fake quant module for weight
+
+    """
+    # base class defines _FLOAT_MODULE as "ConvBn1d"
+    _FLOAT_MODULE = snni.SpconvBnReLUNd  # type: ignore[assignment]
+    _FLOAT_CONV_MODULE = SparseConvolution
+    _FLOAT_BN_MODULE = nn.BatchNorm1d
+    _FLOAT_RELU_MODULE = nn.ReLU  # type: ignore[assignment]
+    # module class after fusing bn into conv
+    _FUSED_FLOAT_MODULE = snni.SpconvReLUNd
+
+    def forward(self, input, add_input):
+        x = _SparseConvBn._forward(self, input, add_input)
+        return x.replace_feature(F.relu(x.features))
+
+    @classmethod
+    def from_float(cls, mod):
+        return super(SparseConvBnAddReLU, cls).from_float(mod)

@@ -311,7 +311,7 @@ class IndiceMaxPool(pccm.Class):
         code.raw(f"""
         auto nhot = out_inds.dim(0);
         auto cudastream = reinterpret_cast<cudaStream_t>(stream);
-        tv::dispatch<float, double, tv::half_t, tv::bfloat16_t>(out.dtype(), [&](auto I){{
+        tv::dispatch<float, double, tv::half_t, tv::bfloat16_t, int8_t>(out.dtype(), [&](auto I){{
             using T = TV_DECLTYPE(I);
             auto launchdims = LaunchUtils::get_blocks_threads_of_2d_tensor(nhot, out.dim(1));
             int num_blocks_X = std::get<0>(launchdims);
@@ -350,7 +350,7 @@ class IndiceMaxPool(pccm.Class):
         tv::check_shape(in, {{-1, out.dim(1)}});
 
         auto cudastream = reinterpret_cast<cudaStream_t>(stream);
-        tv::dispatch<float, double, tv::half_t, tv::bfloat16_t>(out.dtype(), [&](auto I){{
+        tv::dispatch<float, double, tv::half_t, tv::bfloat16_t, int8_t>(out.dtype(), [&](auto I){{
             using T = TV_DECLTYPE(I);
             auto launchdims = LaunchUtils::get_blocks_threads_of_2d_tensor(nhot, out.dim(1));
             int num_blocks_X = std::get<0>(launchdims);
@@ -478,7 +478,7 @@ class IndiceMaxPool(pccm.Class):
         tv::check_shape(in, {{-1, out.dim(1)}});
 
         auto cudastream = reinterpret_cast<cudaStream_t>(stream);
-        tv::dispatch<float, double, tv::half_t, tv::bfloat16_t>(out.dtype(), [&](auto I){{
+        tv::dispatch<float, double, tv::half_t, tv::bfloat16_t, int8_t>(out.dtype(), [&](auto I){{
             using T = TV_DECLTYPE(I);
             auto launchdims = LaunchUtils::get_blocks_threads_of_2d_tensor(nhot, out.dim(1));
             int num_blocks_X = std::get<0>(launchdims);

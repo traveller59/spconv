@@ -2,7 +2,7 @@ from typing import overload, Any, Callable, Dict, List, Optional, Set, Tuple, Ty
 from pccm.stubs import EnumValue, EnumClassValue
 from cumm.tensorview import Tensor
 class ExternalAllocator:
-    def zeros(self, name: str, shape: List[int], dtype: int, device: int, stream: int = 0, is_temp_memory: bool = False) -> Tensor: 
+    def zeros(self, name: str, shape: List[int], dtype: int, device: int, stream: int = 0, is_temp_memory: bool = False, scale: float = 1.0) -> Tensor: 
         """
         Args:
             name: 
@@ -11,9 +11,10 @@ class ExternalAllocator:
             device: 
             stream: 
             is_temp_memory: 
+            scale: 
         """
         ...
-    def empty(self, name: str, shape: List[int], dtype: int, device: int, stream: int = 0, is_temp_memory: bool = False) -> Tensor: 
+    def empty(self, name: str, shape: List[int], dtype: int, device: int, stream: int = 0, is_temp_memory: bool = False, scale: float = 1.0) -> Tensor: 
         """
         Args:
             name: 
@@ -22,6 +23,7 @@ class ExternalAllocator:
             device: 
             stream: 
             is_temp_memory: 
+            scale: 
         """
         ...
     def full_int(self, name: str, shape: List[int], value: int, dtype: int, device: int, stream: int = 0, is_temp_memory: bool = False) -> Tensor: 

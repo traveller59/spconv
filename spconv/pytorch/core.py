@@ -128,7 +128,7 @@ def scatter_nd(indices, updates, shape):
     return ret
 
 
-# ProxyableClassMeta is used for TensorRT conversion in future.
+# ProxyableClassMeta is used for torch.fx
 class SparseConvTensor(metaclass=SpConvTensorMeta):
     def __init__(self,
                  features: torch.Tensor,
@@ -181,8 +181,15 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
             self.thrust_allocator = ThrustSortAllocator(features.device)
         self._timer = CUDAKernelTimer(enable_timer)
         self.force_algo = force_algo
-        # for simple int8 torch inference
-        self.int8_scale: Optional[float] = None 
+
+    @property
+    def is_quantized(self):
+        return self.features.dtype == torch.qint8
+
+    def q_scale(self):
+        if self.is_quantized:
+            return self.features.q_scale()
+        raise ValueError("sparse tensor must be quantized")
 
     def replace_feature(self, feature: torch.Tensor):
         """we need to replace x.features = F.relu(x.features) with x = x.replace_feature(F.relu(x.features))
@@ -220,7 +227,7 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
         x must be NHWC tensor, channel last
         """
         x_sp = x.to_sparse(x.ndim - 1)
-        spatial_shape = list(x_sp.shape[1:-1])
+        spatial_shape = x_sp.shape[1:-1]
         batch_size = x_sp.shape[0]
         indices_th = x_sp.indices().permute(1, 0).contiguous().int()
         features_th = x_sp.values()

@@ -2127,10 +2127,10 @@ class ConvGemmOps(pccm.ParameterizedClass):
         }}
         if (is_subm){{
             out_features = allocator.empty({pccm.literal(AllocKeys.OutFeatures)}, 
-                {{num_activate_out, out_channel}}, tv::DType(output_dtype), features.device(), stream_int);
+                {{num_activate_out, out_channel}}, tv::DType(output_dtype), features.device(), stream_int, false /*is_temp*/, output_scale);
         }}else{{
             out_features = allocator.zeros({pccm.literal(AllocKeys.OutFeatures)}, 
-                {{num_activate_out, out_channel}}, tv::DType(output_dtype), features.device(), stream_int);
+                {{num_activate_out, out_channel}}, tv::DType(output_dtype), features.device(), stream_int, false /*is_temp*/, output_scale);
         }}
         // auto start_ev = tv::CUDAEvent();
         // start_ev.record(stream_int);

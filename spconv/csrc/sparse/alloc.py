@@ -56,7 +56,7 @@ class ExternalAllocator(pccm.Class):
         code.arg("device", "int")
         code.arg("stream", "std::uintptr_t", "0")
         code.arg("is_temp_memory", "bool", "false")
-
+        code.arg("scale", "float", "1.0")
         return code.ret("tv::Tensor")
 
     @pccm.pybind.mark(virtual=True)
@@ -69,7 +69,7 @@ class ExternalAllocator(pccm.Class):
         code.arg("device", "int")
         code.arg("stream", "std::uintptr_t", "0")
         code.arg("is_temp_memory", "bool", "false")
-
+        code.arg("scale", "float", "1.0")
         return code.ret("tv::Tensor")
 
     @pccm.pybind.mark(virtual=True)

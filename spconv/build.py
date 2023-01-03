@@ -21,7 +21,7 @@ from ccimport.compat import InWindows
 from .constants import PACKAGE_NAME, PACKAGE_ROOT, DISABLE_JIT
 
 if project_is_installed(PACKAGE_NAME) and project_is_editable(
-        PACKAGE_NAME) and not DISABLE_JIT:
+        PACKAGE_NAME) and not DISABLE_JIT and False:
     from spconv.core import SHUFFLE_SIMT_PARAMS, SHUFFLE_VOLTA_PARAMS, SHUFFLE_TURING_PARAMS, SHUFFLE_AMPERE_PARAMS
     from spconv.core import IMPLGEMM_SIMT_PARAMS, IMPLGEMM_VOLTA_PARAMS, IMPLGEMM_TURING_PARAMS, IMPLGEMM_AMPERE_PARAMS
 
