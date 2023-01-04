@@ -19,3 +19,4 @@ from .fake_q import (get_default_spconv_trt_ptq_qconfig,
                      get_default_spconv_trt_qat_qconfig)
 from .qmapping import (get_spconv_fmod_to_qat_mapping,
                        get_spconv_qat_to_static_mapping)
+from .core import quantize_per_tensor

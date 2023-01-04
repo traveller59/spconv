@@ -50,3 +50,4 @@ def fuse_spconv_act_eval(conv, act):
     else:
         raise NotImplementedError
     return fused_conv
+

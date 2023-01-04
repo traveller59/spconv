@@ -14,7 +14,8 @@ from spconv.pytorch.conv import (SparseConv1d, SparseConv2d, SparseConv3d,
                                  SubMConv3d, SubMConv4d)
 from spconv.pytorch.identity import Identity
 from spconv.pytorch.modules import (SparseModule, SparseSequential,
-                                    assign_name_for_sparse_modules)
+                                    assign_name_for_sparse_modules, SparseBatchNorm,
+                                    SparseReLU, SparseIdentity)
 from spconv.pytorch.ops import ConvAlgo
 from spconv.pytorch.pool import (SparseMaxPool1d, SparseMaxPool2d,
                                  SparseMaxPool3d, SparseMaxPool4d,

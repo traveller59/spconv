@@ -11,7 +11,7 @@ from torch.ao.quantization.observer import (HistogramObserver,
 from torch.ao.quantization.qconfig import QConfig, QConfigAny, default_reuse_input_qconfig
 from torch.ao.quantization.qconfig_mapping import QConfigMapping, _FIXED_QPARAMS_OP_TO_OBSERVER
 from typing import Any, Callable, Dict, Tuple, Union, List
-from torch.ao.quantization import get_default_qconfig
+from torch.ao.quantization import get_default_qconfig, get_default_qat_qconfig
 from spconv.pytorch.core import SparseConvTensor
 
 __all__ = ["get_default_spconv_trt_ptq_qconfig", "get_default_spconv_trt_qat_qconfig"]
@@ -80,13 +80,14 @@ def get_default_spconv_trt_ptq_qconfig(backend, version):
 def get_default_spconv_trt_qat_qconfig(backend, version):
     return default_symmetric_spconv_qat_qconfig
 
-def get_default_spconv_qconfig_mapping(is_qat: bool, backend: str = "x86", version: int = 0) -> QConfigMapping:
+def get_default_spconv_qconfig_mapping(is_qat: bool, backend: str = "fbgemm", version: int = 0) -> QConfigMapping:
     """
     From torch.ao.quantization.qconfig_mapping
     Return the default QConfigMapping for the given quantization type and backend.
     """
     # get_default_qconfig(backend, version)
     if is_qat:
+        # qconfig = get_default_qat_qconfig(backend, version)
         qconfig = get_default_spconv_trt_qat_qconfig(backend, version)
     else:
         # qconfig = QConfig(activation=HistogramObserver.with_args(reduce_range=False, dtype=torch.qint8),
@@ -144,3 +145,4 @@ def get_default_spconv_qconfig_mapping(is_qat: bool, backend: str = "x86", versi
                        .set_object_type(torch.nn.functional.tanh, qconfig)
 
     return qconfig_mapping
+

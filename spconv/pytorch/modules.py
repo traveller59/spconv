@@ -23,7 +23,7 @@ from spconv import pytorch as spconv
 
 
 def is_spconv_module(module):
-    spconv_modules = (SparseModule, )
+    spconv_modules = (SparseModule, SparseBatchNorm, SparseReLU)
     return isinstance(module, spconv_modules)
 
 
@@ -148,3 +148,37 @@ def assign_name_for_sparse_modules(module: nn.Module):
     for k, n in module.named_modules():
         if isinstance(n, SparseModule):
             n._sparse_unique_name = k
+
+
+class SparseBatchNorm(nn.BatchNorm1d):
+    """this module is exists only for torch.fx transformation for quantization.
+    """
+    def forward(self, input):
+        if isinstance(input, spconv.SparseConvTensor):
+            return input.replace_feature(super().forward(input.features))
+        return super().forward(input)
+
+class SparseSyncBatchNorm(nn.SyncBatchNorm):
+    """this module is exists only for torch.fx transformation for quantization.
+    """
+    def forward(self, input):
+        if isinstance(input, spconv.SparseConvTensor):
+            return input.replace_feature(super().forward(input.features))
+        return super().forward(input)
+
+class SparseReLU(nn.ReLU):
+    """this module is exists only for torch.fx transformation for quantization.
+    """
+    def forward(self, input):
+        if isinstance(input, spconv.SparseConvTensor):
+            return input.replace_feature(super().forward(input.features))
+        return super().forward(input)
+
+
+class SparseIdentity(nn.Identity):
+    """this module is exists only for torch.fx transformation for quantization.
+    """
+    def forward(self, input):
+        if isinstance(input, spconv.SparseConvTensor):
+            return input.replace_feature(super().forward(input.features))
+        return super().forward(input)

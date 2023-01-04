@@ -188,10 +188,16 @@ class ConvTunerSimple(ConvTunerSimpleBase):
             cudadevrt_p = get_cudadevrt_path()
             assert cudadevrt_p is not None, "DynamicParallism must have cudadevrt"
             cudadevrt = str(cudadevrt_p)
+        # mod = CummNVRTCModule([kernel],
+        #                       cudadevrt_path=cudadevrt,
+        #                       verbose=True,
+        #                       custom_names=custom_names,
+        #                       verbose_path="/home/yy/Projects/spconv-release/spconv/build/dev_nvrtc_int8")
         mod = CummNVRTCModule([kernel],
                               cudadevrt_path=cudadevrt,
                               verbose=False,
                               custom_names=custom_names)
+
         mod.load()
         return mod, kernel
 

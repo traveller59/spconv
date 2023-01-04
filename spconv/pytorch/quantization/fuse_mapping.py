@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Union, Callable, Tuple, Dict, Optional, Type, Any
 import torch.nn as nn
 import spconv.pytorch as spconv
@@ -5,7 +6,8 @@ from .utils import fuse_spconv_bn_eval
 from . import intrinsic as snni
 from .intrinsic.qat.modules import SparseConvBn, SparseConvBnReLU, SparseConvBnAddReLU
 from spconv.pytorch.conv import DEFAULT_SPARSE_CONV_TYPES
-def fuse_conv_bn(is_qat, conv, bn):
+
+def fuse_conv_bn(is_qat, conv, bn, is_add_fuse: bool = False):
     r"""Given the conv and bn modules, fuses them and returns the fused module
 
     Args:
@@ -20,11 +22,10 @@ def fuse_conv_bn(is_qat, conv, bn):
     """
     assert(conv.training == bn.training),\
         "Conv and BN both must be in the same mode (train or eval)."
-    
+    fuse_cls = snni.SpconvAddReLUNd if is_add_fuse else snni.SpconvBnNd
     fused_module_class_map = {
-        k: snni.SpconvBnNd for k in DEFAULT_SPARSE_CONV_TYPES
+        k: fuse_cls for k in DEFAULT_SPARSE_CONV_TYPES
     }
-
     if is_qat:
         assert bn.num_features == conv.out_channels, 'Output channel of Conv2d must match num_features of BatchNorm2d'
         assert bn.affine, 'Only support fusing BatchNorm2d with affine set to True'
@@ -37,7 +38,7 @@ def fuse_conv_bn(is_qat, conv, bn):
     else:
         return fuse_spconv_bn_eval(conv, bn)
 
-def fuse_conv_bn_relu(is_qat, conv, bn, relu):
+def fuse_conv_bn_relu(is_qat, conv, bn, relu, is_add_fuse: bool = False):
     r"""Given the conv and bn modules, fuses them and returns the fused module
 
     Args:
@@ -54,8 +55,9 @@ def fuse_conv_bn_relu(is_qat, conv, bn, relu):
         "Conv and BN both must be in the same mode (train or eval)."
     fused_module : Optional[Type[spconv.SparseSequential]] = None
     if is_qat:
+        fuse_cls = snni.SpconvBnAddReLUNd if is_add_fuse else snni.SpconvBnReLUNd
         map_to_fused_module_train = {
-            k: snni.SpconvBnReLUNd for k in DEFAULT_SPARSE_CONV_TYPES
+            k: fuse_cls for k in DEFAULT_SPARSE_CONV_TYPES
         }
         assert bn.num_features == conv.out_channels, 'Output channel of Conv must match num_features of BatchNorm'
         assert bn.affine, 'Only support fusing BatchNorm with affine set to True'
@@ -66,8 +68,9 @@ def fuse_conv_bn_relu(is_qat, conv, bn, relu):
         else:
             raise NotImplementedError("Cannot fuse train modules: {}".format((conv, bn, relu)))
     else:
+        fuse_cls = snni.SpconvAddReLUNd if is_add_fuse else snni.SpconvReLUNd
         map_to_fused_module_eval = {
-            k: snni.SpconvReLUNd for k in DEFAULT_SPARSE_CONV_TYPES
+            k: fuse_cls for k in DEFAULT_SPARSE_CONV_TYPES
         }
         fused_module = map_to_fused_module_eval.get(type(conv), None)
         if fused_module is not None:
@@ -76,28 +79,21 @@ def fuse_conv_bn_relu(is_qat, conv, bn, relu):
         else:
             raise NotImplementedError("Cannot fuse eval modules: {}".format((conv, bn, relu)))
 
-# DEFAULT_SPCONV_OP_LIST_TO_FUSER_METHOD : Dict[Tuple, Union[nn.Sequential, Callable]] = {
-#     (spconv.SubMConv1d, nn.BatchNorm1d): fuse_conv_bn,
-#     (spconv.SubMConv1d, nn.BatchNorm1d, nn.ReLU): fuse_conv_bn_relu,
-#     (spconv.SparseConv1d, nn.BatchNorm1d): fuse_conv_bn,
-#     (spconv.SparseConv1d, nn.BatchNorm1d, nn.ReLU): fuse_conv_bn_relu,
-#     (spconv.SparseInverseConv1d, nn.BatchNorm1d): fuse_conv_bn,
-#     (spconv.SparseInverseConv1d, nn.BatchNorm1d, nn.ReLU): fuse_conv_bn_relu,
-#     (spconv.SubMConv2d, nn.BatchNorm1d): fuse_conv_bn,
-#     (spconv.SubMConv2d, nn.BatchNorm1d, nn.ReLU): fuse_conv_bn_relu,
-#     (spconv.SparseConv2d, nn.BatchNorm1d): fuse_conv_bn,
-#     (spconv.SparseConv2d, nn.BatchNorm1d, nn.ReLU): fuse_conv_bn_relu,
-#     (spconv.SparseInverseConv2d, nn.BatchNorm1d): fuse_conv_bn,
-#     (spconv.SparseInverseConv2d, nn.BatchNorm1d, nn.ReLU): fuse_conv_bn_relu,
-#     (spconv.SubMConv3d, nn.BatchNorm1d): fuse_conv_bn,
-#     (spconv.SubMConv3d, nn.BatchNorm1d, nn.ReLU): fuse_conv_bn_relu,
-#     (spconv.SparseConv3d, nn.BatchNorm1d): fuse_conv_bn,
-#     (spconv.SparseConv3d, nn.BatchNorm1d, nn.ReLU): fuse_conv_bn_relu,
-#     (spconv.SparseInverseConv3d, nn.BatchNorm1d): fuse_conv_bn,
-#     (spconv.SparseInverseConv3d, nn.BatchNorm1d, nn.ReLU): fuse_conv_bn_relu,
-# }
 
-# def get_spconv_fuse_method_mapping():
-#     return DEFAULT_SPCONV_OP_LIST_TO_FUSER_METHOD
+def fuse_conv_bn_add_relu(is_qat, relu, add_pattern):
+    r"""Given the conv and bn modules, fuses them and returns the fused module
 
-# Default map for swapping float module to qat modules
+    Args:
+        conv: Module instance of type conv2d/conv3d
+        bn: Spatial BN instance that needs to be fused with the conv
+
+    Examples::
+
+        >>> m1 = nn.Conv2d(10, 20, 3)
+        >>> b1 = nn.BatchNorm2d(20)
+        >>> m2 = fuse_conv_bn(m1, b1)
+    """
+    _, bn_pattern, _ = add_pattern
+    bn, conv = bn_pattern
+    return fuse_conv_bn_relu(is_qat, conv, bn, relu, True)
+

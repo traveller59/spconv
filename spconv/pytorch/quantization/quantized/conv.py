@@ -323,9 +323,12 @@ class SparseConv(_SparseConv):
         return 'QuantizedSparseConvolution'
 
     def set_weight_bias(self, w: torch.Tensor, b: Optional[torch.Tensor]) -> None:
-        assert b is not None 
         self._weight = w 
-        self._bias = b
+        if b is None:
+            # currently bias tensor must exists.
+            self._bias = torch.zeros((w.shape[0],), dtype=torch.float32, device=w.device)
+        else:
+            self._bias = b
 
     def weight(self):
         return self._weight_bias()[0]
@@ -336,12 +339,11 @@ class SparseConv(_SparseConv):
     def forward(self, input: SparseConvTensor):
         # Temporarily using len(shape) instead of ndim due to JIT issue
         # https://github.com/pytorch/pytorch/issues/23890
-        print("?")
         inp_scale = input.q_scale()
-        w_scales = self.weight().q_per_channel_scales()
+        w_scales = self.weight().q_per_channel_scales().to(torch.float32)
         out_scale = self.scale 
-        channel_scale = out_scale / (inp_scale * w_scales)
-        bias = self.bias() * out_scale
+        channel_scale = (inp_scale * w_scales) / out_scale
+        bias = self.bias() / out_scale
         return self._conv_forward(False, input, 
             self.weight(), bias, channel_scale=channel_scale, output_scale=out_scale)
         return ops.quantized.conv1d(input, self._packed_params, self.scale, self.zero_point)

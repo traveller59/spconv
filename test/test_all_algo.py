@@ -88,7 +88,7 @@ class SparseConvTester:
         op = expand_nd(ndim, 0)
         self.kv: int = np.prod(self.ksize)
         self.num_split = 1 if algo == ConvAlgo.MaskImplicitGemm else 2
-        self.output_scale: float = 1.0
+        self.output_scale: float = 3.4
         self.check_int8_infer = check_int8_infer
         if check_int8_infer:
             assert check_bias and self.dtype == np.int8

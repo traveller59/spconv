@@ -12,4 +12,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .modules import SparseConvBn, SparseConvBnAddReLU, SparseConvBnReLU, SparseConv, SparseConvReLU
+from .modules import (SparseConv, SparseConvAddReLU, SparseConvBn,
+                      SparseConvBnAddReLU, SparseConvBnReLU, SparseConvReLU)

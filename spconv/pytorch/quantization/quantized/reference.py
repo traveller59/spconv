@@ -132,7 +132,7 @@ class SpConv(_SpConvNd, sconvmod.SparseConvolution):
             device=device)
         self._init_weight_qparams(weight_qparams, device)
 
-    def forward(self, x: SparseConvTensor) -> SparseConvTensor:
+    def forward(self, x: SparseConvTensor, add_input: Optional[SparseConvTensor] = None) -> SparseConvTensor:
         """
         we have:
         w(float) -- quant - dequant \
@@ -144,7 +144,7 @@ class SpConv(_SpConvNd, sconvmod.SparseConvolution):
         and the backend should be able to fuse the ops with `*` into a quantized SparseConvolution
         """
         weight_quant_dequant = self.get_weight()
-        result = self._conv_forward(self.training, x, weight_quant_dequant, self.bias)
+        result = self._conv_forward(self.training, x, weight_quant_dequant, self.bias, add_input=add_input)
         return result
 
     def _get_name(self):

@@ -1462,14 +1462,14 @@ def implicit_gemm(features: torch.Tensor,
                   output_scale: float = 1.0,
                   scale: Optional[torch.Tensor] = None,
                   output_add: Optional[torch.Tensor] = None,
-                  output_add_scale: float = 1.0,
+                  output_add_scale: float = 0.0,
                   output_dtype: Optional[torch.dtype] = None):
     stream = get_current_stream()
     bias_tv = tv.Tensor()
     scale_tv = tv.Tensor()
     output_add_tv = tv.Tensor()
     if output_add is not None:
-        assert features.dtype == torch.int8, "fused residual add only support int8"
+        assert features.dtype == torch.qint8, "fused residual add only support int8"
     if bias is not None:
         bias_tv = torch_tensor_to_tv(bias)
     if scale is not None:
@@ -1485,7 +1485,7 @@ def implicit_gemm(features: torch.Tensor,
         output_dtype = features.dtype
 
     if SPCONV_CPP_GEMM and CONV_CPP is not None:
-        alloc = TorchAllocator(features.device)
+        alloc = TorchAllocator(features.device, features.dtype == torch.qint8)
         features_tv = torch_tensor_to_tv(features)
         pair_fwd_tv = torch_tensor_to_tv(pair_fwd)
         pair_mask_fwd_splits_tv = [
@@ -1963,9 +1963,15 @@ def indice_maxpool_implicit_gemm(features: torch.Tensor,
         features = features.contiguous()
 
     out_channel = features.shape[-1]
-    out_features = torch.empty((num_activate_out, out_channel),
-                               dtype=features.dtype,
-                               device=features.device)
+    if features.is_quantized:
+        out_features = torch._empty_affine_quantized((num_activate_out, out_channel),
+                                scale=features.q_scale(),
+                                dtype=features.dtype,
+                                device=features.device)
+    else:
+        out_features = torch.empty((num_activate_out, out_channel),
+                                dtype=features.dtype,
+                                device=features.device)
     assert features.is_cuda
     stream = get_current_stream()
     out_features_tv = torch_tensor_to_tv(out_features)
@@ -2016,9 +2022,16 @@ def indice_avgpool_implicit_gemm(features: torch.Tensor,
         features = features.contiguous()
 
     out_channel = features.shape[-1]
-    out_features = torch.empty((num_activate_out, out_channel),
-                               dtype=features.dtype,
-                               device=features.device)
+    if features.is_quantized:
+        out_features = torch._empty_affine_quantized((num_activate_out, out_channel),
+                                scale=features.q_scale(),
+                                dtype=features.dtype,
+                                device=features.device)
+    else:
+        out_features = torch.empty((num_activate_out, out_channel),
+                                dtype=features.dtype,
+                                device=features.device)
+
     assert features.is_cuda
     stream = get_current_stream()
     out_features_tv = torch_tensor_to_tv(out_features)

@@ -66,14 +66,14 @@ class SparseMaxPool(SparseModule):
         if algo is None:
             # keep in mind that this algorithm is set for Inverse Sparse Conv
             # maxpool itself don't need mask.
-            if kv <= 32 and not CPU_ONLY_BUILD:
+            if kv <= 128 and not CPU_ONLY_BUILD:
                 if kv < 8:
                     algo = ConvAlgo.MaskImplicitGemm
                 else:
                     algo = ConvAlgo.MaskImplicitGemm
             else:
                 algo = ConvAlgo.Native
-        if kv > 32:
+        if kv > 128:
             assert algo == ConvAlgo.Native, "implicit gemm don't support kv >= 32 for now"
         if CPU_ONLY_BUILD:
             assert algo == ConvAlgo.Native, "cpu only build only support native algorithm"
@@ -96,7 +96,10 @@ class SparseMaxPool(SparseModule):
         return None 
 
 
-    def forward(self, input):
+    def forward(self, input: spconv.SparseConvTensor):
+        is_int8 = input.is_quantized
+        if is_int8:
+            assert self.algo == ConvAlgo.MaskImplicitGemm, "only ConvAlgo.MaskImplicitGemm support int8."
         assert isinstance(input, spconv.SparseConvTensor)
         features = input.features
         device = features.device
@@ -296,6 +299,10 @@ class SparseAvgPool(SparseModule):
 
     def forward(self, input):
         assert isinstance(input, spconv.SparseConvTensor)
+        is_int8 = input.is_quantized
+        if is_int8:
+            assert self.algo == ConvAlgo.MaskImplicitGemm, "only ConvAlgo.MaskImplicitGemm support int8."
+
         features = input.features
         device = features.device
         indices = input.indices
@@ -534,3 +541,8 @@ class SparseAvgPool3d(SparseAvgPool):
                              algo=algo,
                              record_voxel_count=record_voxel_count,
                              name=name)
+
+
+ALL_POOL_LAYERS = set([
+    SparseAvgPool3d, SparseAvgPool2d, SparseAvgPool1d, SparseMaxPool1d, SparseMaxPool2d, SparseMaxPool3d, SparseMaxPool4d, SparseAvgPool, SparseMaxPool
+])

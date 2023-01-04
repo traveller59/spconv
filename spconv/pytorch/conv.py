@@ -157,35 +157,10 @@ class SparseConvolutionBase:
         batch_size = input.batch_size
         bias_for_training = bias if training else None
         bias_for_infer = bias if not training else None
-        output_add_scale = 1.0
+        output_add_scale = 0.0
         if is_int8:
             if add_input is not None:
                 output_add_scale = add_input.q_scale()
-        # if self.enable_int8_test_mode:
-        #     assert not self.training, "must in eval mode"
-        #     assert self.algo == ConvAlgo.MaskImplicitGemm, "int8 inference only support MaskImplicitGemm"
-        #     assert bias_for_infer is not None, "conv-bn-relu must be fused"
-        #     assert self._int8_input_scale is not None 
-        #     if features.dtype != torch.int8:
-        #         # quantize
-        #         features = torch.clamp(torch.round(features / self._int8_input_scale), -128, 127).to(torch.int8)
-        #     output_scale = self._int8_output_scale
-        #     int8_out_scale = output_scale
-        #     if int8_out_scale is None:
-        #         int8_out_scale = 1
-        #     if add_input is not None:
-        #         assert add_input.int8_scale is not None, "only support int8 add"
-        #         output_add_scale = add_input.int8_scale
-            
-            # if self._int8_weight.numel() == 0:
-            #     with torch.no_grad():
-            #         assert ALL_WEIGHT_IS_KRSC
-            #         weight_scale = torch.abs(weight).view(self.out_channels, -1).max(1)[0]
-            #         num_1s = [1] * (self.ndim + 1)
-            #         self._int8_weight = (weight / weight_scale.view(self.out_channels, *num_1s) * 127).to(torch.int8)
-            #         if self._int8_weight_scale.numel() == 0:
-            #             self._int8_weight_scale = int8_out_scale / (self._int8_input_scale *  weight_scale)
-            #         self._int8_bias = bias_for_infer * int8_out_scale
         if training:
             msg =  "act don't support backward, only used in inference"
             assert self.act_type == tv.gemm.Activation.None_, msg
@@ -340,9 +315,9 @@ class SparseConvolutionBase:
                         algo,
                         input._timer,
                         bias_for_infer,
-                        self.act_alpha,
-                        self.act_beta,
-                        self.act_type)
+                        act_alpha,
+                        act_beta,
+                        act_type)
                 else:
                     if self.inverse:
                         out_features = Fsp.indice_inverse_conv(
@@ -354,9 +329,9 @@ class SparseConvolutionBase:
                             algo,
                             input._timer,
                             bias_for_infer,
-                            self.act_alpha,
-                            self.act_beta,
-                            self.act_type)
+                            act_alpha,
+                            act_beta,
+                            act_type)
                     else:
                         out_features = Fsp.indice_conv(
                             features,
@@ -367,10 +342,9 @@ class SparseConvolutionBase:
                             algo,
                             input._timer,
                             bias_for_infer,
-                            self.act_alpha,
-                            self.act_beta,
-                            self.act_type)
-
+                            act_type,
+                            act_beta,
+                            act_type)
             else:
                 datas = input.find_indice_pair(self.indice_key)
                 if datas is not None:
@@ -490,9 +464,9 @@ class SparseConvolutionBase:
                         num_activate_out, masks, training, self.subm,
                         input._timer, self.fp32_accum,
                         bias_cur,
-                        self.act_alpha,
-                        self.act_beta,
-                        self.act_type)
+                        act_alpha,
+                        act_beta,
+                        act_type)
                 else:
                     output_dtype = None 
                     if output_scale is None:
@@ -503,9 +477,9 @@ class SparseConvolutionBase:
                         num_activate_out, masks, training, self.subm,
                         input._timer, self.fp32_accum,
                         bias_cur,
-                        self.act_alpha,
-                        self.act_beta,
-                        self.act_type,
+                        act_alpha,
+                        act_beta,
+                        act_type,
                         # TODO do we really need output scale to scale bias in kernel?
                         1.0 if output_scale is None else output_scale, # output_scale
                         channel_scale, # scale
@@ -764,446 +738,6 @@ class SparseConvolution(SparseConvolutionBase, SparseModule):
             name=self.name, sparse_unique_name=self._sparse_unique_name, act_type=self.act_type,
             act_alpha=self.act_alpha, act_beta=self.act_beta)
 
-    # def _conv_forward(self, input: SparseConvTensor, weight: torch.Tensor, bias: Optional[torch.Tensor], add_input: Optional[SparseConvTensor] = None,
-    #         channel_scale: Optional[torch.Tensor] = None, output_scale: Optional[float] = None):
-    #     assert isinstance(input, SparseConvTensor)
-    #     is_int8 = input.is_quantized and weight.is_quantized
-    #     if is_int8:
-    #         assert output_scale is not None and channel_scale is not None, "int8 must be called in static quantized module"
-    #         assert bias is not None, "currently you must specify a bias"
-    #     assert input.features.shape[
-    #         1] == self.in_channels, "channel size mismatch"
-    #     features = input.features
-    #     device = features.device
-    #     indices = input.indices
-    #     spatial_shape = input.spatial_shape
-    #     batch_size = input.batch_size
-    #     bias_for_training = bias if self.training else None
-    #     bias_for_infer = bias if not self.training else None
-    #     output_add_scale = 1.0
-    #     if is_int8:
-    #         if add_input is not None:
-    #             output_add_scale = add_input.q_scale()
-    #     # if self.enable_int8_test_mode:
-    #     #     assert not self.training, "must in eval mode"
-    #     #     assert self.algo == ConvAlgo.MaskImplicitGemm, "int8 inference only support MaskImplicitGemm"
-    #     #     assert bias_for_infer is not None, "conv-bn-relu must be fused"
-    #     #     assert self._int8_input_scale is not None 
-    #     #     if features.dtype != torch.int8:
-    #     #         # quantize
-    #     #         features = torch.clamp(torch.round(features / self._int8_input_scale), -128, 127).to(torch.int8)
-    #     #     output_scale = self._int8_output_scale
-    #     #     int8_out_scale = output_scale
-    #     #     if int8_out_scale is None:
-    #     #         int8_out_scale = 1
-    #     #     if add_input is not None:
-    #     #         assert add_input.int8_scale is not None, "only support int8 add"
-    #     #         output_add_scale = add_input.int8_scale
-            
-    #         # if self._int8_weight.numel() == 0:
-    #         #     with torch.no_grad():
-    #         #         assert ALL_WEIGHT_IS_KRSC
-    #         #         weight_scale = torch.abs(weight).view(self.out_channels, -1).max(1)[0]
-    #         #         num_1s = [1] * (self.ndim + 1)
-    #         #         self._int8_weight = (weight / weight_scale.view(self.out_channels, *num_1s) * 127).to(torch.int8)
-    #         #         if self._int8_weight_scale.numel() == 0:
-    #         #             self._int8_weight_scale = int8_out_scale / (self._int8_input_scale *  weight_scale)
-    #         #         self._int8_bias = bias_for_infer * int8_out_scale
-    #     if self.training:
-    #         msg =  "act don't support backward, only used in inference"
-    #         assert self.act_type == tv.gemm.Activation.None_, msg
-        
-    #     if not self.subm:
-    #         if self.transposed:
-    #             out_spatial_shape = ops.get_deconv_output_size(
-    #                 spatial_shape, self.kernel_size, self.stride, self.padding,
-    #                 self.dilation, self.output_padding)
-    #         else:
-    #             out_spatial_shape = ops.get_conv_output_size(
-    #                 spatial_shape, self.kernel_size, self.stride, self.padding,
-    #                 self.dilation)
-    #     else:
-    #         out_spatial_shape = spatial_shape
-    #     # print(self._sparse_unique_name, spatial_shape, out_spatial_shape)
-    #     # input.update_grid(out_spatial_shape)
-    #     # t = time.time()
-    #     out_tensor = input.shadow_copy()
-    #     if input.benchmark:
-    #         if self.name is None:
-    #             raise ValueError(
-    #                 "you need to assign name to spmodules before benchmark (spconv.utils.bench.assign_name_to_spmod)"
-    #             )
-    #         if self.name not in input.benchmark_record:
-    #             input.benchmark_record[self.name] = {
-    #                 "type": "SparseConvolution",
-    #                 "indice_gen_time": [],
-    #                 "time": [],
-    #                 "num_points": [],
-    #                 "num_out_points": [],
-    #                 "params": {
-    #                     "kernel_size": self.kernel_size,
-    #                     "stride": self.stride,
-    #                     "padding": self.padding,
-    #                     "dilation": self.dilation,
-    #                     "output_padding": self.output_padding,
-    #                     "subm": self.subm,
-    #                     "transposed": self.transposed,
-    #                     "input_channels": self.in_channels,
-    #                     "out_channels": self.out_channels,
-    #                 }
-    #             }
-    #     if self.conv1x1 and not is_int8:
-    #         # in int8 test mode, we don't implement conv1x1 via mm.
-    #         if FILTER_HWIO:
-    #             features = torch.mm(
-    #                 input.features,
-    #                 weight.view(self.out_channels, self.in_channels).T)
-    #         else:
-    #             features = torch.mm(
-    #                 input.features,
-    #                 weight.view(self.in_channels, self.out_channels))
-
-    #         if bias is not None:
-    #             features += bias
-    #         out_tensor = out_tensor.replace_feature(features)
-    #         # padding may change spatial shape of conv 1x1.
-    #         out_tensor.spatial_shape = out_spatial_shape
-    #         return out_tensor
-    #     indice_dict = input.indice_dict.copy()
-    #     # only support contiguous tensor for now
-    #     if not features.is_contiguous():
-    #         features = features.contiguous()
-    #     algo = self.algo
-    #     if self.indice_key is not None:
-    #         datas = input.find_indice_pair(self.indice_key)
-    #         if datas is not None:
-    #             msg = "due to limitation of pytorch, you must provide same algo to layers share same indice key."
-    #             assert algo == datas.algo, msg
-    #             # algo = datas.algo
-    #     profile_ctx = nullcontext()
-    #     if input._timer is not None and self._sparse_unique_name:
-    #         profile_ctx = input._timer.namespace(self._sparse_unique_name)
-    #     with profile_ctx:
-    #         if algo == ConvAlgo.Native:
-    #             datas = input.find_indice_pair(self.indice_key)
-    #             if datas is not None:
-    #                 assert isinstance(datas, IndiceData)
-    #             if self.inverse:
-    #                 assert datas is not None and self.indice_key is not None
-    #                 assert datas.is_subm is False, "inverse conv can only be used with standard conv and pool ops."
-
-    #                 outids = datas.indices
-    #                 indice_pairs = datas.indice_pairs
-    #                 indice_pair_num = datas.indice_pair_num
-    #                 out_spatial_shape = datas.spatial_shape
-    #                 self._check_inverse_reuse_valid(input, spatial_shape,
-    #                                                  datas)
-    #             else:
-    #                 if self.indice_key is not None and datas is not None:
-    #                     outids = datas.out_indices
-    #                     indice_pairs = datas.indice_pairs
-    #                     indice_pair_num = datas.indice_pair_num
-    #                     assert self.subm, "only support reuse subm indices"
-    #                     self._check_subm_reuse_valid(input, spatial_shape,
-    #                                                  datas)
-    #                 else:
-    #                     if input.benchmark:
-    #                         torch.cuda.synchronize()
-    #                         t = time.time()
-    #                     try:
-    #                         outids, indice_pairs, indice_pair_num = ops.get_indice_pairs(
-    #                             indices, batch_size, spatial_shape, algo,
-    #                             self.kernel_size, self.stride, self.padding,
-    #                             self.dilation, self.output_padding, self.subm,
-    #                             self.transposed)
-    #                     except Exception as e:
-    #                         msg = "[Exception|native_pair]"
-    #                         msg += f"indices={indices.shape},bs={batch_size},ss={spatial_shape},"
-    #                         msg += f"algo={algo},ksize={self.kernel_size},stride={self.stride},"
-    #                         msg += f"padding={self.padding},dilation={self.dilation},subm={self.subm},"
-    #                         msg += f"transpose={self.transposed}"
-    #                         print(msg, file=sys.stderr)
-    #                         spconv_save_debug_data(indices)
-    #                         raise e
-    #                     if input.benchmark:
-    #                         torch.cuda.synchronize()
-    #                         interval = time.time() - t
-    #                         out_tensor.benchmark_record[
-    #                             self.name]["indice_gen_time"].append(interval)
-
-    #                     indice_data = IndiceData(outids,
-    #                                              indices,
-    #                                              indice_pairs,
-    #                                              indice_pair_num,
-    #                                              spatial_shape,
-    #                                              out_spatial_shape,
-    #                                              is_subm=self.subm,
-    #                                              algo=algo,
-    #                                              ksize=self.kernel_size,
-    #                                              stride=self.stride,
-    #                                              padding=self.padding,
-    #                                              dilation=self.dilation)
-    #                     if self.indice_key is not None:
-    #                         msg = f"your indice key {self.indice_key} already exists in this sparse tensor."
-    #                         assert self.indice_key not in indice_dict, msg
-    #                         indice_dict[self.indice_key] = indice_data
-    #             if input.benchmark:
-    #                 torch.cuda.synchronize()
-    #                 t = time.time()
-    #             indice_pairs_calc = indice_pairs
-    #             if indice_pairs.device != features.device:
-    #                 indice_pairs_calc = indice_pairs.to(features.device)
-    #             if self.subm:
-    #                 out_features = Fsp.indice_subm_conv(
-    #                     features,
-    #                     weight,
-    #                     indice_pairs_calc,
-    #                     indice_pair_num,
-    #                     outids.shape[0],
-    #                     algo,
-    #                     input._timer,
-    #                     bias_for_infer,
-    #                     self.act_alpha,
-    #                     self.act_beta,
-    #                     self.act_type)
-    #             else:
-    #                 if self.inverse:
-    #                     out_features = Fsp.indice_inverse_conv(
-    #                         features,
-    #                         weight,
-    #                         indice_pairs_calc,
-    #                         indice_pair_num,
-    #                         outids.shape[0],
-    #                         algo,
-    #                         input._timer,
-    #                         bias_for_infer,
-    #                         self.act_alpha,
-    #                         self.act_beta,
-    #                         self.act_type)
-    #                 else:
-    #                     out_features = Fsp.indice_conv(
-    #                         features,
-    #                         weight,
-    #                         indice_pairs_calc,
-    #                         indice_pair_num,
-    #                         outids.shape[0],
-    #                         algo,
-    #                         input._timer,
-    #                         bias_for_infer,
-    #                         self.act_alpha,
-    #                         self.act_beta,
-    #                         self.act_type)
-
-    #         else:
-    #             datas = input.find_indice_pair(self.indice_key)
-    #             if datas is not None:
-    #                 assert isinstance(datas, ImplicitGemmIndiceData)
-    #             if self.inverse:
-    #                 assert datas is not None and self.indice_key is not None
-    #                 assert datas.is_subm is False, "inverse conv can only be used with standard conv and pool ops."
-    #                 outids = datas.indices
-    #                 pair_fwd = datas.pair_bwd
-    #                 pair_bwd = datas.pair_fwd
-    #                 pair_mask_fwd_splits = datas.pair_mask_bwd_splits
-    #                 pair_mask_bwd_splits = datas.pair_mask_fwd_splits
-    #                 mask_argsort_fwd_splits = datas.mask_argsort_bwd_splits
-    #                 mask_argsort_bwd_splits = datas.mask_argsort_fwd_splits
-    #                 masks = datas.masks
-    #                 out_spatial_shape = datas.spatial_shape
-    #                 # assert datas.ksize == self.kernel_size, "inverse conv must have same kernel size as its couple conv"
-
-    #                 self._check_inverse_reuse_valid(input, spatial_shape,
-    #                                                  datas)
-    #             else:
-    #                 if self.indice_key is not None and datas is not None:
-    #                     outids = datas.out_indices
-    #                     pair_fwd = datas.pair_fwd
-    #                     pair_bwd = datas.pair_bwd
-    #                     pair_mask_fwd_splits = datas.pair_mask_fwd_splits
-    #                     pair_mask_bwd_splits = datas.pair_mask_bwd_splits
-    #                     mask_argsort_fwd_splits = datas.mask_argsort_fwd_splits
-    #                     mask_argsort_bwd_splits = datas.mask_argsort_bwd_splits
-    #                     masks = datas.masks
-    #                     assert self.subm, "only support reuse subm indices"
-    #                     self._check_subm_reuse_valid(input, spatial_shape,
-    #                                                  datas)
-    #                 else:
-    #                     if input.benchmark:
-    #                         torch.cuda.synchronize()
-    #                         t = time.time()
-    #                     with input._timer.namespace("gen_pairs"):
-    #                         # we need to gen bwd indices for regular conv
-    #                         # because it may be inversed.
-    #                         try:
-    #                             res = ops.get_indice_pairs_implicit_gemm(
-    #                                 indices,
-    #                                 batch_size,
-    #                                 spatial_shape,
-    #                                 algo,
-    #                                 ksize=self.kernel_size,
-    #                                 stride=self.stride,
-    #                                 padding=self.padding,
-    #                                 dilation=self.dilation,
-    #                                 out_padding=self.output_padding,
-    #                                 subm=self.subm,
-    #                                 transpose=self.transposed,
-    #                                 is_train=(not self.subm) or self.training,
-    #                                 alloc=input.thrust_allocator,
-    #                                 timer=input._timer)
-    #                         except Exception as e:
-    #                             msg = "[Exception|implicit_gemm_pair]"
-    #                             msg += f"indices={indices.shape},bs={batch_size},ss={spatial_shape},"
-    #                             msg += f"algo={algo},ksize={self.kernel_size},stride={self.stride},"
-    #                             msg += f"padding={self.padding},dilation={self.dilation},subm={self.subm},"
-    #                             msg += f"transpose={self.transposed}"
-    #                             print(msg, file=sys.stderr)
-    #                             spconv_save_debug_data(indices)
-    #                             raise e
-    #                     if input.benchmark:
-    #                         torch.cuda.synchronize()
-    #                         interval = time.time() - t
-    #                         out_tensor.benchmark_record[
-    #                             self.name]["indice_gen_time"].append(interval)
-    #                     outids = res[0]
-    #                     num_inds_per_loc = res[1]
-    #                     pair_fwd = res[2]
-    #                     pair_bwd = res[3]
-    #                     pair_mask_fwd_splits = res[4]
-    #                     pair_mask_bwd_splits = res[5]
-    #                     mask_argsort_fwd_splits = res[6]
-    #                     mask_argsort_bwd_splits = res[7]
-    #                     masks = res[8]
-    #                     if self.indice_key is not None:
-    #                         indice_data = ImplicitGemmIndiceData(
-    #                             outids,
-    #                             indices,
-    #                             pair_fwd,
-    #                             pair_bwd,
-    #                             pair_mask_fwd_splits=pair_mask_fwd_splits,
-    #                             pair_mask_bwd_splits=pair_mask_bwd_splits,
-    #                             mask_argsort_fwd_splits=mask_argsort_fwd_splits,
-    #                             mask_argsort_bwd_splits=mask_argsort_bwd_splits,
-    #                             masks=masks,
-    #                             is_subm=self.subm,
-    #                             spatial_shape=spatial_shape,
-    #                             out_spatial_shape=out_spatial_shape,
-    #                             algo=algo,
-    #                             ksize=self.kernel_size,
-    #                             stride=self.stride,
-    #                             padding=self.padding,
-    #                             dilation=self.dilation)
-    #                         msg = f"your indice key {self.indice_key} already exists in this sparse tensor."
-    #                         assert self.indice_key not in indice_dict, msg
-    #                         indice_dict[self.indice_key] = indice_data
-    #             if input.benchmark:
-    #                 torch.cuda.synchronize()
-    #                 t = time.time()
-    #             num_activate_out = outids.shape[0]
-    #             weight_cur = weight
-    #             bias_cur = bias_for_infer
-    #             # if self.enable_int8_test_mode:
-    #             #     assert features.dtype == torch.int8, "in int8 test mode, feature must be int8"
-    #             #     weight_cur = self._int8_weight
-    #             #     bias_cur = self._int8_bias
-    #             if self.training:
-    #                 out_features = Fsp.implicit_gemm(
-    #                     features, weight_cur, pair_fwd, pair_bwd,
-    #                     pair_mask_fwd_splits, pair_mask_bwd_splits,
-    #                     mask_argsort_fwd_splits, mask_argsort_bwd_splits,
-    #                     num_activate_out, masks, self.training, self.subm,
-    #                     input._timer, self.fp32_accum,
-    #                     bias_cur,
-    #                     self.act_alpha,
-    #                     self.act_beta,
-    #                     self.act_type)
-    #             else:
-    #                 output_dtype = None 
-    #                 if output_scale is None:
-    #                     output_dtype = weight.dtype
-    #                 out_features, _, _ = ops.implicit_gemm(
-    #                     features, weight_cur, pair_fwd, pair_mask_fwd_splits, 
-    #                     mask_argsort_fwd_splits, 
-    #                     num_activate_out, masks, self.training, self.subm,
-    #                     input._timer, self.fp32_accum,
-    #                     bias_cur,
-    #                     self.act_alpha,
-    #                     self.act_beta,
-    #                     self.act_type,
-    #                     # TODO do we really need output scale to scale bias in kernel?
-    #                     1.0 if output_scale is None else output_scale, # output_scale
-    #                     channel_scale, # scale
-    #                     output_add=add_input.features if add_input is not None else None,
-    #                     output_add_scale=output_add_scale,
-    #                     output_dtype=output_dtype)
-
-    #     if bias_for_training is not None:
-    #         out_features += bias_for_training
-    #     if input.benchmark:
-    #         torch.cuda.synchronize()
-    #         interval = time.time() - t
-    #         out_tensor.benchmark_record[self.name]["time"].append(interval)
-    #         out_tensor.benchmark_record[self.name]["num_points"].append(
-    #             features.shape[0])
-    #         out_tensor.benchmark_record[self.name]["num_out_points"].append(
-    #             out_features.shape[0])
-    #     if not self.subm and not self.inverse and self.record_voxel_count:
-    #         if hasattr(self, _MAX_NUM_VOXELS_DURING_TRAINING):
-    #             ops.maximum_value_int_(
-    #                 getattr(self, _MAX_NUM_VOXELS_DURING_TRAINING),
-    #                 outids.shape[0])
-    #     out_tensor = out_tensor.replace_feature(out_features)
-    #     out_tensor.indices = outids
-    #     out_tensor.indice_dict = indice_dict
-    #     out_tensor.spatial_shape = out_spatial_shape
-    #     if add_input is not None and not is_int8:
-    #         # in int8, we apply add + act in kernel.
-    #         out_tensor = out_tensor.replace_feature(_apply_act(out_tensor.features + add_input.features, self.act_type, self.act_alpha, self.act_beta))
-            
-    #     return out_tensor
-
-    # def _check_subm_reuse_valid(self, inp: SparseConvTensor,
-    #                             spatial_shape: List[int],
-    #                             datas: Union[ImplicitGemmIndiceData,
-    #                                          IndiceData]):
-    #     assert datas.is_subm, "only support reuse subm indices"
-    #     if self.kernel_size != datas.ksize:
-    #         raise ValueError(
-    #             f"subm with same indice_key must have same kernel"
-    #             f" size, expect {datas.ksize}, this layer {self.kernel_size}")
-    #     if self.dilation != datas.dilation:
-    #         raise ValueError(
-    #             f"subm with same indice_key must have same dilation"
-    #             f", expect {datas.dilation}, this layer {self.dilation}")
-    #     if inp.spatial_shape != datas.spatial_shape:
-    #         raise ValueError(
-    #             f"subm with same indice_key must have same spatial structure"
-    #             f", expect {datas.spatial_shape}, input {spatial_shape}")
-    #     if inp.indices.shape[0] != datas.indices.shape[0]:
-    #         raise ValueError(
-    #             f"subm with same indice_key must have same num of indices"
-    #             f", expect {datas.indices.shape[0]}, input {inp.indices.shape[0]}"
-    #         )
-
-    # def _check_inverse_reuse_valid(self, inp: SparseConvTensor,
-    #                             spatial_shape: List[int],
-    #                             datas: Union[ImplicitGemmIndiceData,
-    #                                          IndiceData]):
-    #     if self.kernel_size != datas.ksize:
-    #         raise ValueError(
-    #             f"Inverse with same indice_key must have same kernel"
-    #             f" size, expect {datas.ksize}, this layer {self.kernel_size}, "
-    #             "please check Inverse Convolution in docs/USAGE.md.")
-    #     if inp.spatial_shape != datas.out_spatial_shape:
-    #         raise ValueError(
-    #             f"Inverse with same indice_key must have same spatial structure (spatial shape)"
-    #             f", expect {datas.spatial_shape}, input {spatial_shape}, "
-    #             "please check Inverse Convolution in docs/USAGE.md.")
-    #     if inp.indices.shape[0] != datas.out_indices.shape[0]:
-    #         raise ValueError(
-    #             f"Inverse with same indice_key must have same num of indices"
-    #             f", expect {datas.indices.shape[0]}, input {inp.indices.shape[0]}, "
-    #             "please check Inverse Convolution in ."
-    #         )
 
 class SparseConv1d(SparseConvolution):
     def __init__(self,

@@ -60,3 +60,27 @@ class SpconvBnAddReLUNd(_FusedSparseModule):
             isinstance(relu, ReLU), 'Incorrect types for input modules{}{}{}' \
             .format(type(conv), type(bn), type(relu))
         super().__init__(conv, bn, relu)
+
+    def forward(self, input, add_input):
+        conv = self[0]
+        bn = self[1]
+        relu = self[2]
+        conv_res = conv(input)
+        conv_res = conv_res.replace_feature(bn(conv_res.features))
+        return conv_res.replace_feature(relu(conv_res.features + add_input.features))
+        
+class SpconvAddReLUNd(_FusedSparseModule):
+    r"""This is a sequential container which calls the Conv 3d, Batch Norm 3d, and ReLU modules.
+    During quantization this will be replaced with the corresponding fused module."""
+    def __init__(self, conv, relu):
+        assert isinstance(conv, SparseConvolution) and isinstance(relu, ReLU), \
+            'Incorrect types for input modules{}{}'.format(
+                type(conv), type(relu))
+        super().__init__(conv, relu)
+
+    def forward(self, input, add_input):
+        conv = self[0]
+        relu = self[1]
+        conv_res = conv(input)
+        return conv_res.replace_feature(relu(conv_res.features + add_input.features))
+        

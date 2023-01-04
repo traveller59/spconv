@@ -233,6 +233,9 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
         features_th = x_sp.values()
         return cls(features_th, indices_th, spatial_shape, batch_size)
 
+    def dequantize(self):
+        return self.replace_feature(self.features.dequantize())
+
     @property
     def spatial_size(self):
         return np.prod(self.spatial_shape)
@@ -263,6 +266,19 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
     # def sparity(self):
     #     return self.indices.shape[0] / np.prod(
     #         self.spatial_shape) / self.batch_size
+
+    def __add__(self, other: "SparseConvTensor"):
+        assert isinstance(other, SparseConvTensor)
+        return self.replace_feature(self.features + other.features)
+
+    def __iadd__(self, other: "SparseConvTensor"):
+        assert isinstance(other, SparseConvTensor)
+        self.features += other.features
+        return self
+        
+    def __radd__(self, other: "SparseConvTensor"):
+        assert isinstance(other, SparseConvTensor)
+        return other.replace_feature(self.features + other.features)
 
     def shadow_copy(self) -> "SparseConvTensor":
         """create a new spconv tensor with all member unchanged"""
