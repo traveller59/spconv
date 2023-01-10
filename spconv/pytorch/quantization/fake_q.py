@@ -1,22 +1,38 @@
 
+from typing import Any, Callable, Dict, List, Tuple, Union
+
 import torch
+from torch.ao.quantization import get_default_qat_qconfig, get_default_qconfig
 from torch.ao.quantization.fake_quantize import (
-    FixedQParamsFakeQuantize, FusedMovingAvgObsFakeQuantize, FakeQuantize,
-    default_fused_per_channel_wt_fake_quant, default_weight_fake_quant, default_per_channel_weight_fake_quant)
-from torch.ao.quantization.observer import (HistogramObserver,
-                                            MovingAverageMinMaxObserver,
-                                            default_weight_observer,
-                                            default_placeholder_observer,
-                                            default_per_channel_weight_observer)
-from torch.ao.quantization.qconfig import QConfig, QConfigAny, default_reuse_input_qconfig
-from torch.ao.quantization.qconfig_mapping import QConfigMapping, _FIXED_QPARAMS_OP_TO_OBSERVER
-from typing import Any, Callable, Dict, Tuple, Union, List
-from torch.ao.quantization import get_default_qconfig, get_default_qat_qconfig
+    FakeQuantize, FixedQParamsFakeQuantize, FusedMovingAvgObsFakeQuantize,
+    default_fused_per_channel_wt_fake_quant,
+    default_per_channel_weight_fake_quant, default_weight_fake_quant)
+from torch.ao.quantization.observer import (
+    MinMaxObserver,
+    HistogramObserver, MovingAverageMinMaxObserver,
+    default_per_channel_weight_observer, default_placeholder_observer,
+    default_weight_observer)
+from torch.ao.quantization.qconfig import (QConfig, QConfigAny,
+                                           default_reuse_input_qconfig)
+from torch.ao.quantization.qconfig_mapping import (
+    _FIXED_QPARAMS_OP_TO_OBSERVER, QConfigMapping)
+
 from spconv.pytorch.core import SparseConvTensor
+from spconv.pytorch.modules import PrintTensorMeta, PrintCurrentTime
 
 __all__ = ["get_default_spconv_trt_ptq_qconfig", "get_default_spconv_trt_qat_qconfig"]
 
 class SparseFusedMovingAvgObsFakeQuantize(FusedMovingAvgObsFakeQuantize):
+    def forward(self, input:Union[SparseConvTensor, torch.Tensor]):
+        if isinstance(input, SparseConvTensor):
+            # add lines to support spconv
+            x = input.features
+            res_features = super().forward(x)
+            return input.replace_feature(res_features)
+        else:
+            return super().forward(input)
+
+class SparseMovingAvgObsFakeQuantize(FakeQuantize):
     def forward(self, input:Union[SparseConvTensor, torch.Tensor]):
         if isinstance(input, SparseConvTensor):
             # add lines to support spconv
@@ -37,6 +53,16 @@ class SparseFusedMovingAvgObsFakeQuantize(FusedMovingAvgObsFakeQuantize):
 #             return super().forward(input)
 
 class SparseHistogramObserver(HistogramObserver):
+    def forward(self, input:Union[SparseConvTensor, torch.Tensor]):
+        if isinstance(input, SparseConvTensor):
+            # add lines to support spconv
+            x = input.features
+            res_features = super().forward(x)
+            return input.replace_feature(res_features)
+        else:
+            return super().forward(input)
+
+class SparseMinMaxObserver(MinMaxObserver):
     def forward(self, input:Union[SparseConvTensor, torch.Tensor]):
         if isinstance(input, SparseConvTensor):
             # add lines to support spconv
@@ -143,6 +169,8 @@ def get_default_spconv_qconfig_mapping(is_qat: bool, backend: str = "fbgemm", ve
                        .set_object_type(torch.nn.functional.leaky_relu, qconfig) \
                        .set_object_type(torch.nn.Tanh, qconfig) \
                        .set_object_type(torch.nn.functional.tanh, qconfig)
+    qconfig_mapping.set_object_type(PrintTensorMeta, None)
+    qconfig_mapping.set_object_type(PrintCurrentTime, None)
 
     return qconfig_mapping
 

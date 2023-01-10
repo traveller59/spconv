@@ -267,18 +267,30 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
     #     return self.indices.shape[0] / np.prod(
     #         self.spatial_shape) / self.batch_size
 
-    def __add__(self, other: "SparseConvTensor"):
-        assert isinstance(other, SparseConvTensor)
-        return self.replace_feature(self.features + other.features)
+    def __add__(self, other: Union["SparseConvTensor", torch.Tensor]):
+        assert isinstance(other, (SparseConvTensor, torch.Tensor))
+        if isinstance(other, torch.Tensor):
+            other_features = other
+        else:
+            other_features = other.features
+        return self.replace_feature(self.features + other_features)
 
-    def __iadd__(self, other: "SparseConvTensor"):
-        assert isinstance(other, SparseConvTensor)
-        self.features += other.features
+    def __iadd__(self, other: Union["SparseConvTensor", torch.Tensor]):
+        assert isinstance(other, (SparseConvTensor, torch.Tensor))
+        if isinstance(other, torch.Tensor):
+            other_features = other
+        else:
+            other_features = other.features
+        self.features += other_features
         return self
         
-    def __radd__(self, other: "SparseConvTensor"):
-        assert isinstance(other, SparseConvTensor)
-        return other.replace_feature(self.features + other.features)
+    def __radd__(self, other: Union["SparseConvTensor", torch.Tensor]):
+        assert isinstance(other, (SparseConvTensor, torch.Tensor))
+        if isinstance(other, torch.Tensor):
+            other_features = other
+        else:
+            other_features = other.features
+        return self.replace_feature(self.features + other_features)
 
     def shadow_copy(self) -> "SparseConvTensor":
         """create a new spconv tensor with all member unchanged"""

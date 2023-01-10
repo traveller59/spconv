@@ -1,12 +1,10 @@
-from collections import namedtuple
 import operator
-from typing import Dict, List, Tuple, Type, Union
+from collections import namedtuple
+from typing import Dict, List, Optional, Tuple, Type, Union
 
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.ao.quantization.fx.match_utils import (
-    MatchAllNode, )
 from torch.ao.nn.quantized.modules.utils import WeightedQuantizedModule
 from torch.ao.quantization.backend_config import (BackendConfig,
                                                   BackendPatternConfig,
@@ -15,9 +13,12 @@ from torch.ao.quantization.backend_config import (BackendConfig,
 from torch.ao.quantization.fx.custom_config import (ConvertCustomConfig,
                                                     FuseCustomConfig,
                                                     PrepareCustomConfig)
+from torch.ao.quantization.fx.match_utils import MatchAllNode
+import torch.nn.intrinsic as nni
+import torch.nn.intrinsic.qat as nniqat
+import torch.nn.quantized._reference as nnqr
 
 import spconv.pytorch.conv as sconvmod
-from spconv.pytorch.modules import SparseBatchNorm, SparseIdentity, SparseReLU, SparseSyncBatchNorm
 import spconv.pytorch.quantization.intrinsic as snni
 import spconv.pytorch.quantization.intrinsic.qat as snniqat
 import spconv.pytorch.quantization.intrinsic.quantized as snniq
@@ -25,10 +26,15 @@ import spconv.pytorch.quantization.quantized as snnq
 import spconv.pytorch.quantization.quantized.reference as snnqr
 from spconv.pytorch import ToDense
 from spconv.pytorch.constants import PYTORCH_VERSION
+from spconv.pytorch.modules import (PrintTensorMeta, SparseBatchNorm,
+                                    SparseIdentity, SparseReLU,
+                                    SparseSyncBatchNorm, PrintCurrentTime)
 from spconv.pytorch.pool import ALL_POOL_LAYERS
 from spconv.pytorch.quantization.fuse_mapping import (fuse_conv_bn,
-                                                      fuse_conv_bn_relu,
-                                                      fuse_conv_bn_add_relu)
+                                                      fuse_conv_bn_add_relu,
+                                                      fuse_conv_bn_relu)
+
+
 
 _SpConvMetadataDef = namedtuple("_ConvMetadata", [
     "root", "bn", "reference", "fused_conv_relu", "fused_conv_bn",
@@ -103,6 +109,31 @@ def _conv_res_relu_extra_inputs_getter(pattern):
     relu, add_pattern = pattern
     _, conv, extra_input = add_pattern
     return [extra_input]
+
+
+# def _get_custom_bn_linear_configs(dtype_configs: List[DTypeConfig]) -> List[BackendPatternConfig]:
+#     """
+#     Return all configs related to linear modules and ops.
+#     """
+#     observation_type = ObservationType.OUTPUT_USE_DIFFERENT_OBSERVER_AS_INPUT
+#     linear_configs: List[BackendPatternConfig] = []
+#     # (3) Linear + batchnorm
+#     # ------------------------
+#     # 3.1 linear bn fusion
+#     if PYTORCH_VERSION[:2] <= [1, 13]:
+#         linear_configs.append(
+#             BackendPatternConfig((nn.Linear, nn.BatchNorm1d))
+#                 .set_dtype_configs(dtype_configs)  # noqa: E131
+#                 .set_fuser_method(fuse_linear_bn)
+#                 .set_fused_module(nni.LinearBn1d))
+#     else:
+#         linear_configs.append(
+#             BackendPatternConfig((nn.Linear, nn.BatchNorm1d))
+#                 .set_dtype_configs(dtype_configs)  # noqa: E131
+#                 .set_fuser_method(fuse_linear_bn)
+#                 .set_fused_module(nni.LinearBn1d))
+
+#     return linear_configs
 
 
 def _get_bn_spconv_configs(bn_cls, dtype_configs):
@@ -526,6 +557,9 @@ def _get_share_observer_ops(dtype_configs):
 
     res.append(_to_dense_cfg)
     res.append(iden_cfg)
+    res.append(BackendPatternConfig(PrintCurrentTime).set_observation_type(
+        ObservationType.OUTPUT_SHARE_OBSERVER_WITH_INPUT).set_dtype_configs(
+            dtype_configs))
 
     for p in ALL_POOL_LAYERS:
         _pool_cfg = (BackendPatternConfig(p).set_observation_type(
@@ -551,31 +585,40 @@ conv_dtype_configs = [
     weighted_op_qint8_dtype_config,
 ]
 
-backend_config = get_tensorrt_backend_config() \
-    .set_backend_pattern_configs(_get_spconv_configs(conv_dtype_configs) + _get_share_observer_ops([non_weighted_op_qint8_dtype_config]))
 
 SPCONV_STATIC_LOWER_FUSED_MODULE_MAP: Dict[Type[nn.Module], Tuple[
     Type[nn.Module], Type[WeightedQuantizedModule]]] = {
         snni.SpconvReLUNd: (snnqr.SpConv, snniq.SparseConvReLU),
         snni.SpconvAddReLUNd: (snnqr.SpConv, snniq.SparseConvAddReLU),
+        # use simple cumm i8 conv to implement linear
+        nni.LinearReLU: (nnqr.Linear, snniq.LinearPerChannelWeightReLU),
+
     }
 
 SPCONV_STATIC_LOWER_MODULE_MAP: Dict[Type[nn.Module],
                                      Type[WeightedQuantizedModule]] = {
                                          snnqr.SpConv: snnq.SparseConv,
+                                         nnqr.Linear: snnq.LinearPerChannelWeight,
                                      }
 
 
-def get_spconv_backend_config():
+def get_spconv_backend_config(additional_bns: Optional[List[Type[nn.Module]]] = None):
+    backend_config = get_tensorrt_backend_config() \
+        .set_backend_pattern_configs(_get_spconv_configs(conv_dtype_configs) + _get_share_observer_ops([non_weighted_op_qint8_dtype_config]))
+    if additional_bns is not None:
+        for bn_type in additional_bns:
+            backend_config.set_backend_pattern_configs(_get_bn_spconv_configs(bn_type, conv_dtype_configs))
     return backend_config
 
 
-def get_spconv_prepare_custom_config():
+def get_spconv_prepare_custom_config(additional_bns: Optional[List[Type[nn.Module]]] = None):
     cfg = PrepareCustomConfig()
     cfg.non_traceable_module_classes = [*sconvmod.DEFAULT_SPARSE_CONV_TYPES]
     cfg.non_traceable_module_classes.extend(
-        [SparseReLU, SparseBatchNorm, SparseSyncBatchNorm])
-
+        [SparseReLU, SparseBatchNorm, SparseSyncBatchNorm, PrintTensorMeta,
+        PrintCurrentTime])
+    if additional_bns is not None:
+        cfg.non_traceable_module_classes.extend(additional_bns)
     return cfg
 
 

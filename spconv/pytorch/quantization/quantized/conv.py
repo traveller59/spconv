@@ -16,11 +16,29 @@ from spconv.pytorch.core import SparseConvTensor
 from torch._ops import ops
 from torch.nn.common_types import _size_1_t
 from torch.nn.modules.utils import _single, _pair, _triple
+from collections.abc import Iterable
 
 from torch.ao.nn.quantized.modules.utils import WeightedQuantizedModule, _quantize_weight
 import spconv.pytorch.quantization.intrinsic.qat.modules as snniqat 
 import spconv.pytorch.quantization.intrinsic.modules as snni 
 from spconv.pytorch.quantization.utils import fuse_spconv_bn_eval, fuse_spconv_bn_weights
+from cumm.tensorview.gemm import ConvParams, GemmAlgoDesp, GemmParams
+from cumm.tensorview.gemm import ConvAlgoDesp
+from cumm.tensorview.gemm import ConvOpType as ConvOpTypeCpp
+from spconv.constants import (NDIM_DONT_CARE, SPCONV_BWD_SPLITK,
+                              SPCONV_NVRTC_MODE, SPCONV_DEBUG_NVRTC_KERNELS)
+from cumm.conv.bases import ConvLayout, ConvLayoutType, ConvOpType
+from spconv import algocore
+from spconv.pytorch.cppcore import torch_tensor_to_tv, get_current_stream
+import torch.ao.nn.intrinsic as nni
+import torch.nn.intrinsic.qat as nniqat
+from torch.nn.utils.fusion import fuse_linear_bn_weights
+from torch.nn.utils.parametrize import type_before_parametrizations
+from spconv.algo import _get_nvrtc_params, SimpleConv
+from cumm.conv.main import gen_gemm_params as gen_conv_params, ConvFwdAndBwdInput, ConvBwdWeight, ConvIterAlgo, GemmAlgo
+from cumm.conv.bases import (NCHW, NHWC, ConvIterAlgo, ConvLayout,
+                             ConvLayoutType, ConvMode, ConvOpType)
+from cumm.gemm.algospec.core import TensorOp
 
 class _SparseConv(SparseConvolutionBase, WeightedQuantizedModule):
     _FLOAT_MODULE = SparseConvolution
@@ -357,5 +375,321 @@ class SparseConv(_SparseConv):
               utilities or provided by the user
         """
         return _SparseConv.from_float(cls, mod)
+
+
+class LinearPerChannelWeight(WeightedQuantizedModule):
+    r"""
+    A quantized linear module with quantized tensor as inputs and outputs.
+    We adopt the same interface as `torch.nn.Linear`, please see
+    https://pytorch.org/docs/stable/nn.html#torch.nn.Linear for documentation.
+
+    This module use conv int8 in cumm to provide qcuda int8 debug.
+
+    Similar to :class:`~torch.nn.Linear`, attributes will be randomly
+    initialized at module creation time and will be overwritten later
+
+    Attributes:
+        weight (Tensor): the non-learnable quantized weights of the module of
+                         shape :math:`(\text{out\_features}, \text{in\_features})`.
+        bias (Tensor): the non-learnable bias of the module of shape :math:`(\text{out\_features})`.
+                If :attr:`bias` is ``True``, the values are initialized to zero.
+        scale: `scale` parameter of output Quantized Tensor, type: double
+        zero_point: `zero_point` parameter for output Quantized Tensor, type: long
+
+    Examples::
+
+        >>> # xdoctest: +REQUIRES(env:TORCH_DOCTEST_QENGINE)
+        >>> m = nn.quantized.Linear(20, 30)
+        >>> input = torch.randn(128, 20)
+        >>> # xdoctest: +SKIP
+        >>> input = torch.quantize_per_tensor(input, 1.0, 0, torch.quint8)
+        >>> output = m(input)
+        >>> print(output.size())
+        torch.Size([128, 30])
+    """
+    _version = 3
+    _FLOAT_MODULE = (nn.Linear, nn.modules.linear.NonDynamicallyQuantizableLinear)
+    CUMM_CONV_PARAMS =  [ *gen_conv_params(ConvFwdAndBwdInput, (64, 64, 32), (32, 32, 32),
+                    2,
+                    ConvIterAlgo.Optimized,
+                    2,
+                    ["s8,s8,s8,s32,f32"],
+                    NHWC,
+                    NHWC,
+                    NHWC,
+                    GemmAlgo.Turing,
+                    TensorOp((16, 8, 16)),
+                    access_per_vector=1,
+                    is_nvrtc=True,
+                    int8_inference=True,
+                    dynamic_mask=False),
+    *gen_conv_params(ConvFwdAndBwdInput, (64, 64, 32), (32, 32, 32),
+                    2,
+                    ConvIterAlgo.Optimized,
+                    2,
+                    ["s8,s8,s8,s32,f32"],
+                    NHWC,
+                    NHWC,
+                    NHWC,
+                    GemmAlgo.Turing,
+                    TensorOp((16, 8, 16)),
+                    access_per_vector=0,
+                    is_nvrtc=True,
+                    int8_inference=True,
+                    dynamic_mask=False),
+    ]
+
+    def __init__(self, in_features, out_features, bias_=True,
+                 dtype=torch.qint8):
+        super().__init__()
+        # We don't muck around with buffers or attributes or anything here
+        # to keep the module simple. *everything* is simply a Python attribute.
+        # Serialization logic is explicitly handled in the below serialization and
+        # deserialization modules
+        self.in_features = in_features
+        self.out_features = out_features
+        bias = None
+        if bias_:
+            bias = torch.zeros(out_features, dtype=torch.float)
+
+        if dtype == torch.qint8:
+            qweight = torch._empty_affine_quantized(
+                [out_features, in_features], scale=1, zero_point=0, dtype=torch.qint8)
+        elif dtype == torch.float16:
+            qweight = torch.zeros([out_features, in_features], dtype=torch.float)
+        else:
+            raise RuntimeError('Unsupported dtype specified for quantized Linear!')
+        self._weight: torch.Tensor = qweight 
+        self._bias: Optional[torch.Tensor] = bias
+        self.scale = 1.0
+        self.zero_point = 0
+        self._nvrtc_params = None
+        # this standard int8 conv operators is used for only quantization debug (to implement quantized Linear/Conv for qcuda backend)
+
+
+
+    def _get_name(self):
+        return 'QuantizedLinearPerChannelWeight'
+
+    def extra_repr(self):
+        return 'in_features={}, out_features={}, scale={}, zero_point={}, qscheme={}'.format(
+            self.in_features, self.out_features, self.scale, self.zero_point, self.weight().qscheme()
+        )
+
+    @staticmethod
+    def _linear_fwd(x: torch.Tensor, weight: torch.Tensor, bias: Optional[torch.Tensor], scale: float, act: tv.gemm.Activation, nvrtc_params):
+        is_ref = True 
+        inp_scale = x.q_scale()
+        w_scales = weight.q_per_channel_scales().to(torch.float32)
+        out_scale = scale 
+        channel_scale = (inp_scale * w_scales) / out_scale
+        channel_k = weight.size(0)
+        channel_c = weight.size(-1)
+        if bias is not None:
+            bias = bias / out_scale
+        else:
+            bias = torch.zeros([channel_k], dtype=torch.float32, device=x.device)
+        ldi = x.size(-1)
+        ldw = weight.size(-1)
+        ldo = weight.size(0)
+        params = ConvParams(2, ConvOpTypeCpp(ConvOpType.kForward.value))
+        assert len(LinearPerChannelWeight.CUMM_CONV_PARAMS) == 2
+        algo_desp_fast = algocore.get_conv_algo_desp_from_param(LinearPerChannelWeight.CUMM_CONV_PARAMS[0])
+        algo_desp_generic = algocore.get_conv_algo_desp_from_param(LinearPerChannelWeight.CUMM_CONV_PARAMS[1])
+        algo_desp = algo_desp_fast
+        if not algo_desp_fast.supported_ldx_conv(ldi, ldw, ldo):
+            algo_desp = algo_desp_generic
+        # if not algo_desp.supported_ldx_conv(ldi, ldw, ldo):
+        #     breakpoint()
+
+        if is_ref:
+            x_detach = torch.zeros(size=x.size(), dtype=torch.int8, device=x.device)
+            weight_detach = torch.zeros(size=weight.size(), dtype=torch.int8, device=x.device)
+            torch_tensor_to_tv(x_detach).copy_(torch_tensor_to_tv(x))
+            torch_tensor_to_tv(weight_detach).copy_(torch_tensor_to_tv(weight))
+            # o_tmp = torch.from_numpy(x_detach.to(torch.int32).cpu().numpy() @ weight_detach.to(torch.int32).cpu().numpy().T).to(x.device)
+
+            o_tmp = x_detach.to(torch.float32) @ weight_detach.to(torch.float32).T
+            o_tmp = o_tmp.to(torch.float32) * channel_scale + bias
+            if act == tv.gemm.Activation.ReLU:
+                o_tmp = torch.maximum(o_tmp, torch.tensor(0, dtype=o_tmp.dtype, device=x.device))
+            o_tmp = torch.clip(torch.round(o_tmp), -128, 127).to(torch.int8)
+            output = torch._empty_affine_quantized(o_tmp.shape, scale=scale, zero_point=0, dtype=x.dtype, device=x.device)
+            torch_tensor_to_tv(output).copy_(torch_tensor_to_tv(o_tmp))
+            return output, None
+        else:
+            assert algo_desp.supported_ldx_conv(ldi, ldw, ldo)
+
+            out_shape = [x.size(0),weight.size(0) ]
+            output = torch._empty_affine_quantized(out_shape, scale=scale, zero_point=0, dtype=x.dtype, device=x.device)
+            params.conv_algo_desp = algo_desp
+            params.input = torch_tensor_to_tv(x).view([x.size(0), 1, 1, channel_c])
+            params.verbose = False
+            params.weight = torch_tensor_to_tv(weight).view([channel_k, 1, 1, channel_c])
+            params.output = torch_tensor_to_tv(output).view([x.size(0), 1, 1, channel_k])
+            params.split_k_slices = 1
+            params.alpha = 1.0
+            params.beta = 0.0
+            params.act_alpha = 1.0
+            params.act_beta = 0.0
+            params.act_type = act
+            params.padding = [0, 0]
+            params.stride = [1, 1]
+            params.dilation = [1, 1]
+            params.stream = get_current_stream()
+            if nvrtc_params is None:
+                mod, ker = SimpleConv._compile_nvrtc_module(algo_desp)
+                nvrtc_params = _get_nvrtc_params(mod, ker, "conv_kernel")
+            params.bias = torch_tensor_to_tv(bias)
+            params.scale = torch_tensor_to_tv(channel_scale)
+            params.nvrtc_params = nvrtc_params
+            tv.gemm.run_nvrtc_conv_kernel(params)
+        return output, nvrtc_params
+
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out, nvrtc_params = self._linear_fwd(x, self.weight(), self.bias(), self.scale, tv.gemm.Activation.None_, self._nvrtc_params)
+        if self._nvrtc_params is None:
+            self._nvrtc_params = nvrtc_params
+        return out
+
+    # ===== Serialization methods =====
+    # The special consideration here is that we have to unpack the weights into their
+    # regular QTensor form for serialization. Packed weights should not live
+    # outside the process in which they were created, rather they should be derived
+    # from the QTensor weight.
+    #
+    # Version 1
+    #   self
+    #   |--- scale : float
+    #   |--- zero_point : int
+    #   |--- weight : Tensor
+    #   |--- bias : Tensor
+    #
+    # Version 2
+    #   self
+    #   |--- scale : float
+    #   |--- zero_point : int
+    #   |--- _packed_params : Module
+    #        |--- weight : Tensor
+    #        |--- bias : Tensor
+    #
+    # Version 3
+    #   self
+    #   |--- scale : float
+    #   |--- zero_point : int
+    #   |--- _packed_params : Module
+    #        |--- _packed_params : (Tensor, Tensor) representing weight, bias
+    #                              of LinearPackedParams C++ struct
+    #
+    def _save_to_state_dict(self, destination, prefix, keep_vars):
+        super()._save_to_state_dict(destination, prefix, keep_vars)
+        destination[prefix + 'scale'] = torch.tensor(self.scale)
+        destination[prefix + 'zero_point'] = torch.tensor(self.zero_point)
+        (w, b) = self._weight_bias()
+        destination[prefix + 'weight'] = w
+        destination[prefix + 'bias'] = b
+
+    # ===== Deserialization methods =====
+    # Counterpart to the serialization methods, we must pack the serialized QTensor
+    # weight into its packed format for use by the FBGEMM ops.
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+                              missing_keys, unexpected_keys, error_msgs):
+        self.scale = float(state_dict[prefix + 'scale'])
+        state_dict.pop(prefix + 'scale')
+
+        self.zero_point = int(state_dict[prefix + 'zero_point'])
+        state_dict.pop(prefix + 'zero_point')
+
+        version = local_metadata.get('version', None)
+
+        # if version is None or version == 1:
+        #     # We moved the parameters into a LinearPackedParameters submodule
+        #     weight = state_dict.pop(prefix + 'weight')
+        #     bias = state_dict.pop(prefix + 'bias')
+        #     state_dict.update({prefix + '_packed_params.weight': weight,
+        #                        prefix + '_packed_params.bias': bias})
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, False,
+            missing_keys, unexpected_keys, error_msgs)
+
+    # Function rather than property to make sure that JIT serialization doesn't
+    # register this as an attribute
+    def _weight_bias(self):
+        return (self._weight, self._bias)
+
+    def weight(self):
+        return self._weight_bias()[0]
+
+    def bias(self):
+        return self._weight_bias()[1]
+
+    def set_weight_bias(self, w: torch.Tensor, b: Optional[torch.Tensor]) -> None:
+        self._weight = w 
+        self._bias = b
+        # self._packed_params.set_weight_bias(w, b)
+
+    @classmethod
+    def from_float(cls, mod):
+        r"""Create a quantized module from an observed float module
+
+        Args:
+            mod (Module): a float module, either produced by torch.ao.quantization
+                          utilities or provided by the user
+        """
+        if hasattr(mod, 'weight_fake_quant'):
+            if type_before_parametrizations(mod) == nniqat.LinearBn1d:
+                mod.weight, mod.bias = fuse_linear_bn_weights(
+                    mod.weight, mod.bias, mod.bn.running_mean, mod.bn.running_var,
+                    mod.bn.eps, mod.bn.weight, mod.bn.bias)
+            weight_post_process = mod.weight_fake_quant
+            activation_post_process = mod.activation_post_process
+        else:
+            # This function does not participate in JIT, so it is OK to ignore
+            # the type mismatch in assignment. Also, mypy has an issue with
+            # iterables not being implemented, so we are ignoring those too.
+            if not isinstance(cls._FLOAT_MODULE, Iterable):
+                cls._FLOAT_MODULE = [cls._FLOAT_MODULE]  # type: ignore[assignment]
+            supported_modules = ', '.join([float_mod.__name__ for float_mod in cls._FLOAT_MODULE])  # type: ignore[attr-defined]
+            error_msg = 'nnq.{}.from_float only works for {}, but got: {}'.format(cls.__name__, supported_modules, type(mod))
+            assert type_before_parametrizations(mod) in cls._FLOAT_MODULE, error_msg.format()  # type: ignore[attr-defined]
+            assert hasattr(mod, 'qconfig'), 'Input float module must have qconfig defined'
+            activation_post_process = mod.activation_post_process
+            if type_before_parametrizations(mod) == nni.LinearReLU:
+                mod = mod[0]
+            weight_post_process = mod.qconfig.weight()
+        weight_post_process(mod.weight)
+        dtype = weight_post_process.dtype
+        act_scale, act_zp = activation_post_process.calculate_qparams()
+        assert dtype == torch.qint8, 'Weight observer must have dtype torch.qint8'
+        qweight = _quantize_weight(mod.weight.float(), weight_post_process)
+        qlinear = cls(mod.in_features,
+                      mod.out_features,
+                      dtype=dtype)
+        qlinear.set_weight_bias(qweight, mod.bias)
+        qlinear.scale = float(act_scale)
+        qlinear.zero_point = int(act_zp)
+        return qlinear
+
+    @classmethod
+    def from_reference(cls, ref_qlinear, output_scale, output_zero_point):
+        r"""Create a (fbgemm/qnnpack) quantized module from a reference quantized module
+
+        Args:
+            ref_qlinear (Module): a reference quantized linear module, either produced by torch.ao.quantization
+                          utilities or provided by the user
+            output_scale (float): scale for output Tensor
+            output_zero_point (int): zero point for output Tensor
+        """
+        qlinear = cls(
+            ref_qlinear.in_features,
+            ref_qlinear.out_features)
+        qweight = ref_qlinear.get_quantized_weight()
+        qlinear.set_weight_bias(qweight, ref_qlinear.bias)
+
+        qlinear.scale = float(output_scale)
+        qlinear.zero_point = int(output_zero_point)
+        return qlinear
 
 

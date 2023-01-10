@@ -15,6 +15,7 @@
 import sys
 import time
 from collections import OrderedDict
+from typing import Union
 
 import torch
 from torch import nn
@@ -182,3 +183,24 @@ class SparseIdentity(nn.Identity):
         if isinstance(input, spconv.SparseConvTensor):
             return input.replace_feature(super().forward(input.features))
         return super().forward(input)
+
+class PrintTensorMeta(nn.Module):
+    def forward(self, x: Union[spconv.SparseConvTensor, torch.Tensor]):
+        if isinstance(x, torch.Tensor):
+            print(x.min(), x.max(), x.mean())
+        elif isinstance(x, spconv.SparseConvTensor):
+            ft = x.features 
+            print(ft.min(), ft.max(), ft.mean())
+        return x
+
+class PrintCurrentTime(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.first_time = time.time()
+
+    def forward(self, x, msg="", reset: bool = False):
+        if reset:
+            self.first_time = time.time()
+        torch.cuda.synchronize()
+        print(msg, time.time() - self.first_time)
+        return x

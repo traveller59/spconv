@@ -269,7 +269,8 @@ class SimpleGemm:
     def device_synchronize(self):
         return GemmMainUnitTest.device_synchronize()
 
-    def _compile_nvrtc_module(self, desp: GemmAlgoDesp):
+    @staticmethod
+    def _compile_nvrtc_module(desp: GemmAlgoDesp):
         params = algocore.get_gemm_param_from_desp(desp)
         kernel = gen_gemm_kernels(params, SPCONV_NVRTC_MODE)
         kernel.namespace = "spconv"
@@ -808,7 +809,8 @@ class SimpleConv:
         return desp.query_conv_workspace_size(mnk[0], mnk[1], mnk[2], splitk,
                                               kv)
 
-    def _compile_nvrtc_module(self, desp: ConvAlgoDesp):
+    @staticmethod
+    def _compile_nvrtc_module(desp: ConvAlgoDesp):
         params = algocore.get_conv_param_from_desp(desp)
         kernel = gen_conv_kernels(params, SPCONV_NVRTC_MODE)
         kernel.namespace = "spconv"
@@ -824,9 +826,8 @@ class SimpleConv:
             cudadevrt = str(cudadevrt_p)
         mod = CummNVRTCModule([kernel],
                               cudadevrt_path=cudadevrt,
-                              verbose=True,
-                              custom_names=custom_names,
-                              verbose_path="/home/yy/Projects/spconv-release/spconv/build/dev_nvrtc_int8")
+                              verbose=False,
+                              custom_names=custom_names)
         mod.load()
         return mod, kernel
 
@@ -870,7 +871,7 @@ class SimpleConv:
         inp = inp.clone()
         weight = weight.clone()
         output = output.clone()
-        print(len(avail), inp.dtype, weight.dtype, output.dtype, bias.dtype, scale.dtype, bias.empty(), scale.empty())
+        # print(len(avail), inp.dtype, weight.dtype, output.dtype, bias.dtype, scale.dtype, bias.empty(), scale.empty())
         channel_k = output.dim(1)
         channel_c = inp.dim(1)
         weight = weight.view([channel_k, -1, channel_c])

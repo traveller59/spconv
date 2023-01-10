@@ -1,5 +1,6 @@
 import platform
 from pathlib import Path
+from typing import Union
 
 import numpy as np
 import torch

@@ -16,7 +16,10 @@ from .backend_cfg import (get_spconv_backend_config,
                           get_spconv_prepare_custom_config,
                           get_spconv_convert_custom_config)
 from .fake_q import (get_default_spconv_trt_ptq_qconfig,
-                     get_default_spconv_trt_qat_qconfig)
+                     get_default_spconv_trt_qat_qconfig,
+                     get_default_spconv_qconfig_mapping)
 from .qmapping import (get_spconv_fmod_to_qat_mapping,
                        get_spconv_qat_to_static_mapping)
 from .core import quantize_per_tensor
+
+from .graph import remove_conv_add_dq, transform_qdq

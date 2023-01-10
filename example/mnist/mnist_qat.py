@@ -250,8 +250,8 @@ class NetV2(nn.Module):
         )
         self.fc1 = nn.Linear(14 * 14 * 64, 128)
         self.fc2 = nn.Linear(128, 10)
-        self.dropout1 = nn.Dropout2d(0.25)
-        self.dropout2 = nn.Dropout2d(0.5)
+        # self.dropout1 = nn.Dropout2d(0.25)
+        # self.dropout2 = nn.Dropout2d(0.5)
         self.quant = QuantStub()
         self.dequant = DeQuantStub()
     
@@ -263,10 +263,10 @@ class NetV2(nn.Module):
         # create SparseConvTensor manually: see SparseConvTensor.from_dense
         x = self.net(x_sp)
         x = torch.flatten(x, 1)
-        x = self.dropout1(x)
+        # x = self.dropout1(x)
         x = self.fc1(x)
         x = F.relu(x)
-        x = self.dropout2(x)
+        # x = self.dropout2(x)
         x = self.fc2(x)
         x = self.dequant(x)
         output = F.log_softmax(x, dim=1)
@@ -474,22 +474,6 @@ def calibrate(args, model: torch.nn.Module, data_loader, device):
             else:
                 output = model(image)
 
-def transform_qdq(m: torch.fx.GraphModule) -> torch.fx.GraphModule:
-    """torch.quantize_per_tensor don't support SparseConvTensor, so we
-    use a custom one by fx transform.
-    """
-    for node in m.graph.nodes:
-        # Checks if we're calling a function (i.e:
-        # torch.add)
-        if node.op == 'call_function':
-            # The target attribute is the function
-            # that call_function calls.
-            if node.target == torch.quantize_per_tensor:
-                node.target = quantize_per_tensor
-    m.graph.lint() # Does some checks to make sure the
-                 # Graph is well-formed.
-    m.recompile()
-    return m
 
 
 def is_dequantize_node(node):
@@ -521,6 +505,23 @@ def remove_conv_add_dq(model: torch.fx.graph_module.GraphModule):
     model.graph.lint() # Does some checks to make sure the
                  # Graph is well-formed.
     return model
+    
+def transform_qdq(m: torch.fx.GraphModule) -> torch.fx.GraphModule:
+    """torch.quantize_per_tensor don't support SparseConvTensor, so we
+    use a custom one by fx transform.
+    """
+    for node in m.graph.nodes:
+        # Checks if we're calling a function (i.e:
+        # torch.add)
+        if node.op == 'call_function':
+            # The target attribute is the function
+            # that call_function calls.
+            if node.target == torch.quantize_per_tensor:
+                node.target = quantize_per_tensor
+    m.graph.lint() # Does some checks to make sure the
+                 # Graph is well-formed.
+    m.recompile()
+    return m
 
 def main():
     # Training settings
@@ -561,7 +562,7 @@ def main():
                         help='random seed (default: 1)')
     parser.add_argument('--sparse',
                         action='store_true',
-                        default=True,
+                        default=False,
                         help='use sparse conv network instead of dense')
     parser.add_argument(
         '--log-interval',
@@ -588,7 +589,7 @@ def main():
     qdevice = torch.device("cuda" if use_cuda and args.sparse else "cpu")
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
     if args.sparse:
-        model = ResidualNetPTQ().to(device)
+        model = NetV2().to(device)
     else:
         model = NetDense().to(device)
 
@@ -647,7 +648,7 @@ def main():
 
     # print(prepared_model)
     # calibrate: run model with some inputs
-    # calibrate(args, prepared_model, test_loader, qdevice)
+    calibrate(args, prepared_model, test_loader, qdevice)
     # convert (ptq): replace intrinsic blocks with quantized modules
     converted_model = qfx.convert_fx(prepared_model, qconfig_mapping=qconfig_mapping, backend_config=backend_cfg)
     converted_model = transform_qdq(converted_model)

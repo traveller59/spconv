@@ -12,4 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .conv import SparseConv
+from .conv import SparseConv, LinearPerChannelWeight
