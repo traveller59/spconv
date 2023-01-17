@@ -273,7 +273,10 @@ class SparseConvTester:
             if self.check_int8_infer:
                 rescaled = output_ref.astype(self.dtype_comp) * self.scales.astype(self.dtype_comp)
                 rescaled += self.bias.astype(self.dtype_comp)
-                rescaled += self.output_add[self.out_order].astype(self.dtype_comp) * self.output_add_scale
+                if self.subm:
+                    rescaled += self.output_add.astype(self.dtype_comp) * self.output_add_scale
+                else:
+                    rescaled += self.output_add[self.out_order].astype(self.dtype_comp) * self.output_add_scale
                 if self.check_act:
                     rescaled = np.maximum(rescaled, 0)
                 if self.out_dtype == np.int8:
@@ -1020,8 +1023,8 @@ def _test_native_conv_cuda(subm: bool):
 
 def test_all_algo_unit():
     # for i in range(5):
-    # _test_impgemm_conv_cuda(True)
-    _test_impgemm_conv_cuda(False)
+    _test_impgemm_conv_cuda(True)
+    # _test_impgemm_conv_cuda(False)
     # _test_native_conv_cuda(True)
     # _test_native_conv_cuda(False)
 

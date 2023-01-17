@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, List, Optional, Tuple, Union, Dict
+from typing import Any, List, Optional, Tuple, TypeVar, Union, Dict
 
 import numpy as np
 import torch
@@ -181,6 +181,10 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
             self.thrust_allocator = ThrustSortAllocator(features.device)
         self._timer = CUDAKernelTimer(enable_timer)
         self.force_algo = force_algo
+        self.int8_scale: Optional[np.ndarray] = None
+
+    def __repr__(self):
+        return f"SparseConvTensor[shape={self._features.shape}]"
 
     @property
     def is_quantized(self):
@@ -204,6 +208,7 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
         new_spt.thrust_allocator = self.thrust_allocator
         new_spt._timer = self._timer
         new_spt.force_algo = self.force_algo
+        new_spt.int8_scale = self.int8_scale
 
         return new_spt
 
@@ -302,6 +307,7 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
         tensor.thrust_allocator = self.thrust_allocator
         tensor._timer = self._timer
         tensor.force_algo = self.force_algo
+        tensor.int8_scale = self.int8_scale
         return tensor
 
 def expand_nd(ndim: int, val: Union[int, List[int], Tuple[int, ...], np.ndarray]) -> List[int]:

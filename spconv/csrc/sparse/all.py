@@ -922,6 +922,8 @@ class SpconvOps(pccm.Class):
                  pyanno="cumm.tensorview.Tensor = Tensor()")
         code.arg("stream", "std::uintptr_t", "0", pyanno="int")
         code.arg("mask_count", "int", "1", pyanno="int")
+        code.arg("do_sort", "bool", "true")
+
         code.add_dependency(CustomThrustLib, TensorViewKernel)
         code.add_param_class("cudakers", self.cuda_common_kernel)
         if not use_allocator:
@@ -935,6 +937,9 @@ class SpconvOps(pccm.Class):
         }}
         tv::cuda::Launch launcher(data.dim(0), stream_cu);
         launcher(cudakers::arange_kernel<int32_t>, indices.data_ptr<int32_t>(), indices.dim(0));
+        if (!do_sort){{
+            return indices;
+        }}
         // auto timer = tv::CUDATimer();
         """)
         # nested tv::dispatch may cause compiler bug in msvc.
@@ -1645,6 +1650,7 @@ class SpconvOps(pccm.Class):
         code.arg("preallocated", f"std::unordered_map<std::string, tv::Tensor>", 
             "std::unordered_map<std::string, tv::Tensor>{}", 
             "Dict[str, cumm.tensorview.Tensor] = {}")
+        code.arg("do_sort", f"bool", "true")
 
         if CUMM_CPU_ONLY_BUILD:
             code.raw(f"""
@@ -1788,7 +1794,7 @@ class SpconvOps(pccm.Class):
             auto mask_argsort = allocator.empty({pccm.literal(AllocKeys.MaskArgSort)}, 
                 {{mask_split_count, num_act_in}}, tv::int32, 0, stream_int);
             for (int j = 0; j < mask_split_count; ++j){{
-                sort_1d_by_key_allocator_v2(pair_mask[j], thrustalloc, mask_argsort[j], stream_int, mask_int_count);
+                sort_1d_by_key_allocator_v2(pair_mask[j], thrustalloc, mask_argsort[j], stream_int, mask_int_count, do_sort);
             }}
         """)
         with code.else_():
@@ -1952,6 +1958,7 @@ Your Conv Params: )" << "\\n";
                 tv::CUDAKernelTimerGuard timer_guard("gen_conv_inds_sort", 
                     timer, reinterpret_cast<cudaStream_t>(stream_int));
                 if (is_mask_split){{
+                    TV_ASSERT_RT_ERR(do_sort, "not implemented for now");
                     for (int j = 0; j < mask_split_count; ++j){{
                         auto mask_tensor_sub = mask_tensor.slice_first_axis(j, j + 1);
                         if (!is_train){{
@@ -1967,12 +1974,12 @@ Your Conv Params: )" << "\\n";
                 }}else{{
                     if (!is_train){{
                         sort_1d_by_key_allocator_v2(pair_mask_fwd[0], thrustalloc, 
-                            mask_argsort_fwd[0], stream_int, mask_int_count);
+                            mask_argsort_fwd[0], stream_int, mask_int_count, do_sort);
                     }}else{{
                         sort_1d_by_key_allocator_v2(pair_mask_fwd[0], thrustalloc, 
-                            mask_argsort_fwd[0], stream_int, mask_int_count);
+                            mask_argsort_fwd[0], stream_int, mask_int_count, do_sort);
                         sort_1d_by_key_allocator_v2(pair_mask_bwd[0], thrustalloc, 
-                            mask_argsort_bwd[0], stream_int, mask_int_count);
+                            mask_argsort_bwd[0], stream_int, mask_int_count, do_sort);
                     }}
                 }}
             }}

@@ -591,14 +591,14 @@ SPCONV_STATIC_LOWER_FUSED_MODULE_MAP: Dict[Type[nn.Module], Tuple[
         snni.SpconvReLUNd: (snnqr.SpConv, snniq.SparseConvReLU),
         snni.SpconvAddReLUNd: (snnqr.SpConv, snniq.SparseConvAddReLU),
         # use simple cumm i8 conv to implement linear
-        nni.LinearReLU: (nnqr.Linear, snniq.LinearPerChannelWeightReLU),
+        # nni.LinearReLU: (nnqr.Linear, snniq.LinearPerChannelWeightReLU),
 
     }
 
 SPCONV_STATIC_LOWER_MODULE_MAP: Dict[Type[nn.Module],
                                      Type[WeightedQuantizedModule]] = {
                                          snnqr.SpConv: snnq.SparseConv,
-                                         nnqr.Linear: snnq.LinearPerChannelWeight,
+                                        #  nnqr.Linear: snnq.LinearPerChannelWeight,
                                      }
 
 

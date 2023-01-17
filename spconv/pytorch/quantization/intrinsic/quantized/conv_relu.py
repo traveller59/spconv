@@ -14,7 +14,7 @@
 
 from typing import Optional
 from spconv.pytorch.core import SparseConvTensor
-from spconv.pytorch.cppcore import get_current_stream
+from spconv.pytorch.cppcore import get_current_stream, torch_tensor_to_tv
 import spconv.pytorch.quantization.quantized as nnq
 from spconv.pytorch.quantization.intrinsic import SpconvReLUNd, SpconvAddReLUNd
 from cumm import tensorview as tv 
@@ -88,7 +88,6 @@ class SparseConvAddReLU(nnq.SparseConv):
     def forward(self, input, add_input: Optional[SparseConvTensor] = None):
         msg = f"{input.features.shape[0]}, {input.features.shape[1]}, {self.weight().shape[0]}"
         with tv.measure_and_print(f"QuantizedSparseConvAddReLU|{msg}", get_current_stream(), enable=False):
-
             inp_scale = input.q_scale()
             w_scales = self.weight().q_per_channel_scales().to(torch.float32)
             out_scale = self.scale 

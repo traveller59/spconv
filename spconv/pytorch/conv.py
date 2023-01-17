@@ -136,6 +136,9 @@ class SparseConvolutionBase:
         self.zero_point = 0
         if self.conv1x1:
             assert act_type == tv.gemm.Activation.None_, "conv1x1 don't support fused act"
+            
+    def is_inverseable(self):
+        return self.indice_key is not None and not self.subm
 
     def _conv_forward(self, training: bool, input: SparseConvTensor, weight: torch.Tensor, bias: Optional[torch.Tensor], add_input: Optional[SparseConvTensor] = None,
             channel_scale: Optional[torch.Tensor] = None, output_scale: Optional[float] = None, name: Optional[str] = None,
@@ -681,6 +684,9 @@ class SparseConvolution(SparseConvolutionBase, SparseModule):
             s += ', bias=False'
         if self.algo is not None:
             s += f', algo={self.algo}'
+        if self.act_type != tv.gemm.Activation.None_:
+            s += f', act={self.act_type}'
+
         return s.format(**self.__dict__)
 
     def _calculate_fan_in_and_fan_out(self):
@@ -730,8 +736,6 @@ class SparseConvolution(SparseConvolutionBase, SparseModule):
             bound = 1 / math.sqrt(fan_in)
             init.uniform_(self.bias, -bound, bound)
 
-    def is_inverseable(self):
-        return self.indice_key is not None and not self.subm
 
     def forward(self, input: SparseConvTensor, add_input: Optional[SparseConvTensor] = None):
         return self._conv_forward(self.training, input, self.weight, self.bias, add_input,

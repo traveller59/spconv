@@ -317,6 +317,7 @@ class ResidualNetPTQ(nn.Module):
         super(ResidualNetPTQ, self).__init__()
         self.net = spconv.SparseSequential(
             SubMConvBNReLU(1, 32, 3),
+            # SubMConvBNReLU(32, 32, 3),
             SparseBasicBlock2(32, 32),
             SubMConvBNReLU(32, 64, 3),
             SparseConvBNReLU(64, 64, 2, 2), # 14x14
@@ -474,55 +475,6 @@ def calibrate(args, model: torch.nn.Module, data_loader, device):
             else:
                 output = model(image)
 
-
-
-def is_dequantize_node(node):
-    return isinstance(node, torch.fx.Node) and node.op == "call_method" and node.target == "dequantize"
-
-def _get_module(node: torch.fx.Node, modules: Dict[str, nn.Module]) -> Optional[nn.Module]:
-    """
-    Return the `torch.nn.Module` that corresponds to the specified node's target.
-    If no such node exists, return None.
-    """
-    if node.op == "call_module" and str(node.target) in modules:
-        return modules[str(node.target)]
-    else:
-        return None
-
-def remove_conv_add_dq(model: torch.fx.graph_module.GraphModule):
-    modules = dict(model.named_modules(remove_duplicate=False))
-    for n in model.graph.nodes:
-        if (n.op == "call_module" and type(_get_module(n, modules)) == snniq.SparseConvAddReLU):
-            # check second input, if it's dequantized, remove that dequantize node
-            arg1 = n.args[1]
-            if is_dequantize_node(arg1):
-                dq_node = arg1
-                assert(isinstance(dq_node, torch.fx.Node))
-                dn_input = dq_node.args[0]
-                n.replace_input_with(dq_node, dn_input)
-    model.graph.eliminate_dead_code()
-    model.recompile()
-    model.graph.lint() # Does some checks to make sure the
-                 # Graph is well-formed.
-    return model
-    
-def transform_qdq(m: torch.fx.GraphModule) -> torch.fx.GraphModule:
-    """torch.quantize_per_tensor don't support SparseConvTensor, so we
-    use a custom one by fx transform.
-    """
-    for node in m.graph.nodes:
-        # Checks if we're calling a function (i.e:
-        # torch.add)
-        if node.op == 'call_function':
-            # The target attribute is the function
-            # that call_function calls.
-            if node.target == torch.quantize_per_tensor:
-                node.target = quantize_per_tensor
-    m.graph.lint() # Does some checks to make sure the
-                 # Graph is well-formed.
-    m.recompile()
-    return m
-
 def main():
     # Training settings
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
@@ -562,7 +514,7 @@ def main():
                         help='random seed (default: 1)')
     parser.add_argument('--sparse',
                         action='store_true',
-                        default=False,
+                        default=True,
                         help='use sparse conv network instead of dense')
     parser.add_argument(
         '--log-interval',
@@ -589,7 +541,7 @@ def main():
     qdevice = torch.device("cuda" if use_cuda and args.sparse else "cpu")
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
     if args.sparse:
-        model = NetV2().to(device)
+        model = ResidualNetPTQ().to(device)
     else:
         model = NetDense().to(device)
 

@@ -2201,7 +2201,7 @@ class ConvGemmOps(pccm.ParameterizedClass):
             }}
             if (!output_add.empty() && tune_res.algo_desp.is_int8_inference){{
                 // use source as bias
-                beta = output_add_scale;
+                beta = output_add_scale / output_scale;
             }}
 
             if (j > 0){{

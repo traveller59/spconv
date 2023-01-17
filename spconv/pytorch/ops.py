@@ -1468,6 +1468,7 @@ def implicit_gemm(features: torch.Tensor,
     bias_tv = tv.Tensor()
     scale_tv = tv.Tensor()
     output_add_tv = tv.Tensor()
+    is_int8 = features.is_quantized and filters.is_quantized
     if output_add is not None:
         assert features.dtype == torch.qint8, "fused residual add only support int8"
     if bias is not None:
@@ -1535,15 +1536,31 @@ def implicit_gemm(features: torch.Tensor,
     filters = filters.reshape(out_channel, -1, filters.shape[-1])
     kv = filters.shape[1]
     mask_int_count = div_up(kv, 32)
-    if is_subm:
-        out_features = torch.empty((num_activate_out, out_channel),
-                                   dtype=output_dtype,
-                                   device=features.device)
+    if is_int8:
+        if is_subm:
+            out_features = torch._empty_affine_quantized(size=(num_activate_out, out_channel), 
+                scale=output_scale, zero_point=0, dtype=features.dtype, device=features.device)
+            # out_features = torch.empty((num_activate_out, out_channel),
+            #                         dtype=output_dtype,
+            #                         device=features.device)
+        else:
+            out_features = torch._empty_affine_quantized(size=(num_activate_out, out_channel), 
+                scale=output_scale, zero_point=0, dtype=features.dtype, device=features.device)
+            ctx = tv.Context()
+            ctx.set_cuda_stream(stream)
+            torch_tensor_to_tv(out_features).zero_(ctx)
+            # out_features = torch.zeros((num_activate_out, out_channel),
+            #                         dtype=output_dtype,
+            #                         device=features.device)
     else:
-        out_features = torch.zeros((num_activate_out, out_channel),
-                                   dtype=output_dtype,
-                                   device=features.device)
-
+        if is_subm:
+            out_features = torch.empty((num_activate_out, out_channel),
+                                    dtype=output_dtype,
+                                    device=features.device)
+        else:
+            out_features = torch.zeros((num_activate_out, out_channel),
+                                    dtype=output_dtype,
+                                    device=features.device)
     pair_fwd_tv = torch_tensor_to_tv(pair_fwd)
     features_tv = torch_tensor_to_tv(features)
     filters_tv = torch_tensor_to_tv(filters)
@@ -1617,7 +1634,7 @@ def implicit_gemm(features: torch.Tensor,
             if bias is not None and not tune_res.algo_desp.is_int8_inference:
                 beta = 1 
             if output_add is not None and tune_res.algo_desp.is_int8_inference:
-                beta = output_add_scale 
+                beta = output_add_scale / output_scale
             CONV.run_with_tuned_result(
                 tune_res,
                 ConvOpType.kForward,
@@ -1640,7 +1657,7 @@ def implicit_gemm(features: torch.Tensor,
                 act_alpha=act_alpha,
                 act_beta=act_beta,
                 scale=scale_tv,
-                output_add=output_add)
+                output_add=output_add_tv)
     return out_features, mask_output_fwd, mask_width
 
 

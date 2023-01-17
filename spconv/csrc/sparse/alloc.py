@@ -304,6 +304,7 @@ class StaticAllocator(ExternalAllocator):
         code.arg("device", "int")
         code.arg("stream", "std::uintptr_t", "0")
         code.arg("is_temp_memory", "bool", "false")
+        code.arg("scale", "float", "1.0")
         code.raw(f"""
         auto tvctx = tv::Context();
         """)
@@ -328,6 +329,7 @@ class StaticAllocator(ExternalAllocator):
         code.arg("device", "int")
         code.arg("stream", "std::uintptr_t", "0")
         code.arg("is_temp_memory", "bool", "false")
+        code.arg("scale", "float", "1.0")
         code.raw(f"""
         if (name == {pccm.literal(AllocKeys.ThrustTemp)}){{
             // thrust tmp shouldn't inside tensor_dict. use a simple method to allocate

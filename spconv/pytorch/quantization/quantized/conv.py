@@ -87,7 +87,7 @@ class _SparseConv(SparseConvolutionBase, WeightedQuantizedModule):
         bias_float = (
             torch.zeros(out_channels, dtype=torch.float,
                         **{k: v for k, v in factory_kwargs.items() if k != 'dtype'}) if bias else None)
-
+        self._max_voxels = torch.zeros(1, dtype=torch.int32, device=device)
         self.set_weight_bias(qweight, bias_float)
         self.scale = 1.0
         self.zero_point = 0
@@ -95,6 +95,9 @@ class _SparseConv(SparseConvolutionBase, WeightedQuantizedModule):
     def set_weight_bias(self, qweight, bias_float):
         self._weight: torch.Tensor = qweight 
         self._bias: torch.Tensor = bias_float
+
+    def set_max_voxels(self, max_voxel):
+        self._max_voxels = max_voxel
 
     def bias(self):
         return self._bias
@@ -137,6 +140,7 @@ class _SparseConv(SparseConvolutionBase, WeightedQuantizedModule):
         destination[prefix + 'bias'] = b
         destination[prefix + 'scale'] = torch.tensor(self.scale)
         destination[prefix + 'zero_point'] = torch.tensor(self.zero_point)
+        destination[prefix + 'max_voxels'] = torch.tensor(self._max_voxels)
 
     # @torch.jit.export
     # def __getstate__(self):
@@ -169,6 +173,8 @@ class _SparseConv(SparseConvolutionBase, WeightedQuantizedModule):
         state_dict.pop(prefix + 'weight')
         state_dict.pop(prefix + 'bias')
         self.scale = float(state_dict[prefix + 'scale'])
+        state_dict.pop(prefix + 'max_voxels')
+        self._max_voxels = state_dict[prefix + 'max_voxels']
         state_dict.pop(prefix + 'scale')
         self.zero_point = int(state_dict[prefix + 'zero_point'])
         state_dict.pop(prefix + 'zero_point')
@@ -213,6 +219,7 @@ class _SparseConv(SparseConvolutionBase, WeightedQuantizedModule):
         assert weight_post_process.dtype == torch.qint8, \
             'Weight observer must have a dtype of qint8'
         qweight = _quantize_weight(mod.weight.float(), weight_post_process)
+        
         # the __init__ call used is the one from derived classes and not the one from _ConvNd
         qconv = cls(mod.ndim, mod.in_channels, mod.out_channels, mod.kernel_size,
                          mod.stride, mod.padding, mod.dilation,
@@ -230,6 +237,8 @@ class _SparseConv(SparseConvolutionBase, WeightedQuantizedModule):
                          act_alpha=mod.act_alpha,
                          act_beta=mod.act_beta)
         qconv.set_weight_bias(qweight, mod.bias)
+        if mod.get_max_num_voxels() is not None:
+            qconv.set_max_voxels(mod.get_max_num_voxels())
         if activation_post_process is None or activation_post_process.dtype == torch.float:
             return qconv  # dynamic quantization doesn't need scale/zero_point
         else:
@@ -295,6 +304,8 @@ class _SparseConv(SparseConvolutionBase, WeightedQuantizedModule):
         qconv.set_weight_bias(qweight, ref_qconv.bias)
         qconv.scale = float(output_scale)
         qconv.zero_point = int(output_zero_point)
+        if ref_qconv.get_max_num_voxels() is not None:
+            qconv.set_max_voxels(ref_qconv.get_max_num_voxels())
         return qconv
 
 

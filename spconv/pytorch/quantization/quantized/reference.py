@@ -85,6 +85,8 @@ class _SpConvNd(sconvmod.SparseConvolution, ReferenceQuantizedModule):
         qref_conv.weight = torch.nn.Parameter(float_conv.weight.detach())
         if float_conv.bias is not None:
             qref_conv.bias = torch.nn.Parameter(float_conv.bias.detach())
+        if conv.get_max_num_voxels() is not None:
+            qref_conv.get_max_num_voxels()[:] = conv.get_max_num_voxels()
         return qref_conv
 
 

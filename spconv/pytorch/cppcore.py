@@ -137,10 +137,11 @@ class TorchAllocator(ExternalAllocator):
         else:
             ten = torch.empty(shape, dtype=th_dtype, device=dev).zero_()
         ten_tv = torch_tensor_to_tv(ten, dtype_bkp)
-        # if self.is_quantized:
-        #     ctx = tv.Context()
-        #     ctx.set_cuda_stream(stream)
-        #     ten_tv.zero_(ctx)
+        if self.is_quantized:
+            # no _zeros_affine_quantized available, so we need to zero_ here.
+            ctx = tv.Context()
+            ctx.set_cuda_stream(stream)
+            ten_tv.zero_(ctx)
         self.allocated[ten_tv.byte_pointer()] = ten
         if name and not is_temp_memory:
             self.allocated[name] = ten

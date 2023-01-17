@@ -34,8 +34,11 @@ def main(include: str,
     cu.namespace = "cumm.gemm.main"
     all_imp = (IMPLGEMM_SIMT_PARAMS + IMPLGEMM_VOLTA_PARAMS +
                IMPLGEMM_TURING_PARAMS + IMPLGEMM_AMPERE_PARAMS)
-    # all_imp = IMPLGEMM_SIMT_PARAMS
-    all_imp = list(filter(lambda x: not x.is_nvrtc, all_imp))
+    # keep all int8 kernels in libspconv
+    for x in all_imp:
+        if x.int8_inference:
+            x.is_nvrtc = False 
+    all_imp = list(filter(lambda x: (not x.is_nvrtc), all_imp))
     if inference_only:
         all_imp = list(filter(lambda x: x.op_type == ConvOpType.kForward, all_imp))
     convcu = ConvMainUnitTest(all_imp)
