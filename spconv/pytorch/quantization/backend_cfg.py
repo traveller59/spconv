@@ -632,3 +632,18 @@ def get_spconv_convert_custom_config():
     # cfg.set_observed_to_quantized_mapping(snni., snniq.SparseConvReLU)
 
     return cfg
+
+def prepare_spconv_torch_inference(with_linear: bool):
+    from torch.ao.quantization.fx._lower_to_native_backend import \
+        STATIC_LOWER_FUSED_MODULE_MAP, STATIC_LOWER_MODULE_MAP
+    fmap = SPCONV_STATIC_LOWER_FUSED_MODULE_MAP.copy()
+    lmap = SPCONV_STATIC_LOWER_MODULE_MAP.copy()
+    if with_linear:
+        fmap.update({
+            nni.LinearReLU: (nnqr.Linear, snniq.LinearPerChannelWeightReLU),
+        })
+        lmap.update({
+            nnqr.Linear: snnq.LinearPerChannelWeight
+        })
+    STATIC_LOWER_FUSED_MODULE_MAP.update(fmap)
+    STATIC_LOWER_MODULE_MAP.update(lmap)

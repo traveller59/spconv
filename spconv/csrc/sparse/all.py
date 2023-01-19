@@ -1647,10 +1647,10 @@ class SpconvOps(pccm.Class):
         code.arg("timer", "tv::CUDAKernelTimer", "tv::CUDAKernelTimer(false)",
                  "cumm.tensorview.CUDAKernelTimer = CUDAKernelTimer(False)")
         code.arg("direct_table", f"bool", "false")
+        code.arg("do_sort", f"bool", "true")
         code.arg("preallocated", f"std::unordered_map<std::string, tv::Tensor>", 
             "std::unordered_map<std::string, tv::Tensor>{}", 
             "Dict[str, cumm.tensorview.Tensor] = {}")
-        code.arg("do_sort", f"bool", "true")
 
         if CUMM_CPU_ONLY_BUILD:
             code.raw(f"""

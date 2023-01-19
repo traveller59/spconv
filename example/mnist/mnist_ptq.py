@@ -37,8 +37,6 @@ from torchvision import datasets, transforms
 import spconv.pytorch as spconv
 import spconv.pytorch.quantization as spconvq
 from spconv.pytorch.quantization import get_default_spconv_trt_ptq_qconfig
-from spconv.pytorch.quantization.backend_cfg import \
-    SPCONV_STATIC_LOWER_FUSED_MODULE_MAP, SPCONV_STATIC_LOWER_MODULE_MAP
 from spconv.pytorch.quantization.core import quantize_per_tensor
 from spconv.pytorch.quantization.fake_q import \
     get_default_spconv_qconfig_mapping
@@ -102,6 +100,7 @@ class SparseBasicBlock(spconv.SparseModule):
             identity = self.downsample(x)
         out = self.relu(out + identity)
         return out
+
 
 class Net(nn.Module):
     def __init__(self):
@@ -215,7 +214,6 @@ class ResidualNetPTQ(nn.Module):
         super(ResidualNetPTQ, self).__init__()
         self.net = spconv.SparseSequential(
             SubMConvBNReLU(1, 32, 3),
-            # SubMConvBNReLU(32, 32, 3),
             SparseBasicBlock(32, 32),
             SubMConvBNReLU(32, 64, 3),
             SparseConvBNReLU(64, 64, 2, 2), # 14x14
@@ -480,22 +478,21 @@ def main():
     model.eval()
     if not args.sparse:
         model = model.cpu()
-
-    model_qat = copy.deepcopy(model)
     spconvq.prepare_spconv_torch_inference(True)
-    # do qat
-
-    qconfig_mapping_qat = get_default_spconv_qconfig_mapping(True)
+    # tensorrt only support symmetric quantization, per-tensor act and per-channel weight.
+    qconfig_mapping = get_default_spconv_qconfig_mapping(is_qat=False)
     prepare_cfg = spconvq.get_spconv_prepare_custom_config()
     backend_cfg = spconvq.get_spconv_backend_config()
-
-    prepared_model_qat = qfx.prepare_qat_fx(model_qat, qconfig_mapping_qat, (), backend_config=backend_cfg, prepare_custom_config=prepare_cfg)
-    train(args, prepared_model_qat, qdevice, train_loader, optimizer, 1)
-    converted_model = qfx.convert_fx(prepared_model_qat, qconfig_mapping=qconfig_mapping_qat, backend_config=backend_cfg)
+    # prepare: fuse your model, all patterns such as conv-bn-relu fuse to modules in torch.ao.quantization.intrinsic / spconv.pytorch.quantization.intrinsic
+    # then add observers to fused model.
+    prepared_model = qfx.prepare_fx(model, qconfig_mapping, (), backend_config=backend_cfg, prepare_custom_config=prepare_cfg)
+    # calibrate: run model with some inputs
+    calibrate(args, prepared_model, test_loader, qdevice)
+    # convert (ptq): replace intrinsic blocks with quantized modules
+    converted_model = qfx.convert_fx(prepared_model, qconfig_mapping=qconfig_mapping, backend_config=backend_cfg)
     converted_model = spconvq.transform_qdq(converted_model)
     # test converted ptq model with int8 kernel
-    spconvq.remove_conv_add_dq(converted_model)
-    # you will see some nvrtc compile log here, which means int8 kernel is used.
+    converted_model = spconvq.remove_conv_add_dq(converted_model)
     print(converted_model)
     test(args, converted_model, qdevice, test_loader)
 

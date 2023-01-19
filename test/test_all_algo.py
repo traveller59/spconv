@@ -330,10 +330,10 @@ def _test_impgemm_conv_cuda(subm: bool):
     device = torch.device("cuda:0")
     shapes = [[19, 18, 17]]
     batchsizes = [1]
-    # dtypes = [(np.float32, np.float32), (np.float16, np.float16)]
+    dtypes = [(np.float32, np.float32), (np.float16, np.float16)]
     # dtypes = [np.float16]
-    dtypes = [(np.int8, np.int8), (np.int8, np.float32), (np.int8, np.float16)]
-    dtypes = [(np.int8, np.int8)]
+    # dtypes = [(np.int8, np.int8), (np.int8, np.float32), (np.int8, np.float16)]
+    # dtypes = [(np.int8, np.int8)]
     # dtypes = [(np.float16, np.float16)]
 
     test_case = TestCase()
@@ -341,19 +341,19 @@ def _test_impgemm_conv_cuda(subm: bool):
     # out_channels = [32, 48, 64]
     in_channels = [32, 47]
     out_channels = [32, 48, 62]
-    in_channels = [16]
-    out_channels = [16]
+    # in_channels = [16]
+    # out_channels = [16]
 
     multiple_base = 16
     if subm:
         # ksizes = [3, (3, 3, 5), (3, 5, 5), 5]
-        ksizes = [3]
+        ksizes = [3, 5]
         strides = [1]
         paddings = [0]
         dilations = [1]
     else:
         ksizes = [2, 3, (3, 3, 4), 4, (4, 5, 5), 5]
-        ksizes = [2, 3]
+        ksizes = [2, 3, 5]
 
         strides = [1, 2, 3]
         paddings = [0, 1]
@@ -1024,7 +1024,7 @@ def _test_native_conv_cuda(subm: bool):
 def test_all_algo_unit():
     # for i in range(5):
     _test_impgemm_conv_cuda(True)
-    # _test_impgemm_conv_cuda(False)
+    _test_impgemm_conv_cuda(False)
     # _test_native_conv_cuda(True)
     # _test_native_conv_cuda(False)
 

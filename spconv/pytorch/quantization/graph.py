@@ -49,8 +49,8 @@ def transform_qdq(m: torch.fx.GraphModule) -> torch.fx.GraphModule:
                 node.target = quantize_per_tensor
             if node.target == torch.ops.quantized.add:
                 node.target = quantized_add
-
+    m.graph.eliminate_dead_code()
+    m.recompile()
     m.graph.lint() # Does some checks to make sure the
                  # Graph is well-formed.
-    m.recompile()
     return m

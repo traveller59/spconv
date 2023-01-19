@@ -32,6 +32,9 @@ using GemmTunerSimple =
     spconvlib::spconv::csrc::sparse::convops::spops::GemmTuner;
 
 int main(int argc, char **argv) {
+  bool is_int8 = false;
+  float inp_scale = 0.04;
+  float out_scale = 0.05;
 
   tv::ssprint("Hello libspconv!!!");
   TV_ASSERT_RT_ERR(argc == 2, "usage: main /path/to/benchmark-pc.jarr, you can "
@@ -161,6 +164,10 @@ int main(int argc, char **argv) {
     // if your kernel volume > 32, you need to use
     // tv::gemm::SparseConvAlgo::kNative. otherwise use kMaskImplicitGemm.
     if (i == 0) {
+      if (is_int8){
+        // native don't support int8
+        continue;
+      }
       auto conv_algo = tv::gemm::SparseConvAlgo::kNative;
       bool inverse = false;
       // native algo code example

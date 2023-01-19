@@ -77,6 +77,8 @@ Update Spconv: you **MUST UNINSTALL** all spconv/cumm/spconv-cuxxx/cumm-cuxxx fi
 
 ## NEWS
 
+* spconv 2.3: int8 quantization support. see docs and examples for more details.
+
 * spconv 2.2: ampere feature support (by [EvernightAurora](https://github.com/EvernightAurora)), pure c++ code generation, nvrtc, drop python 3.6
 
 ## Spconv 2.2 vs Spconv 2.1

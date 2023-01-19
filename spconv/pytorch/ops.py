@@ -26,7 +26,7 @@ from spconv.pytorch.core import ThrustSortAllocator
 from spconv.pytorch.cppcore import _TORCH_DTYPE_TO_TV, TorchAllocator, torch_tensor_to_tv, get_current_stream, get_arch, TorchSpconvMatmul
 from spconv.core_cc.csrc.sparse.all import SpconvOps
 from spconv.core_cc.csrc.sparse.alloc import ExternalAllocator
-from spconv.constants import SPCONV_CPP_INDICE_PAIRS, SPCONV_CPP_INDICE_PAIRS_IGEMM, SPCONV_CPP_GEMM, SPCONV_DIRECT_TABLE_HASH_SIZE_SCALE, SPCONV_ALLOW_TF32
+from spconv.constants import SPCONV_CPP_INDICE_PAIRS, SPCONV_CPP_INDICE_PAIRS_IGEMM, SPCONV_CPP_GEMM, SPCONV_DIRECT_TABLE_HASH_SIZE_SCALE, SPCONV_ALLOW_TF32, SPCONV_DO_SORT
 import spconv.core_cc as _ext
 from spconv.core_cc.csrc.sparse.convops.spops import ConvGemmOps
 from spconv.core_cc.csrc.sparse.inference import InferenceOps
@@ -342,7 +342,8 @@ def get_indice_pairs_implicit_gemm(
         alloc: Optional[ThrustSortAllocator] = None,
         timer: CUDAKernelTimer = CUDAKernelTimer(False),
         num_out_act_bound: int = -1,
-        direct_table: bool = SPCONV_USE_DIRECT_TABLE):
+        direct_table: bool = SPCONV_USE_DIRECT_TABLE,
+        do_sort=SPCONV_DO_SORT):
     """
     Why return tuple? because pytorch seems don't support custom object in autograd.
     return: (
@@ -382,7 +383,8 @@ def get_indice_pairs_implicit_gemm(
             stream,
             num_out_act_bound,
             timer=timer_cpp,
-            direct_table=direct_table)
+            direct_table=direct_table,
+            do_sort=do_sort)
         mask_split_count = mask_tensor.dim(0)
         masks = [mask_tensor[i:i + 1].numpy() for i in range(mask_split_count)]
         if subm:
@@ -548,7 +550,8 @@ def get_indice_pairs_implicit_gemm(
                 SpconvOps.sort_1d_by_key_allocator(pair_mask_tv[j],
                                                     alloc.alloc,
                                                     mask_argsort_tv[j], stream,
-                                                    mask_int_count)
+                                                    mask_int_count,
+                                                    do_sort=do_sort)
         # CONV.stream_synchronize(stream)
         pair_mask_in_splits = [pair_mask[i] for i in range(mask_split_count)]
         mask_argsort_in_splits = [
@@ -764,22 +767,22 @@ def get_indice_pairs_implicit_gemm(
                                                                  alloc.alloc,
                                                                  mask_argsort_fwd_tv[0],
                                                                  stream,
-                                                                 mask_int_count)
+                                                                 mask_int_count, do_sort=do_sort)
                 else:
                     if pair_mask_bwd_tv.dim(1) > pair_mask_fwd_tv.dim(1):
                         SpconvOps.sort_1d_by_key_allocator(
                             pair_mask_bwd_tv[0], alloc.alloc,
-                            mask_argsort_bwd_tv[0], stream, mask_int_count)
+                            mask_argsort_bwd_tv[0], stream, mask_int_count, do_sort=do_sort)
                         SpconvOps.sort_1d_by_key_allocator(
                             pair_mask_fwd_tv[0], alloc.alloc,
-                            mask_argsort_fwd_tv[0], stream, mask_int_count)
+                            mask_argsort_fwd_tv[0], stream, mask_int_count, do_sort=do_sort)
                     else:
                         SpconvOps.sort_1d_by_key_allocator(
                             pair_mask_fwd_tv[0], alloc.alloc,
-                            mask_argsort_fwd_tv[0], stream, mask_int_count)
+                            mask_argsort_fwd_tv[0], stream, mask_int_count, do_sort=do_sort)
                         SpconvOps.sort_1d_by_key_allocator(
                             pair_mask_bwd_tv[0], alloc.alloc,
-                            mask_argsort_bwd_tv[0], stream, mask_int_count)
+                            mask_argsort_bwd_tv[0], stream, mask_int_count, do_sort=do_sort)
 
         # CONV.stream_synchronize(stream)
         if not is_train:

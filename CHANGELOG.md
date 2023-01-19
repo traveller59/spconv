@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.3.0] - 2023-01-19
+### Added 
+- Add int8 quantization support
+- Add large kernel support for implicit gemm (kv <= 128)
+
 ## [2.2.6] - 2022-11-06
 ### Fixed 
 - CI fail because of pypi temporary shutdown. assign a new version and run again.

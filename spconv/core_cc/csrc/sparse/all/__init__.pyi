@@ -557,7 +557,7 @@ class SpconvOps:
         """
         ...
     @staticmethod
-    def get_indice_pairs_implicit_gemm(allocator, indices: Tensor, batch_size: int, input_dims: List[int], algo: int, ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], out_padding: List[int], subm: bool, transposed: bool, is_train: bool, stream_int: int = 0, num_out_act_bound: int = -1, timer: CUDAKernelTimer =  CUDAKernelTimer(False), direct_table: bool = False, preallocated: Dict[str, Tensor] =  {}, do_sort: bool = True) -> Tuple[Tensor, int]: 
+    def get_indice_pairs_implicit_gemm(allocator, indices: Tensor, batch_size: int, input_dims: List[int], algo: int, ksize: List[int], stride: List[int], padding: List[int], dilation: List[int], out_padding: List[int], subm: bool, transposed: bool, is_train: bool, stream_int: int = 0, num_out_act_bound: int = -1, timer: CUDAKernelTimer =  CUDAKernelTimer(False), direct_table: bool = False, do_sort: bool = True, preallocated: Dict[str, Tensor] =  {}) -> Tuple[Tensor, int]: 
         """
         Args:
             allocator: 
@@ -577,8 +577,8 @@ class SpconvOps:
             num_out_act_bound: 
             timer: 
             direct_table: 
-            preallocated: 
             do_sort: 
+            preallocated: 
         """
         ...
     @staticmethod

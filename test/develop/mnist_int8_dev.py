@@ -70,6 +70,137 @@ class SparseConvBNReLU(spconv.SparseSequential):
         )
 
 class SparseBasicBlock(spconv.SparseModule):
+    expansion = 1
+    def __init__(self,
+                 in_planes, out_planes,
+                 stride=1,
+                 downsample=None):
+        spconv.SparseModule.__init__(self)
+        conv1 = spconv.SubMConv2d(in_planes, out_planes, 3, stride, 1, bias=False)
+        conv2 = spconv.SubMConv2d(out_planes, out_planes, 3, stride, 1, bias=False)
+
+        norm1 = nn.BatchNorm1d(out_planes, momentum=0.1)
+        norm2 = nn.BatchNorm1d(out_planes, momentum=0.1)
+
+        self.conv1_bn_relu = spconv.SparseSequential(conv=conv1, bn=norm1, relu=nn.ReLU(inplace=True))
+        self.conv2_bn = spconv.SparseSequential(conv=conv2, bn=norm2)
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+        self.iden_for_fx_match = nn.Identity()
+
+    def forward(self, x: spconv.SparseConvTensor):
+        identity = self.iden_for_fx_match(x.features)
+        out = self.conv1_bn_relu(x)
+        out = self.conv2_bn(out)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out = out.replace_feature(self.relu(out.features + identity))
+        return out
+
+class SparseBasicBlock1(spconv.SparseModule):
+    """residual block that supported by spconv quantization.
+    """
+    expansion = 1
+    def __init__(self,
+                 in_planes, out_planes,
+                 stride=1,
+                 downsample=None):
+        spconv.SparseModule.__init__(self)
+        self.conv1 = spconv.SubMConv2d(in_planes, out_planes, 3, stride, 1, bias=False)
+        self.conv2 = spconv.SubMConv2d(out_planes, out_planes, 3, stride, 1, bias=False)
+
+        self.norm1 = nn.BatchNorm1d(out_planes, momentum=0.1)
+        self.norm2 = nn.BatchNorm1d(out_planes, momentum=0.1)
+
+        self.relu1 = nn.ReLU(inplace=True)
+        self.relu2 = nn.ReLU(inplace=True)
+        self.downsample = downsample
+        self.iden_for_fx_match = nn.Identity()
+
+    def forward(self, x: spconv.SparseConvTensor):
+        identity = self.iden_for_fx_match(x.features)
+        # if self.training:
+        #     assert x.features.dim() == 2, f'x.features.dim()={x.features.dim()}'
+        out = self.conv1(x)
+        out = out.replace_feature(self.relu1(self.norm1(out.features)))
+        out = self.conv2(out)
+        out = out.replace_feature(self.norm2(out.features))
+
+        # if self.downsample is not None:
+        #     identity = self.downsample(x)
+
+        out = out.replace_feature(self.relu2(out.features + identity))
+        return out
+
+class SparseBasicBlock2(spconv.SparseModule):
+    """residual block that supported by spconv quantization.
+    """
+    expansion = 1
+    def __init__(self,
+                 in_planes, out_planes,
+                 stride=1,
+                 downsample=None):
+        spconv.SparseModule.__init__(self)
+        self.conv1 = spconv.SubMConv2d(in_planes, out_planes, 3, stride, 1, bias=False)
+        self.conv2 = spconv.SubMConv2d(out_planes, out_planes, 3, stride, 1, bias=False)
+
+        self.norm1 = spconv.SparseBatchNorm(out_planes, momentum=0.1)
+        self.norm2 = spconv.SparseBatchNorm(out_planes, momentum=0.1)
+
+        self.relu1 = spconv.SparseReLU(inplace=True)
+        self.relu2 = spconv.SparseReLU(inplace=True)
+        self.downsample = downsample
+        self.iden_for_fx_match = spconv.SparseIdentity()
+
+    def forward(self, x: spconv.SparseConvTensor):
+        identity = self.iden_for_fx_match(x)
+        # if self.training:
+        #     assert x.features.dim() == 2, f'x.features.dim()={x.features.dim()}'
+        out = self.conv1(x)
+        out = self.relu1(self.norm1(out))
+        out = self.conv2(out)
+        out = self.norm2(out)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+        out = self.relu2(out + identity)
+        return out
+
+class SparseBasicBlock3(spconv.SparseModule):
+    """residual block that supported by spconv quantization.
+    """
+    expansion = 1
+    def __init__(self,
+                 in_planes, out_planes,
+                 stride=1,
+                 downsample=None):
+        spconv.SparseModule.__init__(self)
+        self.conv1 = spconv.SubMConv2d(in_planes, out_planes, 3, stride, 1, bias=False)
+        conv2 = spconv.SubMConv2d(out_planes, out_planes, 3, stride, 1, bias=False)
+
+        self.norm1 = spconv.SparseBatchNorm(out_planes, momentum=0.1)
+        norm2 = spconv.SparseBatchNorm(out_planes, momentum=0.1)
+        self.residual_conv = SpconvAddReLUNd(conv2, spconv.SparseReLU(inplace=True))
+        self.relu1 = spconv.SparseReLU(inplace=True)
+        # self.relu2 = spconv.SparseReLU(inplace=True)
+        self.downsample = downsample
+        self.iden_for_fx_match = spconv.SparseIdentity()
+
+    def forward(self, x: spconv.SparseConvTensor):
+        identity = self.iden_for_fx_match(x)
+        # if self.training:
+        #     assert x.features.dim() == 2, f'x.features.dim()={x.features.dim()}'
+        out = self.conv1(x)
+        out = self.relu1(self.norm1(out))
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+        out = self.residual_conv(out, identity)
+        return out
+
+class SparseBasicBlock4(spconv.SparseModule):
     """residual block that supported by spconv quantization.
     """
     expansion = 1
@@ -102,6 +233,7 @@ class SparseBasicBlock(spconv.SparseModule):
             identity = self.downsample(x)
         out = self.relu(out + identity)
         return out
+
 
 class Net(nn.Module):
     def __init__(self):
@@ -216,7 +348,7 @@ class ResidualNetPTQ(nn.Module):
         self.net = spconv.SparseSequential(
             SubMConvBNReLU(1, 32, 3),
             # SubMConvBNReLU(32, 32, 3),
-            SparseBasicBlock(32, 32),
+            SparseBasicBlock4(32, 32),
             SubMConvBNReLU(32, 64, 3),
             SparseConvBNReLU(64, 64, 2, 2), # 14x14
             SparseConvBNReLU(64, 64, 2, 2), # 7x7
@@ -482,22 +614,54 @@ def main():
         model = model.cpu()
 
     model_qat = copy.deepcopy(model)
-    spconvq.prepare_spconv_torch_inference(True)
-    # do qat
+    STATIC_LOWER_FUSED_MODULE_MAP.update(SPCONV_STATIC_LOWER_FUSED_MODULE_MAP)
+    STATIC_LOWER_MODULE_MAP.update(SPCONV_STATIC_LOWER_MODULE_MAP)
 
-    qconfig_mapping_qat = get_default_spconv_qconfig_mapping(True)
+    # tensorrt only support symmetric quantization, per-tensor act and per-channel weight.
+    qconfig_mapping = get_default_spconv_qconfig_mapping(False)
     prepare_cfg = spconvq.get_spconv_prepare_custom_config()
     backend_cfg = spconvq.get_spconv_backend_config()
+    # convert_cfg = spconvq.get_spconv_convert_custom_config()
+    # prepare: fuse your model, all patterns such as conv-bn-relu fuse to modules in torch.ao.quantization.intrinsic / spconv.pytorch.quantization.intrinsic
+    # then add observers to fused model.
+    prepared_model = qfx.prepare_fx(model, qconfig_mapping, (), backend_config=backend_cfg, prepare_custom_config=prepare_cfg)
+    # print(prepared_model)
+    # breakpoint()
 
-    prepared_model_qat = qfx.prepare_qat_fx(model_qat, qconfig_mapping_qat, (), backend_config=backend_cfg, prepare_custom_config=prepare_cfg)
-    train(args, prepared_model_qat, qdevice, train_loader, optimizer, 1)
-    converted_model = qfx.convert_fx(prepared_model_qat, qconfig_mapping=qconfig_mapping_qat, backend_config=backend_cfg)
+    # print(prepared_model)
+    # calibrate: run model with some inputs
+    calibrate(args, prepared_model, test_loader, qdevice)
+    # convert (ptq): replace intrinsic blocks with quantized modules
+    converted_model = qfx.convert_fx(prepared_model, qconfig_mapping=qconfig_mapping, backend_config=backend_cfg)
     converted_model = spconvq.transform_qdq(converted_model)
     # test converted ptq model with int8 kernel
     spconvq.remove_conv_add_dq(converted_model)
-    # you will see some nvrtc compile log here, which means int8 kernel is used.
+
     print(converted_model)
+    breakpoint()
+
     test(args, converted_model, qdevice, test_loader)
+    # do qat
+    # qconfig_mapping_qat = get_default_spconv_qconfig_mapping(True)
+    # prepared_model_qat = qfx.prepare_qat_fx(model_qat, qconfig_mapping_qat, (), backend_config=backend_cfg, prepare_custom_config=prepare_cfg)
+    # # converted_model = qfx.convert_fx(prepared_model_qat, qconfig_mapping=qconfig_mapping_qat, backend_config=backend_cfg)
+    # # breakpoint()
+    # print(prepared_model_qat)
+    # train(args, prepared_model_qat, qdevice, train_loader, optimizer, 1)
+    # converted_model = qfx.convert_fx(prepared_model_qat, qconfig_mapping=qconfig_mapping_qat, backend_config=backend_cfg)
+    # converted_model = transform_qdq(converted_model)
+    # test(args, converted_model, qdevice, test_loader)
+    # # [type(m) for m in prepared_model_qat.modules()]
+    # # model.qconfig = get_default_spconv_trt_ptq_qconfig()
+    # # prepare_custom_config_dict = spconvq.get_prepare_custom_config()
+    # # convert_custom_config_dict = spconvq.get_convert_custom_config()
+    # # torch.ao.quantization.prepare(model, inplace=True)
+    # # print('Post Training Quantization Prepare: Inserting Observers')
+    # # print('\n ConvBnReLUBlock:After observer insertion \n\n', model.net[0])
+    # # test(args, model, device, test_loader)
+    # print(converted_model)
+    # you will see some nvrtc compile log here, which means int8 kernel is used.
+    breakpoint()
 
 if __name__ == '__main__':
     main()
