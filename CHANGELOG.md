@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.3.1] - 2023-01-20
+### Changed 
+- change version
+
 ## [2.3.0] - 2023-01-19
 ### Added 
 - Add int8 quantization support
