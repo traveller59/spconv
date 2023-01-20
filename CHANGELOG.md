@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.3.2] - 2023-01-20
+### Changed 
+- change version
+
+
 ## [2.3.1] - 2023-01-20
 ### Changed 
 - change version
