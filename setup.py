@@ -167,8 +167,8 @@ if disable_jit is not None and disable_jit == "1":
     all_shuffle = SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS + SHUFFLE_AMPERE_PARAMS
     all_imp = (IMPLGEMM_SIMT_PARAMS + IMPLGEMM_VOLTA_PARAMS +
                IMPLGEMM_TURING_PARAMS + IMPLGEMM_AMPERE_PARAMS)
-    all_shuffle = list(filter(lambda x: not x.is_nvrtc, all_shuffle))
-    all_imp = list(filter(lambda x: not x.is_nvrtc, all_imp))
+    # all_shuffle = list(filter(lambda x: not x.is_nvrtc, all_shuffle))
+    # all_imp = list(filter(lambda x: not x.is_nvrtc, all_imp))
 
     cu = GemmMainUnitTest(all_shuffle)
     convcu = ConvMainUnitTest(all_imp)

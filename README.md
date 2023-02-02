@@ -57,11 +57,9 @@
 | CUDA 11.4 | [![PyPI Version][pypi-ver-114]][pypi-url-114] | ```pip install spconv-cu114```| [![pypi monthly download][pypi-download-114]][pypi-url-114]|
 | CUDA 11.6 | [![PyPI Version][pypi-ver-116]][pypi-url-116] | ```pip install spconv-cu116```| [![pypi monthly download][pypi-download-116]][pypi-url-116]|
 | CUDA 11.7 | [![PyPI Version][pypi-ver-117]][pypi-url-117] | ```pip install spconv-cu117```| [![pypi monthly download][pypi-download-117]][pypi-url-117]| 
-| CUDA 11.8* | [![PyPI Version][pypi-ver-118]][pypi-url-118] | ```pip install spconv-cu118```| [![pypi monthly download][pypi-download-118]][pypi-url-118]| 
+| CUDA 11.8 | [![PyPI Version][pypi-ver-118]][pypi-url-118] | ```pip install spconv-cu118```| [![pypi monthly download][pypi-download-118]][pypi-url-118]| 
+| CUDA 12.0 | [![PyPI Version][pypi-ver-120]][pypi-url-120] | ```pip install spconv-cu120```| [![pypi monthly download][pypi-download-120]][pypi-url-120]| 
 
-*: sm_89 and sm_90 is added in CUDA 11.8. If you use RTX 4090 or H100, you should use this version.
-
-<!-- | CUDA 12.0 | [![PyPI Version][pypi-ver-120]][pypi-url-120] | ```pip install spconv-cu120```| [![pypi monthly download][pypi-download-120]][pypi-url-120]| -->
 
 ```spconv``` is a project that provide heavily-optimized sparse convolution implementation with tensor core support. check [benchmark](docs/BENCHMARK.md) to see how fast spconv 2.x runs.
 

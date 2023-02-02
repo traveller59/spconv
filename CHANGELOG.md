@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.3.3] - 2023-02-02
+### Fixed 
+- Fix int8 nvrtc error when use prebuilt
+- Fix int8 kernel when run on turing GPU
+
 ## [2.3.2] - 2023-01-20
 ### Changed 
 - change version

@@ -330,10 +330,10 @@ def _test_impgemm_conv_cuda(subm: bool):
     device = torch.device("cuda:0")
     shapes = [[19, 18, 17]]
     batchsizes = [1]
-    dtypes = [(np.float32, np.float32), (np.float16, np.float16)]
+    # dtypes = [(np.float32, np.float32), (np.float16, np.float16)]
     # dtypes = [np.float16]
     # dtypes = [(np.int8, np.int8), (np.int8, np.float32), (np.int8, np.float16)]
-    # dtypes = [(np.int8, np.int8)]
+    dtypes = [(np.int8, np.int8)]
     # dtypes = [(np.float16, np.float16)]
 
     test_case = TestCase()
@@ -341,6 +341,9 @@ def _test_impgemm_conv_cuda(subm: bool):
     # out_channels = [32, 48, 64]
     in_channels = [32, 47]
     out_channels = [32, 48, 62]
+    in_channels = [16]
+    out_channels = [16]
+
     # in_channels = [16]
     # out_channels = [16]
 
