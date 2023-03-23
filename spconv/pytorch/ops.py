@@ -2103,3 +2103,17 @@ def maximum_value_int_(ten: torch.Tensor, value: int):
     else:
         assert not ten.is_cuda
     SpconvOps.maximum_value_int(torch_tensor_to_tv(ten), value, stream)
+
+
+def global_pool_rearrange(coords: torch.Tensor, batch_size: int):
+    is_cpu = not coords.is_cuda
+    stream = 0
+    if not is_cpu:
+        stream = get_current_stream()
+
+    out_indices = torch.empty((batch_size, coords.shape[0]), dtype=torch.int32, device=coords.device)
+    counts = torch.zeros((batch_size, ), dtype=torch.int32, device=coords.device)
+    
+    SpconvOps.global_pool_rearrange(torch_tensor_to_tv(out_indices), torch_tensor_to_tv(coords),
+                                      torch_tensor_to_tv(counts), stream )
+    return out_indices, counts

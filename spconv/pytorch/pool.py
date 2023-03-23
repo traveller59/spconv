@@ -248,6 +248,42 @@ class SparseMaxPool(SparseModule):
         out_tensor.spatial_shape = out_spatial_shape
         return out_tensor
 
+class SparseGlobalMaxOrAvgPool(SparseModule):
+    """TODO: deploy not supported. this implementation support
+    backward natively. for deploy, we should use single kernel with 
+    smem based reduce.
+    """
+    def __init__(self, is_mean: bool, name=None):
+        super(SparseGlobalMaxOrAvgPool, self).__init__(name=name)
+        self.is_mean = is_mean
+
+    def forward(self, input: spconv.SparseConvTensor):
+        is_int8 = input.is_quantized
+        assert not is_int8, "not implemented"
+        assert isinstance(input, spconv.SparseConvTensor)
+        out_indices, counts = ops.global_pool_rearrange(input.indices, input.batch_size)
+        counts_cpu = counts.cpu()
+
+        counts_cpu_np = counts_cpu.numpy()
+        res_features_list: List[torch.Tensor] = []
+        for i in range(input.batch_size):
+            real_inds = out_indices[i, :counts_cpu_np[i]]
+            real_features = input.features[real_inds]
+            if self.is_mean:
+                real_features_reduced = torch.mean(real_features, dim=0)[0]
+            else:
+                real_features_reduced = torch.max(real_features, dim=0)[0]
+            res_features_list.append(real_features_reduced)
+        res = torch.stack(res_features_list)
+        return res 
+    
+class SparseGlobalAvgPool(SparseGlobalMaxOrAvgPool):
+    def __init__(self, name=None):
+        super(SparseGlobalAvgPool, self).__init__(is_mean=True, name=name)
+
+class SparseGlobalMaxPool(SparseGlobalMaxOrAvgPool):
+    def __init__(self, name=None):
+        super(SparseGlobalMaxPool, self).__init__(is_mean=False, name=name)
 
 class SparseAvgPool(SparseModule):
     def __init__(self,

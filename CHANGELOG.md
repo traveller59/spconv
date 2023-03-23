@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.3.4] - 2023-03-23
+### Added 
+- Add SparseGlobalMaxPool and SparseGlobalAvgPool for training only. libspconv don't support it.
+
 ## [2.3.3] - 2023-02-02
 ### Fixed 
 - Fix int8 nvrtc error when use prebuilt

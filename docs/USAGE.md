@@ -31,9 +31,11 @@ from spconv.pytorch.hash import HashTable
 | ```spconv.SparseConv3d```          | Downsample               | ```nn.Conv3d```             | Use ```indice_key``` to save data for inverse |
 | ```spconv.SubMConv3d```            | Convolution              | N/A                         | Use ```indice_key``` to save data for reuse |
 | ```spconv.SparseInverseConv3d```   | Upsample                 |  N/A                        | Use pre-saved ```indice_key``` to upsample |
-| ```spconv.SparseConvTranspose3d``` | Upsample (don't use this)|  ```nn.ConvTranspose3d```   | VERY SLOW and CAN'T RECOVER ORIGIN POINT CLOUD |
+| ```spconv.SparseConvTranspose3d``` | Upsample (for generative model)|  ```nn.ConvTranspose3d```   | VERY SLOW and CAN'T RECOVER ORIGIN POINT CLOUD |
 | ```spconv.SparseMaxPool3d```       | Downsample               |  ```nn.MaxPool3d```         | Use ```indice_key``` to save data for inverse |
 | ```spconv.SparseSequential```       | Container               |  ```nn.Sequential```         | support layers above and ```nn.ReLU, nn.BatchNorm, ...```|
+| ```spconv.SparseGlobalMaxPool```     | global pool             |   N/A   | return dense tensor instead of SparseConvTensor|
+| ```spconv.SparseGlobalAvgPool```     | global pool             |   N/A   | return dense tensor instead of SparseConvTensor|
 
 
 | Functional APIs                    | Usage                    |
@@ -142,6 +144,16 @@ class ExampleNet(nn.Module):
         x = spconv.SparseConvTensor(features, coors, self.shape, batch_size)
         return self.net(x)
 ```
+
+### How To Use SparseConvTranspose
+
+```SparseConvTranspose``` (standard upsampling) should only be used in generative model. You need to use a classifier to check if a output coordicates is empty, then set batch indices (or xyz) of that sparse tensor to a negative number:
+
+```Python
+spt.indices[empty_mask, 0] = -1
+```
+
+In next sparse convolution, invalid coordinates will be removed until you perform next ```spt.indices[empty_mask, 0] = -1```.
 
 #### Common Mistake 
 * issue [#467](https://github.com/traveller59/spconv/issues/467)

@@ -784,6 +784,32 @@ class SpconvOps(pccm.Class):
 
     @pccm.pybind.mark
     @_STATIC_FUNCTION
+    def global_pool_rearrange(self):
+        code = pccm.FunctionCode()
+        code.arg("out_indices, coords, counts", "tv::Tensor")
+        code.arg("stream", "std::uintptr_t", "0", pyanno="int")
+        code.add_dependency(IndiceMaxPoolCPU)
+        if not CUMM_CPU_ONLY_BUILD:
+            code.add_dependency(IndiceMaxPool)
+        code.raw(f"""
+        if (out_indices.is_cpu()){{
+            IndiceMaxPoolCPU::global_pool_rearrange(out_indices, coords, counts);
+        }}
+        """)
+        if not CUMM_CPU_ONLY_BUILD:
+            with code.else_():
+                code.raw(f"""
+                IndiceMaxPool::global_pool_rearrange(out_indices, coords, counts, stream);
+                """)
+        else:
+            code.raw(f"""
+            TV_THROW_RT_ERR("not implemented in cpu-only spconv!!! ")
+            """)
+        return code
+
+
+    @pccm.pybind.mark
+    @_STATIC_FUNCTION
     def maxpool_implicit_gemm_forward(self):
         code = pccm.FunctionCode()
         if CUMM_CPU_ONLY_BUILD:

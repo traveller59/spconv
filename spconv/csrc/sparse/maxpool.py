@@ -298,6 +298,46 @@ class IndiceMaxPool(pccm.Class):
         }}
         """)
         return code
+    
+    @pccm.cuda.cuda_global_function
+    def global_pool_rearrange_kernel(self):
+        code = pccm.FunctionCode()
+        code.arg("out_indices", "int*")
+        code.arg("coords", "const int*")
+        code.arg("counts", "int*")
+        code.arg("num_indices", "int")
+
+        code.arg("indices_stride", "int")
+
+        code.raw(f"""
+        for (int i : tv::KernelLoopX<int>(num_indices)) {{
+            int batch_idx = coords[i * indices_stride];
+            if (batch_idx >= 0){{
+                auto old = atomicAdd(counts + batch_idx, 1);
+                out_indices[batch_idx * num_indices + old] = i;
+            }}
+        }}
+        """)
+        return code
+    
+    @pccm.cuda.static_function
+    def global_pool_rearrange(self):
+        code = pccm.FunctionCode()
+        code.arg("out_indices", "tv::Tensor")
+        code.arg("coords", "tv::Tensor")
+        code.arg("counts", "tv::Tensor")
+        code.arg("stream", "std::uintptr_t", "0")
+
+        code.raw(f"""
+        auto nhot = coords.dim(0);
+        auto cudastream = reinterpret_cast<cudaStream_t>(stream);
+        tv::cuda::Launch launcher = tv::cuda::Launch(nhot, cudastream);
+        launcher(global_pool_rearrange_kernel, out_indices.data_ptr<int>(), 
+            coords.data_ptr<const int>(), counts.data_ptr<int>(), nhot, 
+            coords.stride(0));
+        TV_CHECK_CUDA_ERR_V2("global_pool_feature_rearrange failed!!!");
+        """)
+        return code
 
     @pccm.cuda.static_function
     def forward(self):
@@ -554,6 +594,30 @@ class IndiceMaxPoolCPU(pccm.Class):
         if CUMM_CPU_ONLY_BUILD:
             self.add_dependency(OMPLib)
         self.add_include("tensorview/parallel/all.h")
+
+    @pccm.static_function
+    def global_pool_rearrange(self):
+        code = pccm.FunctionCode()
+        code.arg("out_indices", "tv::Tensor")
+        code.arg("coords", "tv::Tensor")
+        code.arg("counts", "tv::Tensor")
+
+        code.raw(f"""
+        auto nhot = coords.dim(0);
+        auto out_ptr = out_indices.data_ptr<int>();
+        auto coord_ptr = coords.data_ptr<const int>();
+        auto count_ptr = counts.data_ptr<int>();
+        int indices_stride = coords.stride(0);
+        for (int i = 0; i < nhot; ++i){{
+            int batch_idx = coord_ptr[0];
+            if (batch_idx >= 0){{
+                out_ptr[batch_idx * nhot + (count_ptr[batch_idx]++)] = i;
+            }}
+            coord_ptr += indices_stride;
+        }}
+        """)
+        return code
+
 
     @pccm.static_function
     def forward(self):

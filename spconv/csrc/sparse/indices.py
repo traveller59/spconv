@@ -195,7 +195,8 @@ class ConvOutLocIter(pccm.ParameterizedClass):
             stride_valid.append(
                 f"!(npq_no_stride[{i + 1}] % problem_.stride[{i}])")
         code.raw(f"""
-        return npq_no_stride[0] < problem_.N && 
+        return (npq_no_stride[0] < problem_.N) && 
+            (npq_no_stride[0] >= 0) && 
             {' && '.join(hw_valid)} &&
             {' && '.join(stride_valid)};
         """)
@@ -218,7 +219,7 @@ class ConvOutLocIter(pccm.ParameterizedClass):
                 (f"npq_offset[{i + 1}] >= 0 && "
                  f"npq_offset[{i + 1}] < problem_.output_dims[{i}]"))
         code.raw(f"""
-        return npq_offset[0] < problem_.N && 
+        return (npq_offset[0] < problem_.N) && (npq_offset[0] >= 0) && 
             {' && '.join(hw_valid)};
         """)
         return code
@@ -240,7 +241,7 @@ class ConvOutLocIter(pccm.ParameterizedClass):
                 (f"nhw_offset[{i + 1}] >= 0 && "
                  f"nhw_offset[{i + 1}] < problem_.input_dims[{i}]"))
         code.raw(f"""
-        return nhw_offset[0] < problem_.N && 
+        return (nhw_offset[0] < problem_.N) && (nhw_offset[0] >= 0) && 
             {' && '.join(hw_valid)};
         """)
         return code
@@ -262,7 +263,7 @@ class ConvOutLocIter(pccm.ParameterizedClass):
                 (f"nhw_offset[{i + 1}] >= 0 && "
                  f"nhw_offset[{i + 1}] < problem_.output_dims[{i}]"))
         code.raw(f"""
-        return nhw_offset[0] < problem_.N && 
+        return (nhw_offset[0] < problem_.N) && (nhw_offset[0] >= 0) && 
             {' && '.join(hw_valid)};
         """)
         return code

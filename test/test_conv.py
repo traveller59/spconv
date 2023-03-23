@@ -190,6 +190,20 @@ class SparseMaxPoolTestTorch(nn.Module):
         x = spconv.SparseConvTensor(features, coors, self.shape, batch_size)
         return self.net(x)  # .dense()
 
+class SparseGlobalMaxPoolTestTorch(nn.Module):
+    def __init__(self, shape):
+        super().__init__()
+        layers = [
+            spconv.SparseGlobalMaxPool()
+        ]
+        self.net = spconv.SparseSequential(*layers, )
+        self.shape = shape
+
+    def forward(self, features, coors, batch_size):
+        coors = coors.int()
+        x = spconv.SparseConvTensor(features, coors, self.shape, batch_size)
+        return self.net(x)  # .dense()
+
 
 class MaxPool3dTestTorch(nn.Module):
     def __init__(self, num_layers, ndim, shape, kernel_size, stride, padding,
@@ -526,6 +540,63 @@ def test_spmaxpool3d():
         test_case.assertAllClose(din_np, din_sparse_np, atol=1e-4)
 
 
+def test_spglobalmaxpool3d():
+    test_case = TestCase()
+
+    np.random.seed(485)
+    devices = ["cpu:0", "cuda:0"]
+    shapes = [[19, 18, 17]]
+    batchsizes = [1, 2]
+
+    channels = [64]
+    # ksizes = [2]
+    # strides = [2]
+    # paddings = [0]
+    # dilations = [1]
+
+
+    for dev, shape, bs, C in params_grid(
+            devices, shapes, batchsizes, channels):
+        device = torch.device(dev)
+        num_points = [1000] * bs
+        # when data contains negative, sparse maxpool is not equal to dense maxpool.
+        sparse_dict = generate_sparse_data(shape,
+                                            num_points,
+                                            C,
+                                            data_range=[0.1, 0.4])
+
+        features = np.ascontiguousarray(sparse_dict["features"]).astype(
+            np.float32)
+        indices = np.ascontiguousarray(
+            sparse_dict["indices"][:, [3, 0, 1, 2]]).astype(np.int32)
+        features_dense = sparse_dict["features_dense"].astype(np.float32)
+        indices_t = torch.from_numpy(indices).int().to(device)
+        features_t = torch.from_numpy(features).to(device)
+        features_t.requires_grad = True
+        features_dense_t = torch.from_numpy(features_dense).to(device)
+        features_dense_t.requires_grad = True
+        net = SparseGlobalMaxPoolTestTorch(shape).to(device)
+        net_ref = MaxPool3dTestTorch(1, 3, shape, shape, shape, 0, 1).to(device)
+
+        out_ref = net_ref(features_dense_t)
+        out = net(features_t, indices_t, bs)
+        out_dense = out
+        out_np = out.detach().cpu().numpy()
+        out_ref_np = out_ref.detach().cpu().numpy()
+        test_case.assertAllClose(out_np.reshape(-1), out_ref_np.reshape(-1), atol=1e-4)
+
+        dout = np.random.uniform(
+            -0.2, 0.2, out_dense.shape).astype(features.dtype)
+        dout_t = torch.from_numpy(dout).to(device).view(bs, C, 1, 1, 1)
+        out.backward(dout_t.reshape(bs, C))
+        out_ref.backward(dout_t)
+        din_dense = features_dense_t.grad.detach().permute(0, 2, 3, 4,
+                                                            1).contiguous()
+        din_sparse = gather_nd(din_dense, indices_t.long())
+        din = features_t.grad.detach()
+        din_np = din.cpu().numpy()
+        din_sparse_np = din_sparse.cpu().numpy()
+        test_case.assertAllClose(din_np, din_sparse_np, atol=1e-4)
 
 if __name__ == "__main__":
-    test_spmaxpool3d()
+    test_spglobalmaxpool3d()

@@ -296,6 +296,16 @@ class SpconvOps:
         """
         ...
     @staticmethod
+    def global_pool_rearrange(out_indices: Tensor, coords: Tensor, counts: Tensor, stream: int = 0) -> None: 
+        """
+        Args:
+            out_indices: 
+            coords: 
+            counts: 
+            stream: 
+        """
+        ...
+    @staticmethod
     def maxpool_implicit_gemm_forward(out: Tensor, inp: Tensor, inds: Tensor, stream: int = 0) -> None: 
         """
         Args:
