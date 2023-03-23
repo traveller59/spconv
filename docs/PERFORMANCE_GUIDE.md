@@ -27,3 +27,5 @@
 * If you train with float32 and ampere or later GPUs, you can set ```spconv.constants.SPCONV_ALLOW_TF32``` to enable faster fp32 training.
 See [benchmark](BENCHMARK.md) for more performance details of different algorithms.
 * Different CUDA version of spconv may have different performance. Use newest cuda version if possible. For example, spconv-cu117 is faster than spconv-cu114, spconv-cu114 is faster than spconv-cu111.
+* if your kernel size volume larger than 32, spconv will use a slower (and more inaccurate in fp16) algorithm. to use a faster algo for large kernel size (need time to compile at runtime), use ```large_kernel_fast_algo=True```
+* use ```SparseGlobalMaxPool``` instead of use large kernel size when you need global pool.

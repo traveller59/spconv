@@ -2,7 +2,7 @@
 
 ## [2.3.5] - 2023-03-24
 ### Fixed 
-- pypi project reach size limit, so we need to assign a new version number.
+- use a flag to enable large kernel algo (need time to compile at runtime)
 
 ## [2.3.4] - 2023-03-23
 ### Added 
