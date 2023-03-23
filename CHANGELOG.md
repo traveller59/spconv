@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.3.5] - 2023-03-24
+### Fixed 
+- pypi project reach size limit, so we need to assign a new version number.
+
 ## [2.3.4] - 2023-03-23
 ### Added 
 - Add SparseGlobalMaxPool and SparseGlobalAvgPool for training only. libspconv don't support it.

@@ -145,15 +145,16 @@ class ExampleNet(nn.Module):
         return self.net(x)
 ```
 
-### How To Use SparseConvTranspose
+### Generative Model Usage
 
-```SparseConvTranspose``` (standard upsampling) should only be used in generative model. You need to use a classifier to check if a output coordicates is empty, then set batch indices (or xyz) of that sparse tensor to a negative number:
+```SparseConvTranspose``` (standard upsampling) should only be used in generative model. You need to use a classifier to check if a output coordicates is empty, then set batch indices (or xyz) of that sparse tensor to a negative number.
 
-```Python
-spt.indices[empty_mask, 0] = -1
-```
+1. use ```SparseConvTranspose``` to upsample your sparse conv tensor, this will generate lots of points.
 
-In next sparse convolution, invalid coordinates will be removed until you perform next ```spt.indices[empty_mask, 0] = -1```.
+2. use a classifier to get valid indices
+
+3. use ```select_by_index``` to generate new sparse conv tensor
+
 
 #### Common Mistake 
 * issue [#467](https://github.com/traveller59/spconv/issues/467)

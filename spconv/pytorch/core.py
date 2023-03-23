@@ -211,6 +211,14 @@ class SparseConvTensor(metaclass=SpConvTensorMeta):
         new_spt.int8_scale = self.int8_scale
 
         return new_spt
+    
+    def select_by_index(self, valid_indices: torch.Tensor):
+        new_spt = self.shadow_copy()
+        new_spt.indices = self.indices[valid_indices] 
+        new_spt.features = self.features[valid_indices] 
+        # reuse data must be cleared after modify indices
+        new_spt.indice_dict.clear()
+        return new_spt
 
     def minus(self):
         return self.replace_feature(-self.features)
