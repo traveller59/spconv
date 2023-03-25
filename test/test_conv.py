@@ -558,7 +558,9 @@ def test_spglobalmaxpool3d():
     test_case = TestCase()
 
     np.random.seed(485)
-    devices = ["cpu:0", "cuda:0"]
+    devices = [] # no support for globalpool for CPU yet
+    if torch.has_cuda:
+        devices += ["cuda:0"]
     shapes = [[19, 18, 17]]
     batchsizes = [1, 2]
 
