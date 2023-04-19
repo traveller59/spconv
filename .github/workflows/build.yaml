@@ -174,7 +174,7 @@ jobs:
         env:
           CUDA_VERSION: ${{ matrix.cuda-version }}
           PYTHON_VERSION: ${{ matrix.python-version }}
-          DOCKER_IMAGE: scrin/manylinux2014-cuda:cu114-devel-1.0.0
+          DOCKER_IMAGE: scrin/manylinux2014-cuda:cu120-devel-1.0.0
           PLAT: manylinux2014_x86_64
           BOOST_VERSION: boost_1_77_0
         if: |

@@ -1,4 +1,7 @@
 # Changelog
+## [2.3.6] - 2023-04-19
+### Fixed 
+- Fix a CI bug that cpu cumm and spconv use different gcc compiler, must be same.
 
 ## [2.3.5] - 2023-03-24
 ### Fixed 
