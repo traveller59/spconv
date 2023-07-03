@@ -379,8 +379,8 @@ def test_spdeconv3d():
 
     algos = [
         ConvAlgo.Native,
-        # ConvAlgo.MaskImplicitGemm,
-        # ConvAlgo.MaskSplitImplicitGemm
+        ConvAlgo.MaskImplicitGemm,
+        ConvAlgo.MaskSplitImplicitGemm
     ]
 
     for dev, shape, bs, IC, OC, k, s, p, d, al in params_grid(
@@ -490,8 +490,8 @@ def test_spmaxpool3d():
     # dilations = [1]
     algos = [
         ConvAlgo.Native, 
-        # ConvAlgo.MaskImplicitGemm,
-        # ConvAlgo.MaskSplitImplicitGemm
+        ConvAlgo.MaskImplicitGemm,
+        ConvAlgo.MaskSplitImplicitGemm
     ]
 
 
