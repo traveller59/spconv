@@ -248,7 +248,9 @@ def test_spconv3d():
     test_case = TestCase()
     np.random.seed(484)
     torch.manual_seed(48848)
-    devices = ["cuda:0"]
+    devices = ["cpu"]
+    if torch.has_cuda:
+        devices += ["cuda:0"]
     shapes = [[19, 18, 17]]
     batchsizes = [1, 2]
 
@@ -259,17 +261,19 @@ def test_spconv3d():
     paddings = [0, 1, 2]
     dilations = [1, 2, 3]
     algos = [
-        ConvAlgo.Native, ConvAlgo.MaskImplicitGemm,
+        ConvAlgo.Native, 
+        ConvAlgo.MaskImplicitGemm,
         ConvAlgo.MaskSplitImplicitGemm
     ]
-    algos = [ConvAlgo.Native, ConvAlgo.MaskImplicitGemm, ConvAlgo.MaskSplitImplicitGemm]
 
     for dev, shape, bs, IC, OC, k, s, p, d, al in params_grid(
             devices, shapes, batchsizes, in_channels, out_channels, ksizes,
             strides, paddings, dilations, algos):
         if all([s > 1, d > 1]):
             continue  # don't support this.
-        # print(dev, shape, bs, IC, OC, k, s, p, d)
+        if dev == "cpu" and al is not ConvAlgo.Native:
+            continue # CPU only supports ConvAlgo.Native
+        # print(dev, shape, bs, IC, OC, k, s, p, d, al)
         device = torch.device(dev)
         num_points = [1500] * bs
         dtype = torch.float32
@@ -360,7 +364,9 @@ def test_spdeconv3d():
     test_case = TestCase()
 
     np.random.seed(484)
-    devices = ["cuda:0"]
+    devices = ["cpu"]
+    if torch.has_cuda:
+        devices += ["cuda:0"]
     shapes = [[19, 18, 17]]
     batchsizes = [1, 2]
 
@@ -372,7 +378,8 @@ def test_spdeconv3d():
     dilations = [1, 2, 3]
 
     algos = [
-        ConvAlgo.Native, ConvAlgo.MaskImplicitGemm,
+        ConvAlgo.Native,
+        ConvAlgo.MaskImplicitGemm,
         ConvAlgo.MaskSplitImplicitGemm
     ]
 
@@ -381,6 +388,8 @@ def test_spdeconv3d():
             strides, paddings, dilations, algos):
         if all([s > 1, d > 1]):
             continue  # don't support this.
+        if dev == "cpu" and al is not ConvAlgo.Native:
+            continue # CPU only supports ConvAlgo.Native
         device = torch.device(dev)
         num_points = [1000] * bs
         dtype = torch.float32
@@ -463,7 +472,9 @@ def test_spmaxpool3d():
     test_case = TestCase()
 
     np.random.seed(485)
-    devices = ["cuda:0"]
+    devices = ["cpu"]
+    if torch.has_cuda:
+        devices += ["cuda:0"]
     shapes = [[19, 18, 17]]
     batchsizes = [1, 2]
 
@@ -478,7 +489,8 @@ def test_spmaxpool3d():
     # paddings = [0]
     # dilations = [1]
     algos = [
-        ConvAlgo.Native, ConvAlgo.MaskImplicitGemm,
+        ConvAlgo.Native, 
+        ConvAlgo.MaskImplicitGemm,
         ConvAlgo.MaskSplitImplicitGemm
     ]
 
@@ -488,6 +500,8 @@ def test_spmaxpool3d():
             strides, paddings, dilations, algos):
         if all([s > 1, d > 1]):
             continue  # don't support this.
+        if dev == "cpu" and al is not ConvAlgo.Native:
+            continue # CPU only supports ConvAlgo.Native
         device = torch.device(dev)
         num_points = [1000] * bs
 
@@ -544,7 +558,9 @@ def test_spglobalmaxpool3d():
     test_case = TestCase()
 
     np.random.seed(485)
-    devices = ["cpu:0", "cuda:0"]
+    devices = [] # no support for globalpool for CPU yet
+    if torch.has_cuda:
+        devices += ["cuda:0"]
     shapes = [[19, 18, 17]]
     batchsizes = [1, 2]
 
@@ -599,4 +615,7 @@ def test_spglobalmaxpool3d():
         test_case.assertAllClose(din_np, din_sparse_np, atol=1e-4)
 
 if __name__ == "__main__":
+    test_spconv3d()
+    test_spdeconv3d()
+    test_spmaxpool3d()
     test_spglobalmaxpool3d()

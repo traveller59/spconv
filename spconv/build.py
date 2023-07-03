@@ -28,6 +28,7 @@ if project_is_installed(PACKAGE_NAME) and project_is_editable(
     from cumm.gemm.main import GemmMainUnitTest
     from cumm.conv.main import ConvMainUnitTest
     from cumm.common import CompileInfo
+    from cumm.constants import CUMM_CPU_ONLY_BUILD
 
     from spconv.csrc.sparse.all import SpconvOps
     from spconv.csrc.sparse.alloc import ExternalAllocator
@@ -38,24 +39,35 @@ if project_is_installed(PACKAGE_NAME) and project_is_editable(
     from spconv.csrc.sparse.convops import SimpleExternalSpconvMatmul
     from spconv.csrc.sparse.inference import InferenceOps
 
-    all_shuffle = SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS + SHUFFLE_AMPERE_PARAMS
-    # all_shuffle = list(filter(lambda x: not x.is_nvrtc, all_shuffle))
-    cu = GemmMainUnitTest(all_shuffle)
-    cu.namespace = "cumm.gemm.main"
-    all_imp = (IMPLGEMM_SIMT_PARAMS + IMPLGEMM_VOLTA_PARAMS +
-               IMPLGEMM_TURING_PARAMS + IMPLGEMM_AMPERE_PARAMS)
-    # all_imp = list(filter(lambda x: not x.is_nvrtc, all_imp))
-    convcu = ConvMainUnitTest(all_imp)
-    convcu.namespace = "cumm.conv.main"
-    gemmtuner = GemmTunerSimple(cu)
-    gemmtuner.namespace = "csrc.sparse.convops.gemmops"
-    convtuner = ConvTunerSimple(convcu)
-    convtuner.namespace = "csrc.sparse.convops.convops"
-    convops = ConvGemmOps(gemmtuner, convtuner)
-    convops.namespace = "csrc.sparse.convops.spops"
+    if not CUMM_CPU_ONLY_BUILD:
+        all_shuffle = SHUFFLE_SIMT_PARAMS + SHUFFLE_VOLTA_PARAMS + SHUFFLE_TURING_PARAMS + SHUFFLE_AMPERE_PARAMS
+        # all_shuffle = list(filter(lambda x: not x.is_nvrtc, all_shuffle))
+        cu = GemmMainUnitTest(all_shuffle)
+        cu.namespace = "cumm.gemm.main"
+        all_imp = (IMPLGEMM_SIMT_PARAMS + IMPLGEMM_VOLTA_PARAMS +
+                IMPLGEMM_TURING_PARAMS + IMPLGEMM_AMPERE_PARAMS)
+        # all_imp = list(filter(lambda x: not x.is_nvrtc, all_imp))
+        convcu = ConvMainUnitTest(all_imp)
+        convcu.namespace = "cumm.conv.main"
 
-    cus = [
-        cu, convcu, gemmtuner, convtuner,
+        gemmtuner = GemmTunerSimple(cu)
+        gemmtuner.namespace = "csrc.sparse.convops.gemmops"
+        convtuner = ConvTunerSimple(convcu)
+        convtuner.namespace = "csrc.sparse.convops.convops"
+        convops = ConvGemmOps(gemmtuner, convtuner)
+        convops.namespace = "csrc.sparse.convops.spops"
+    else:
+        gemmtuner = GemmTunerSimple(None)
+        gemmtuner.namespace = "csrc.sparse.convops.gemmops"
+        convtuner = ConvTunerSimple(None)
+        convtuner.namespace = "csrc.sparse.convops.convops"
+        convops = ConvGemmOps(gemmtuner, convtuner)
+        convops.namespace = "csrc.sparse.convops.spops"
+    cus = []
+    if not CUMM_CPU_ONLY_BUILD:
+        cus += [cu, convcu]
+    cus += [
+        gemmtuner, convtuner,
         convops,
         SpconvOps(),
         BoxOps(),
@@ -63,14 +75,16 @@ if project_is_installed(PACKAGE_NAME) and project_is_editable(
         CompileInfo(),
         ExternalAllocator(),
         ExternalSpconvMatmul(),
-        SimpleExternalSpconvMatmul(), # for debug, won't be included in release
+        # SimpleExternalSpconvMatmul(), # for debug, won't be included in release, also doesn't work on CPU
         InferenceOps(),
         PointCloudCompress(),
     ]
+
     pccm.builder.build_pybind(cus,
                               PACKAGE_ROOT / "core_cc",
                               namespace_root=PACKAGE_ROOT,
                               load_library=False,
+                            #   build_meta=build_meta,
                               verbose=True)
 
     # cus_dev: List[pccm.Class] = [

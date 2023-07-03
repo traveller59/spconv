@@ -23,6 +23,9 @@ class OMPLib(pccm.Class):
         self.add_include("tensorview/parallel/all.h")
         if compat.InWindows:
             self.build_meta.add_public_cflags("cl", "/openmp")
+        elif compat.InMacOS:
+            # OpenMP on macOS fails tests, so disable OpenMP for now
+            pass
         else:
             self.build_meta.add_public_cflags("g++", "-fopenmp")
             self.build_meta.add_public_cflags("clang++", "-fopenmp")
