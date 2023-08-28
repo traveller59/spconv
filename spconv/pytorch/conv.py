@@ -339,7 +339,7 @@ class SparseConvolutionBase:
                         out_features = Fsp.indice_conv(
                             features, weight, indice_pairs_calc,
                             indice_pair_num, outids.shape[0], algo,
-                            input._timer, bias_for_infer, act_type, act_beta,
+                            input._timer, bias_for_infer, act_alpha, act_beta,
                             act_type)
             else:
                 datas = input.find_indice_pair(self.indice_key)
