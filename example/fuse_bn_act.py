@@ -1,11 +1,11 @@
 # Copyright 2021 Yan Yan
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -27,7 +27,7 @@ from cumm import tensorview as tv
 from spconv.core import ConvAlgo
 import torch.fx
 import spconv.pytorch as spconv
-import copy 
+import copy
 import pickle
 from spconv.pytorch.conv import SparseConvolution
 from spconv.pytorch import functional as Fsp
@@ -36,7 +36,11 @@ from spconv.pytorch import functional as Fsp
 def fuse_bn_weights(conv_w_OKI, conv_b, bn_rm, bn_rv, bn_eps, bn_w, bn_b):
     NDim = conv_w_OKI.ndim - 2
     permute = [0, NDim+1] + [i+1 for i in range(NDim)]
-    conv_w_OIK = conv_w_OKI.permute(*permute)
+    if list(conv_w_OKI.shape[1:-1]) != [1,1,1]:
+        conv_w_OIK = conv_w_OKI.permute(*permute)
+    else:
+        conv_w_OIK = conv_w_OKI.reshape((conv_w_OKI.shape[-1], conv_w_OKI.shape[0])).T.reshape(conv_w_OKI.shape).permute(*permute)
+
     # OIDHW
     if conv_b is None:
         conv_b = torch.zeros_like(bn_rm)
@@ -49,7 +53,11 @@ def fuse_bn_weights(conv_w_OKI, conv_b, bn_rm, bn_rv, bn_eps, bn_w, bn_b):
     conv_w_OIK = conv_w_OIK * (bn_w * bn_var_rsqrt).reshape([-1] + [1] * (len(conv_w_OIK.shape) - 1))
     conv_b = (conv_b - bn_rm) * bn_var_rsqrt * bn_w + bn_b
     permute = [0,] + [i+2 for i in range(NDim)] + [1,]
-    conv_w_OKI = conv_w_OIK.permute(*permute).contiguous()
+    if list(conv_w_OKI.shape[1:-1]) != [1,1,1]:
+        conv_w_OKI = conv_w_OIK.permute(*permute).contiguous()
+    else:
+        conv_w_OKI = conv_w_OIK.permute(*permute).contiguous().squeeze().T.reshape(conv_w_OKI.shape)
+
     return torch.nn.Parameter(conv_w_OKI), torch.nn.Parameter(conv_b)
 
 def fuse_bn(conv, bn):
@@ -144,7 +152,7 @@ def fuse(model: torch.fx.GraphModule) -> torch.fx.GraphModule:
                 # Now that all uses of the batch norm have been replaced, we can
                 # safely remove the batch norm.
                 fx_model.graph.erase_node(node)
-                
+
     fx_model.graph.lint()
     # After we've modified our graph, we need to recompile our graph in order
     # to keep the generated code in sync.
@@ -193,7 +201,7 @@ def fuse_act(model: torch.fx.GraphModule) -> torch.fx.GraphModule:
                 # Now that all uses of the batch norm have been replaced, we can
                 # safely remove the batch norm.
                 fx_model.graph.erase_node(node)
-                
+
     fx_model.graph.lint()
     # After we've modified our graph, we need to recompile our graph in order
     # to keep the generated code in sync.
@@ -360,6 +368,12 @@ class Net(nn.Module):
             nn.BatchNorm1d(64),
             nn.ReLU(),
 
+            spconv.SparseConv3d(64,
+                                64,
+                                1,
+                                bias=False,
+                                algo=algo),
+            nn.BatchNorm1d(64),
         )
         max_batch_size = 1
         # grid (dense map) is used for indice generation. use pre-allocated grid can run faster.
@@ -397,7 +411,8 @@ def main():
     device = torch.device("cuda:0")
     device_cpu = torch.device("cpu:0")
     dtype = torch.float32
-    net = Net(spatial_shape, ConvAlgo.MaskImplicitGemm).cuda().eval().to(dtype)
+    net = Net(spatial_shape, ConvAlgo.Native).cuda().eval().to(dtype)
+    net.eval()
     tracer = MyTracer()
     graph_trace = tracer.trace(net)
     net_fused = torch.fx.GraphModule(tracer.root, graph_trace)
@@ -414,10 +429,10 @@ def main():
     out_fused = net_fused(voxels_th_cuda, coors_th_cuda, 1)
     res = Fsp.sparse_add_hash_based(out_ref, out_fused.minus())
     print(torch.linalg.norm(res.features))
-    _set_enable_int8_test_inplace(net_fused, True)
-    qvoxels_cuda = voxels_th_cuda.to(torch.int8)
-    
-    out_int8 = net_fused(qvoxels_cuda, coors_th_cuda, 1)
+    #_set_enable_int8_test_inplace(net_fused, True)
+    #qvoxels_cuda = voxels_th_cuda.to(torch.int8)
+
+    #out_int8 = net_fused(qvoxels_cuda, coors_th_cuda, 1)
 
 if __name__ == "__main__":
     main()
