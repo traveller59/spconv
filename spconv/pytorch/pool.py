@@ -314,8 +314,10 @@ class SparseAvgPool(SparseModule):
         self.record_voxel_count = record_voxel_count
         self.dilation = expand_nd(ndim, dilation)
         self.indice_key = indice_key
-        kv = int(np.prod(kernel_size))
-        assert kv <= 32, "avg pool only support implicit-gemm style indice gen with kv <= 32 limit"
+        kv = int(np.prod(self.kernel_size))
+        assert kv <= 128, "avg pool only support implicit-gemm style indice gen with kv <= 128 limit"
+        if kv >= 32:
+            pass # maybe show some warnings here
         self.algo = ConvAlgo.MaskImplicitGemm
 
     def extra_repr(self):
