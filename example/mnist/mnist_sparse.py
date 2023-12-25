@@ -66,8 +66,9 @@ def train(args, model, device, train_loader, optimizer, epoch):
     model.train()
     scaler = torch.cuda.amp.grad_scaler.GradScaler()
     amp_ctx = contextlib.nullcontext()
+    assert args.fp16
     if args.fp16:
-        amp_ctx = torch.cuda.amp.autocast()
+        amp_ctx = torch.cuda.amp.autocast(dtype=torch.float16)
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
@@ -107,7 +108,7 @@ def test(args, model, device, test_loader):
     correct = 0
     amp_ctx = contextlib.nullcontext()
     if args.fp16:
-        amp_ctx = torch.cuda.amp.autocast()
+        amp_ctx = torch.cuda.amp.autocast(dtype=torch.float16)
 
     with torch.no_grad():
         for data, target in test_loader:

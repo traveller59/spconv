@@ -24,7 +24,27 @@ class SparseMaxPool2dTestTorch(torch.nn.Module):
         coors = coors.int()
         x = spconv.SparseConvTensor(features, coors, self.shape, batch_size)
         return self.net(x)  # .dense()
-shapes = [[65536, 65536]]
+    
+class SparseMaxPool3dTestTorch(torch.nn.Module):
+    def __init__(self, num_layers, ndim, shape, kernel_size, stride, padding,
+                 dilation, algo):
+        super().__init__()
+        self.algo = algo
+        layers = [
+            spconv.SparseMaxPool3d(kernel_size, stride, padding, dilation, algo=algo)
+        ]
+        for i in range(1, num_layers):
+            layers.append(
+                spconv.SparseMaxPool3d(kernel_size, stride, padding, dilation, algo=algo))
+        self.net = spconv.SparseSequential(*layers, )
+        self.shape = shape
+
+    def forward(self, features, coors, batch_size):
+        coors = coors.int()
+        x = spconv.SparseConvTensor(features, coors, self.shape, batch_size)
+        return self.net(x)  # .dense()
+
+shapes = [[128, 16384, 16384]]
 batchsizes = [32]
 
 in_channels = [32]
@@ -54,15 +74,19 @@ for dev, shape, bs, IC, OC, k, s, p, d, al in params_grid(
                                         data_range=[0.1, 1],
                                         shape_scale = 64)
     print(2)
-    net = SparseMaxPool2dTestTorch(1, 2, shape, k, s, p, d, al).to(device)
+    net = SparseMaxPool3dTestTorch(1, 2, shape, k, s, p, d, al).to(device)
     features = np.ascontiguousarray(sparse_dict["features"]).astype(
         np.float32)
-    indices = np.ascontiguousarray(
-        sparse_dict["indices"][:, [2, 0, 1]]).astype(np.int32)
-    print(indices.max(0))
+    if len(shape) == 3:
+        indices = np.ascontiguousarray(
+            sparse_dict["indices"][:, [3, 0, 1, 2]]).astype(np.int32)
+    else:
+        indices = np.ascontiguousarray(
+            sparse_dict["indices"][:, [2, 0, 1]]).astype(np.int32)
+    print(indices.max(0), indices.min(0))
     indices_t = torch.from_numpy(indices).int().to(device)
     features_t = torch.from_numpy(features).to(device)
     features_t.requires_grad = True
 
     out = net(features_t, indices_t, bs)
-    print(out.indices.min(0))
+    print(out.indices.cpu().numpy().min(0), out.indices.cpu().numpy().max(0))

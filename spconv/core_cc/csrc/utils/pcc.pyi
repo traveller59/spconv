@@ -1,5 +1,5 @@
 from typing import overload, Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
-from pccm.stubs import EnumValue, EnumClassValue
+from pccm.stubs import EnumValue, EnumClassValue, enum
 from cumm.tensorview import Tensor
 class PointCloudCompress:
     @staticmethod
@@ -43,8 +43,8 @@ class PointCloudCompress:
             data: 
         """
         ...
-    class EncodeType:
-        XYZ_8 = EnumClassValue(0) # type: EnumClassValue
-        XYZI_8 = EnumClassValue(1) # type: EnumClassValue
+    class EncodeType(enum.Enum):
+        XYZ_8 = 0
+        XYZI_8 = 1
         @staticmethod
         def __members__() -> Dict[str, EnumClassValue]: ...

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
 import sys
 import pickle
 
@@ -33,6 +34,13 @@ from typing import List
 from functools import reduce
 from cumm import tensorview as tv
 
+import collections
+import collections.abc
+import numpy as np
+HAS_NUMPY = True
+from torch._six import string_classes
+from typing import Any
+
 _MAX_INT32 = 2147483647
 
 _T = TypeVar("_T")
@@ -41,20 +49,57 @@ _T = TypeVar("_T")
 def identity_decorator(func: _T) -> _T:
     return func
 
+# Casts Tensors and containers of Tensors.  Special-cases passthroughs for strings and np.ndarrays, which
+# may be falsely detected as "Iterables."
+def _cast(value, dtype):
+    if isinstance(value, torch.Tensor):
+        is_eligible = (value.is_floating_point() and value.is_cuda and (value.dtype is not torch.float64))
+        return value.to(dtype) if is_eligible else value
+    elif isinstance(value, string_classes):
+        return value
+    elif HAS_NUMPY and isinstance(value, np.ndarray):
+        return value
+    elif isinstance(value, collections.abc.Mapping):
+        return {_cast(k, dtype): _cast(v, dtype) for k, v in value.items()}
+    elif isinstance(value, collections.abc.Iterable):
+        iterable = map(lambda v: _cast(v, dtype), value)
+        if isinstance(value, list) or isinstance(value, tuple):
+            return type(value)(iterable)
+        else:
+            return iterable
+    else:
+        return value
 
 if PYTORCH_VERSION >= [1, 6, 0]:
     import torch.cuda.amp as amp
-    _TORCH_CUSTOM_FWD = amp.custom_fwd(cast_inputs=torch.float16)
+    _TORCH_CUSTOM_FWD = amp.custom_fwd
     _TORCH_CUSTOM_BWD = amp.custom_bwd
 
 else:
     _TORCH_CUSTOM_FWD = identity_decorator
     _TORCH_CUSTOM_BWD = identity_decorator
 
+def custom_fwd_based_on_current_autocast_state(fwd):
+    if PYTORCH_VERSION < [1, 6, 0]:
+        return fwd
+    if fwd is None:
+        return custom_fwd_based_on_current_autocast_state
+    @functools.wraps(fwd)
+    def decorate_fwd(*args, **kwargs):
+        autocast_context = torch.is_autocast_enabled()
+        args[0]._fwd_used_autocast = False
+        if autocast_context:
+            autocast_dtype = torch.get_autocast_gpu_dtype()
+            with torch.cuda.amp.autocast(enabled=False):
+                return fwd(*_cast(args, autocast_dtype), **_cast(kwargs, autocast_dtype))
+        else:
+            return fwd(*args, **kwargs)
+    return decorate_fwd
+
 
 class SparseConvFunction(Function):
     @staticmethod
-    @_TORCH_CUSTOM_FWD
+    @custom_fwd_based_on_current_autocast_state
     def forward(ctx,
                 features,
                 filters,
@@ -67,6 +112,7 @@ class SparseConvFunction(Function):
                 act_alpha: float = 0.0,
                 act_beta: float = 0.0,
                 act_type: tv.gemm.Activation = tv.gemm.Activation.None_):
+        
         ctx.save_for_backward(indice_pairs, indice_pair_num, features, filters)
         ctx.algo = algo
         ctx.timer = timer
@@ -119,7 +165,7 @@ class SparseConvFunction(Function):
 
 class SparseInverseConvFunction(Function):
     @staticmethod
-    @_TORCH_CUSTOM_FWD
+    @custom_fwd_based_on_current_autocast_state
     def forward(ctx,
                 features,
                 filters,
@@ -186,7 +232,7 @@ class SparseInverseConvFunction(Function):
 
 class SparseImplicitGemmFunction(Function):
     @staticmethod
-    @_TORCH_CUSTOM_FWD
+    @custom_fwd_based_on_current_autocast_state
     def forward(ctx,
                 features: torch.Tensor,
                 filters: torch.Tensor,
@@ -288,7 +334,7 @@ class SparseImplicitGemmFunction(Function):
 
 class SubMConvFunction(Function):
     @staticmethod
-    @_TORCH_CUSTOM_FWD
+    @custom_fwd_based_on_current_autocast_state
     def forward(ctx,
                 features,
                 filters,
@@ -355,7 +401,7 @@ class SubMConvFunction(Function):
 
 class SparseMaxPoolFunction(Function):
     @staticmethod
-    @_TORCH_CUSTOM_FWD
+    @custom_fwd_based_on_current_autocast_state
     def forward(ctx, features, indice_pairs, indice_pair_num,
                 num_activate_out):
         out = ops.indice_maxpool(features, indice_pairs, indice_pair_num,
@@ -375,7 +421,7 @@ class SparseMaxPoolFunction(Function):
 
 class SparseMaxPoolImplicitGemmFunction(Function):
     @staticmethod
-    @_TORCH_CUSTOM_FWD
+    @custom_fwd_based_on_current_autocast_state
     def forward(ctx, features: torch.Tensor, indice_pairs_fwd: torch.Tensor,
                 indice_pairs_bwd: torch.Tensor, num_activate_out: int):
         out = ops.indice_maxpool_implicit_gemm(features, indice_pairs_fwd,
@@ -395,7 +441,7 @@ class SparseMaxPoolImplicitGemmFunction(Function):
 
 class SparseAvgPoolImplicitGemmFunction(Function):
     @staticmethod
-    @_TORCH_CUSTOM_FWD
+    @custom_fwd_based_on_current_autocast_state
     def forward(ctx, features: torch.Tensor, indice_pairs_fwd: torch.Tensor,
                 indice_pairs_bwd: torch.Tensor, num_activate_out: int,
                 calc_count):

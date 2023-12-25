@@ -29,6 +29,7 @@ _TORCH_DTYPE_TO_TV = {
     torch.float32: tv.float32,
     torch.float64: tv.float64,
     torch.float16: tv.float16,
+    torch.bfloat16: tv.bfloat16,
     torch.int32: tv.int32,
     torch.int64: tv.int64,
     torch.int8: tv.int8,

@@ -1,4 +1,8 @@
 # Changelog
+## [2.3.7] - 2023-12-25
+### Added 
+- add a flag to enable bf16 `SPCONV_ADD_BF16`, must compile from source.
+
 ## [2.3.6] - 2023-04-19
 ### Fixed 
 - Fix a CI bug that cpu cumm and spconv use different gcc compiler, must be same.
