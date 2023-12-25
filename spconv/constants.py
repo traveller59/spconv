@@ -121,4 +121,4 @@ SPCONV_INT8_DEBUG = os.getenv("SPCONV_INT8_DEBUG", "0") == "1"
 SPCONV_DO_SORT = os.getenv("SPCONV_DO_SORT", "1") == "1"
 
 
-SPCONV_ADD_BF16 = True # not available in release package
+SPCONV_ADD_BF16 = False # not available in release package
