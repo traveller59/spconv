@@ -42,7 +42,12 @@ def identity_decorator(func: _T) -> _T:
     return func
 
 
-if PYTORCH_VERSION >= [1, 6, 0]:
+if PYTORCH_VERSION >= [2, 4, 0]:
+    import torch.amp as amp
+    _TORCH_CUSTOM_FWD = amp.custom_fwd(cast_inputs=torch.float16, device_type="cuda")
+    _TORCH_CUSTOM_BWD = amp.custom_bwd
+    
+elif PYTORCH_VERSION >= [1, 6, 0]:
     import torch.cuda.amp as amp
     _TORCH_CUSTOM_FWD = amp.custom_fwd(cast_inputs=torch.float16)
     _TORCH_CUSTOM_BWD = amp.custom_bwd
