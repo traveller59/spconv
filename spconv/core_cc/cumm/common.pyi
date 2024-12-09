@@ -1,5 +1,5 @@
 from typing import overload, Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
-from pccm.stubs import EnumValue, EnumClassValue
+from pccm.stubs import EnumValue, EnumClassValue, enum
 class CompileInfo:
     @staticmethod
     def get_compiled_cuda_version() -> Tuple[int, int]: ...

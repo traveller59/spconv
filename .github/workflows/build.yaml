@@ -15,8 +15,8 @@ jobs:
     runs-on: windows-2019
     strategy:
       matrix:
-        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11'] 
-        cuda-version: ['10.2', '11.3', '11.4', '11.6', '11.7', '11.8', '12.0']
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13'] 
+        cuda-version: ['11.4', '11.8', '12.1', '12.4', '12.6']
     steps:
       - uses: actions/checkout@master
       - uses: dorny/paths-filter@v2
@@ -41,7 +41,7 @@ jobs:
             (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) ) || 
             (
               (steps.changes.outputs.needbuild == 'true') && 
-              (env.PYTHON_VERSION == '3.10')
+              (env.PYTHON_VERSION == '3.12')
             )
           )
         shell: powershell
@@ -60,7 +60,7 @@ jobs:
             (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) ) || 
             (
               (steps.changes.outputs.needbuild == 'true') && 
-              (env.PYTHON_VERSION == '3.10')
+              (env.PYTHON_VERSION == '3.12')
             )
           )
         shell: powershell
@@ -89,7 +89,7 @@ jobs:
             (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) ) || 
             (
               (steps.changes.outputs.needbuild == 'true') && 
-              (env.PYTHON_VERSION == '3.10')
+              (env.PYTHON_VERSION == '3.12')
             )
           )
         run: |
@@ -115,8 +115,8 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11'] # this version is only used for upload.
-        cuda-version: ['102', '113', '114', '116', '117', '118', '120', '']
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13'] # this version is only used for upload.
+        cuda-version: ['114', '118', '121', '124', '126', '']
 
     steps:
       - uses: actions/checkout@master
@@ -160,7 +160,7 @@ jobs:
             (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) ) || 
             (
               (steps.changes.outputs.needbuild == 'true') && 
-              (env.PYTHON_VERSION == '3.10')
+              (env.PYTHON_VERSION == '3.12')
             )
           )
         run: |
@@ -174,7 +174,7 @@ jobs:
         env:
           CUDA_VERSION: ${{ matrix.cuda-version }}
           PYTHON_VERSION: ${{ matrix.python-version }}
-          DOCKER_IMAGE: scrin/manylinux2014-cuda:cu120-devel-1.0.0
+          DOCKER_IMAGE: scrin/manylinux2014-cuda:cu126-devel-1.0.0
           PLAT: manylinux2014_x86_64
           BOOST_VERSION: boost_1_77_0
         if: |
@@ -182,7 +182,7 @@ jobs:
             (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')) ) || 
             (
               (steps.changes.outputs.needbuild == 'true') && 
-              (env.PYTHON_VERSION == '3.10')
+              (env.PYTHON_VERSION == '3.12')
             )
           )
         run: |

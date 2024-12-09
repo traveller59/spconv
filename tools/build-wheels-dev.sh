@@ -27,24 +27,16 @@ function repair_wheel {
 gcc -v
 export SPCONV_DISABLE_JIT="1"
 export CUMM_CUDA_ARCH_LIST="8.6"
-# export SPCONV_PYTHON_LIST="3.7;3.8;3.9;3.10"
+export SPCONV_PYTHON_LIST="3.13"
 # Compile wheels, we only support 3.6-3.10.
 # "/opt/python/cp36-cp36m/bin/pip" wheel /io/ --no-deps -w /io/wheelhouse_tmp
 
 for PYVER in ${SPCONV_PYTHON_LIST//;/ }
 do
     PYVER2=`echo "$PYVER" | sed 's/\.//'`
-    PYVER_CP="cp$PYVER2-cp$PYVER2"
-    if [ "$PYVER2" = "36" ]; then
-        PYVER_CP="cp$PYVER2-cp${PYVER2}m"
-    fi
-    if [ "$PYVER2" = "37" ]; then
-        PYVER_CP="cp$PYVER2-cp${PYVER2}m"
-    fi
-    if [[ $PYVER2 == *"311"* ]]; then
-        PYVER_CP="cp311-cp311"
-    fi
+    PYVER_T=`echo "$PYVER2" | sed 's/t//'`
 
+    PYVER_CP="cp$PYVER_T-cp$PYVER2"
     "/opt/python/$PYVER_CP/bin/pip" wheel /io/  -v --no-deps -w /io/wheelhouse_tmp
 done
 

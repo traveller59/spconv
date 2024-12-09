@@ -39,9 +39,9 @@ if cuda_ver:
     cuda_ver_str = cuda_ver.replace(".", "") # 10.2 to 102
 
     RELEASE_NAME += "-cu{}".format(cuda_ver_str)
-    deps = ["cumm-cu{}>=0.4.5, <0.5.0".format(cuda_ver_str)]
+    deps = ["cumm-cu{}>=0.7.5, <0.8.0".format(cuda_ver_str)]
 else:
-    deps = ["cumm>=0.4.5, <0.5.0"]
+    deps = ["cumm>=0.7.5, <0.8.0"]
 
 
 
@@ -49,11 +49,11 @@ DESCRIPTION = 'spatial sparse convolution'
 URL = 'https://github.com/traveller59/spconv'
 EMAIL = 'yanyan.sub@outlook.com'
 AUTHOR = 'Yan Yan'
-REQUIRES_PYTHON = '>=3.7'
+REQUIRES_PYTHON = '>=3.9'
 VERSION = None
 
 # What packages are required for this module to be executed?
-REQUIRED = ["pccm>=0.4.0", "ccimport>=0.4.0", "pybind11>=2.6.0", "fire", "numpy", *deps]
+REQUIRED = ["pccm>=0.4.16", "ccimport>=0.4.4", "pybind11>=2.6.0", "fire", "numpy", *deps]
 
 # What packages are optional?
 EXTRAS = {
@@ -249,11 +249,11 @@ setup(
         'License :: OSI Approved :: Apache Software License',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
         'Programming Language :: Python :: Implementation :: CPython',
     ],
     # $ setup.py publish support.

@@ -34,17 +34,9 @@ export CUMM_CUDA_ARCH_LIST="all"
 for PYVER in ${SPCONV_PYTHON_LIST//;/ }
 do
     PYVER2=`echo "$PYVER" | sed 's/\.//'`
-    PYVER_CP="cp$PYVER2-cp$PYVER2"
-    if [ "$PYVER2" = "36" ]; then
-        PYVER_CP="cp$PYVER2-cp${PYVER2}m"
-    fi
-    if [ "$PYVER2" = "37" ]; then
-        PYVER_CP="cp$PYVER2-cp${PYVER2}m"
-    fi
-    if [[ $PYVER2 == *"311"* ]]; then
-        PYVER_CP="cp311-cp311"
-    fi
+    PYVER_T=`echo "$PYVER2" | sed 's/\t//'`
 
+    PYVER_CP="cp$PYVER_T-cp$PYVER2"
     "/opt/python/$PYVER_CP/bin/pip" wheel /io/  -v --no-deps -w /io/wheelhouse_tmp
 done
 

@@ -1,5 +1,5 @@
 from typing import overload, Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
-from pccm.stubs import EnumValue, EnumClassValue
+from pccm.stubs import EnumValue, EnumClassValue, enum
 from cumm.tensorview import Tensor
 from cumm.tensorview import CUDAKernelTimer
 class ThrustCustomAllocatorV2:

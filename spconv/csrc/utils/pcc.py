@@ -95,7 +95,7 @@ class PointCloudCompress(pccm.Class):
                             enc[3] = uint8_t(inten);
                         }}
                         auto pos_uint = pos_int + hash_t::direct_hash_offset();
-                        uint64_t scalar = hash_t::encode(pos_int[0], pos_int[1], pos_int[2]);
+                        uint64_t scalar = hash_t::encode(pos_uint[0], pos_uint[1], pos_uint[2]);
                         auto iter = hash.find(scalar);
                         if (iter == hash.end()){{
                             auto pos_offset = pos_int.cast<float>() * vsize;
@@ -116,6 +116,7 @@ class PointCloudCompress(pccm.Class):
                             }}
                         }}
                         points_data += point_stride;
+                        intensity_data += inten_stride;
 
                     }}
                     res = tv::empty({{final_size}}, tv::uint8, -1);
