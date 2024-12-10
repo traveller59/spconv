@@ -270,7 +270,7 @@ class SparseGlobalMaxOrAvgPool(SparseModule):
             real_inds = out_indices[i, :counts_cpu_np[i]]
             real_features = input.features[real_inds]
             if self.is_mean:
-                real_features_reduced = torch.mean(real_features, dim=0)[0]
+                real_features_reduced = torch.mean(real_features, dim=0)
             else:
                 real_features_reduced = torch.max(real_features, dim=0)[0]
             res_features_list.append(real_features_reduced)
