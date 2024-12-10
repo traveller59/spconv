@@ -153,7 +153,7 @@ jobs:
           CUDA_VERSION: ${{ matrix.cuda-version }}
           PYTHON_VERSION: ${{ matrix.python-version }}
           DOCKER_IMAGE: scrin/manylinux2014-cuda:cu${{ matrix.cuda-version }}-devel-1.0.0
-          PLAT: manylinux2014_x86_64
+          PLAT: ${{ matrix.cuda-version > '123' && 'manylinux_2_28_x86_64' || 'manylinux2014_x86_64' }}
           BOOST_VERSION: boost_1_77_0
         if: |
           (env.CUDA_VERSION != '') && (
@@ -174,7 +174,8 @@ jobs:
         env:
           CUDA_VERSION: ${{ matrix.cuda-version }}
           PYTHON_VERSION: ${{ matrix.python-version }}
-          DOCKER_IMAGE: scrin/manylinux2014-cuda:cu126-devel-1.0.0
+          # use cu121 docker to build cpu wheel, cuda 124+ manylinux requires manylinux_2_28
+          DOCKER_IMAGE: scrin/manylinux2014-cuda:cu121-devel-1.0.0
           PLAT: manylinux2014_x86_64
           BOOST_VERSION: boost_1_77_0
         if: |
