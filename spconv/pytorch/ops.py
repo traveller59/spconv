@@ -1197,7 +1197,10 @@ def indice_conv_backward(features: torch.Tensor,
     pair_in = indice_pairs_tv[int(inverse)]
     pair_out = indice_pairs_tv[int(not inverse)]
 
-    stream = get_current_stream()
+    if features.is_cuda:
+        stream = get_current_stream()
+    else:
+        stream = 0
     indice_pair_num_cpu = indice_pair_num.cpu().tolist()
     if subm and all(x == 0 for x in indice_pair_num_cpu):
         return (din, dfilters.reshape(filters_shape))
