@@ -1,4 +1,8 @@
 # Changelog
+## [2.3.8] - 2024-12-15
+### Fixed 
+- fix os version in CI to resolve windows mismatch compiler problem
+
 ## [2.3.7] - 2024-12-08
 ### Changed
 - add python 3.13 and cuda 12.1/12.4/12.6 prebuilts, drop python 3.7/3.8 prebuilts, change manylinux glibc from 2_17 to 2_28 if cuda >= 12.4, which requires recent OS such as ubuntu 18.10+.
